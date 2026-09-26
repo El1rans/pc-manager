@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PCManager.Core/PCManager.Core.csproj" />
+    <Project Path="src/PCManager.App/PCManager.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PCManager.Core.Tests/PCManager.Core.Tests.csproj" />
+  </Folder>
+</Solution>
