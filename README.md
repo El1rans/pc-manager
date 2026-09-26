@@ -6,9 +6,35 @@ Built with C# / .NET (WPF).
 
 ## Status
 
-Early stage. `prototype/` holds the first working tool: a winget updater that lists available updates and lets you choose which ones to install.
+Foundation stage: a production-shaped app shell (solution layout, host + DI, logging, settings,
+navigation with Dashboard/Updates/Hardware/Lighting placeholder pages, admin elevation support) is
+in place under `src/`. `prototype/` holds the original PowerShell winget updater tool that
+milestone 02 ports into the app; it is kept for reference and not built.
 
-To run the prototype, double-click `prototype/Winget Updater.bat`.
+To run the prototype standalone, double-click `prototype/Winget Updater.bat`.
+
+## Building, running, and testing
+
+Requires the .NET SDK version pinned in `global.json` (Windows, since the app uses WPF).
+
+```powershell
+dotnet build -c Release
+dotnet test -c Release
+dotnet run -c Release --project src/PCManager.App
+```
+
+See `CONTRIBUTING.md` for the full workflow and `docs/specs/` for the engineering standards and
+milestone specs.
+
+## Features
+
+- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting), following Windows
+  light/dark theme.
+- Settings persisted as JSON under `%APPDATA%\PCManager\settings.json`, atomic writes, corrupt-file
+  recovery.
+- Logs written to `%APPDATA%\PCManager\logs`.
+- Admin elevation: the sidebar shows whether the app is running as administrator and can relaunch
+  elevated.
 
 ## Planned modules
 
