@@ -1,5 +1,7 @@
+using System.ComponentModel;
 using System.Windows;
 using Microsoft.Extensions.Logging;
+using PCManager.Core.Components;
 
 namespace PCManager.App.Features.Setup;
 
@@ -22,6 +24,7 @@ public partial class SetupWindow : Window
 
         _viewModel.CloseRequested += OnCloseRequested;
         Loaded += OnLoaded;
+        Closing += OnClosing;
         Closed += OnClosed;
     }
 
@@ -39,9 +42,29 @@ public partial class SetupWindow : Window
 
     private void OnCloseRequested(object? sender, EventArgs e) => Close();
 
+    /// <summary>
+    /// An install is running to completion regardless of the dialog (see
+    /// <see cref="IComponentService.InstallAsync"/> - once winget has launched, cancellation only
+    /// stops us from waiting on it, not the install itself), so closing the window here - whether
+    /// via Alt+F4, the X button, or anything else - while <see cref="SetupViewModel.IsBusy"/> would
+    /// just hide the window while winget (and possibly the PawnIO driver installer) keeps running
+    /// unattended. Refuse the close until it finishes.
+    /// </summary>
+    private void OnClosing(object? sender, CancelEventArgs e)
+    {
+        if (_viewModel.IsBusy)
+        {
+            e.Cancel = true;
+        }
+    }
+
     private void OnClosed(object? sender, EventArgs e)
     {
         _viewModel.CloseRequested -= OnCloseRequested;
+        // Closing via the window's own X button (rather than Skip or Close) still counts as
+        // first-run having been shown - otherwise it would reappear every launch. Idempotent, so
+        // it does not matter whether Skip/PrimaryAction already marked it.
+        _viewModel.MarkFirstRunCompleted();
         _viewModel.Dispose();
     }
 }

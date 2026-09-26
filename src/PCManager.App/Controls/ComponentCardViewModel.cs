@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -38,7 +39,11 @@ public sealed partial class ComponentCardViewModel : ObservableObject, IDisposab
         Definition = definition;
         _componentService = componentService;
         _logger = logger;
-        _dispatcher = Dispatcher.CurrentDispatcher;
+        // Application.Current.Dispatcher (rather than Dispatcher.CurrentDispatcher) is always the
+        // one UI dispatcher, regardless of which thread happens to construct this view model. Falls
+        // back to the constructing thread's dispatcher when there is no WPF Application (e.g. unit
+        // tests), so this view model stays constructible outside a running app.
+        _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
 
         _componentService.StatusChanged += OnComponentServiceStatusChanged;
     }
@@ -55,22 +60,31 @@ public sealed partial class ComponentCardViewModel : ObservableObject, IDisposab
 
     public bool IsNotInstalled => Status.State == ComponentState.NotInstalled;
 
-    public bool IsInstalledNotRunning => Status.State == ComponentState.Installed;
+    /// <summary>Installed and still needs its start step (e.g. OpenRGB before "Start" is clicked).
+    /// A component with no start step never reports this - see <see cref="IsReady"/>.</summary>
+    public bool IsInstalledNotRunning => Status.State == ComponentState.Installed && NeedsStartStep;
+
+    /// <summary>Nothing left to do: either actually running, or installed with no separate start
+    /// step to begin with (e.g. the PawnIO driver).</summary>
+    public bool IsReady => Status.State == ComponentState.Running ||
+        (Status.State == ComponentState.Installed && !NeedsStartStep);
 
     public bool IsRunning => Status.State == ComponentState.Running;
 
     public bool IsError => Status.State == ComponentState.Error;
 
-    public bool ShowPrimaryButton => !IsBusy && Status.State != ComponentState.Running;
+    public bool ShowPrimaryButton => !IsBusy && !IsReady;
 
-    public string StatusText => Status.State switch
+    public string StatusText => Status.Message ?? DefaultStatusText;
+
+    private string DefaultStatusText => Status.State switch
     {
         ComponentState.NotInstalled when Definition.RequiresAdmin => "Needs administrator approval",
         ComponentState.NotInstalled => "Not installed",
         ComponentState.Installed when NeedsStartStep => "Installed - not started",
-        ComponentState.Installed => "Installed",
+        ComponentState.Installed => "Ready",
         ComponentState.Running => "Ready",
-        ComponentState.Error => Status.Message ?? "Something went wrong.",
+        ComponentState.Error => "Something went wrong.",
         _ => string.Empty,
     };
 
@@ -98,6 +112,8 @@ public sealed partial class ComponentCardViewModel : ObservableObject, IDisposab
     [RelayCommand(CanExecute = nameof(CanRunPrimaryAction))]
     private async Task PrimaryActionAsync()
     {
+        _operationCts.Cancel();
+        _operationCts.Dispose();
         _operationCts = new CancellationTokenSource();
         var cancellationToken = _operationCts.Token;
 
@@ -115,6 +131,9 @@ public sealed partial class ComponentCardViewModel : ObservableObject, IDisposab
             {
                 var log = new Progress<string>(line => LogLines.Add(line));
                 var progress = new Progress<string>(text => ProgressText = text);
+                // Note: cancelling cancellationToken only prevents InstallAsync from starting
+                // winget in the first place - once it has launched, InstallAsync runs it to
+                // completion regardless (see IComponentService.InstallAsync).
                 Status = await _componentService.InstallAsync(Definition.Id, log, progress, cancellationToken)
                     .ConfigureAwait(true);
             }
@@ -153,6 +172,7 @@ public sealed partial class ComponentCardViewModel : ObservableObject, IDisposab
     {
         OnPropertyChanged(nameof(IsNotInstalled));
         OnPropertyChanged(nameof(IsInstalledNotRunning));
+        OnPropertyChanged(nameof(IsReady));
         OnPropertyChanged(nameof(IsRunning));
         OnPropertyChanged(nameof(IsError));
         OnPropertyChanged(nameof(ShowPrimaryButton));

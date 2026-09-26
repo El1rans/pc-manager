@@ -18,9 +18,19 @@ public partial class ComponentCard : UserControl
     {
         InitializeComponent();
         Loaded += OnLoaded;
+        // A page that creates the card's view model asynchronously (or swaps it) may set
+        // DataContext after Loaded has already fired and found nothing - reload whenever it
+        // changes to a real view model instead of getting stuck on the default "not installed"
+        // status forever.
+        DataContextChanged += OnDataContextChanged;
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    private async void OnLoaded(object sender, RoutedEventArgs e) => await TryLoadAsync().ConfigureAwait(true);
+
+    private async void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e) =>
+        await TryLoadAsync().ConfigureAwait(true);
+
+    private async Task TryLoadAsync()
     {
         if (DataContext is not ComponentCardViewModel viewModel)
         {
@@ -33,8 +43,8 @@ public partial class ComponentCard : UserControl
         }
         catch (Exception ex)
         {
-            // Loaded is an event handler, so this is the boundary: log and leave the card showing
-            // whatever status it already had rather than crashing the page.
+            // Event handlers are the boundary here: log and leave the card showing whatever status
+            // it already had rather than crashing the page.
             var logger = App.Services?.GetService<ILogger<ComponentCard>>();
             logger?.LogError(ex, "ComponentCard failed to load its status.");
         }

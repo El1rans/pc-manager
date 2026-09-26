@@ -30,13 +30,13 @@
                                 <Setter Property="Text" Value="&#xE783;"/>
                                 <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                    <DataTrigger Binding="{Binding IsReady}" Value="True">
                                         <Setter Property="Text" Value="&#xE73E;"/>
                                         <Setter Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}"/>
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding IsInstalledNotRunning}" Value="True">
-                                        <Setter Property="Text" Value="&#xE73E;"/>
-                                        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}"/>
+                                        <Setter Property="Text" Value="&#xE946;"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding IsError}" Value="True">
                                         <Setter Property="Text" Value="&#xE783;"/>

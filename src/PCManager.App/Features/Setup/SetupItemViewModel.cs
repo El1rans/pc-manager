@@ -28,11 +28,13 @@ public sealed partial class SetupItemViewModel : ObservableObject
 
     public bool IsAlreadyInstalled => Status.State is ComponentState.Installed or ComponentState.Running;
 
-    public string StatusText => Status.State switch
+    public string StatusText => ProgressMessage ?? Status.Message ?? DefaultStatusText;
+
+    private string DefaultStatusText => Status.State switch
     {
         ComponentState.Installed or ComponentState.Running => "Already installed",
-        ComponentState.Error => Status.Message ?? "Setup failed.",
-        _ => ProgressMessage ?? string.Empty,
+        ComponentState.Error => "Setup failed.",
+        _ => string.Empty,
     };
 
     partial void OnStatusChanged(ComponentStatus value) => OnPropertyChanged(nameof(StatusText));

@@ -14,18 +14,32 @@ namespace PCManager.App.Features.Setup;
 public sealed partial class SetupViewModel : ObservableObject, IDisposable
 {
     private readonly IComponentService _componentService;
+    private readonly IRegistryReader _registryReader;
     private readonly ISettingsStore _settingsStore;
     private readonly ILogger<SetupViewModel> _logger;
     private CancellationTokenSource _cts = new();
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(SetUpCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PrimaryActionCommand))]
     [NotifyCanExecuteChangedFor(nameof(SkipCommand))]
     private bool _isBusy;
 
-    public SetupViewModel(IComponentService componentService, ISettingsStore settingsStore, ILogger<SetupViewModel> logger)
+    /// <summary>True once a "Set up" run has finished at least once (successfully or not) - the
+    /// dialog stays open showing per-item results instead of closing immediately. See
+    /// <see cref="PrimaryButtonText"/> and <see cref="ShowSkip"/>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PrimaryButtonText))]
+    [NotifyPropertyChangedFor(nameof(ShowSkip))]
+    private bool _hasRun;
+
+    public SetupViewModel(
+        IComponentService componentService,
+        IRegistryReader registryReader,
+        ISettingsStore settingsStore,
+        ILogger<SetupViewModel> logger)
     {
         _componentService = componentService;
+        _registryReader = registryReader;
         _settingsStore = settingsStore;
         _logger = logger;
         Items = new ObservableCollection<SetupItemViewModel>(
@@ -34,28 +48,59 @@ public sealed partial class SetupViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<SetupItemViewModel> Items { get; }
 
-    /// <summary>Raised when the dialog should close (setup finished, or the user chose Skip).</summary>
+    /// <summary>True if any selected item could still be installed or retried - i.e. is
+    /// <see cref="ComponentState.NotInstalled"/> or <see cref="ComponentState.Error"/>.</summary>
+    private bool AnyRetryable => Items.Any(
+        i => i.IsSelected && i.Status.State is ComponentState.NotInstalled or ComponentState.Error);
+
+    /// <summary>"Set up" before the first run; after that, "Retry" while any selected item is
+    /// still not-installed or errored, otherwise "Close".</summary>
+    public string PrimaryButtonText => !HasRun ? "Set up" : AnyRetryable ? "Retry" : "Close";
+
+    /// <summary>Hidden once a run has happened - "Close" (via <see cref="PrimaryButtonText"/>)
+    /// covers "I'm done here" once results are showing.</summary>
+    public bool ShowSkip => !HasRun;
+
+    /// <summary>Raised when the dialog should close (the user chose Skip, or Close after a run).</summary>
     public event EventHandler? CloseRequested;
 
     public async Task LoadAsync(CancellationToken cancellationToken)
     {
+        // A hint from the PC Manager installer (milestone 07) about which components it already
+        // set up - see docs/specs/07-installer.md, "Contract with first-run setup". Detection
+        // below is still the source of truth for each item's actual status; this only affects
+        // which not-yet-detected-as-installed items default to ticked.
+        var installerHandledIds = _registryReader.GetInstallerHandledComponentIds();
+
         foreach (var item in Items)
         {
             item.Status = await _componentService.GetStatusAsync(item.Definition.Id, cancellationToken)
                 .ConfigureAwait(true);
-            item.IsSelected = item.Status.State == ComponentState.NotInstalled;
+            item.IsSelected = item.Status.State == ComponentState.NotInstalled &&
+                !installerHandledIds.Contains(item.Definition.Id);
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanSetUp))]
-    private async Task SetUpAsync()
+    [RelayCommand(CanExecute = nameof(CanRunPrimaryAction))]
+    private async Task PrimaryActionAsync()
     {
+        if (HasRun && !AnyRetryable)
+        {
+            CloseRequested?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        _cts.Cancel();
+        _cts.Dispose();
         _cts = new CancellationTokenSource();
         IsBusy = true;
 
         try
         {
-            foreach (var item in Items.Where(i => i.IsSelected && i.Status.State == ComponentState.NotInstalled))
+            // An item left in Error from a previous attempt is retried the same as one that was
+            // never attempted.
+            foreach (var item in Items.Where(
+                i => i.IsSelected && i.Status.State is ComponentState.NotInstalled or ComponentState.Error))
             {
                 item.ProgressMessage = "Installing...";
                 var log = new Progress<string>(line => item.ProgressMessage = line);
@@ -65,12 +110,13 @@ public sealed partial class SetupViewModel : ObservableObject, IDisposable
                     .InstallAsync(item.Definition.Id, log, progress, _cts.Token)
                     .ConfigureAwait(true);
 
-                item.ProgressMessage = item.Status.State == ComponentState.Error ? item.Status.Message : null;
+                item.ProgressMessage = null;
             }
         }
         catch (OperationCanceledException)
         {
-            // Dialog closed mid-install; expected, not an error.
+            // Cancelled before any install actually launched (see IComponentService.InstallAsync);
+            // expected, not an error.
         }
         catch (Exception ex)
         {
@@ -82,10 +128,11 @@ public sealed partial class SetupViewModel : ObservableObject, IDisposable
         }
 
         MarkFirstRunCompleted();
-        CloseRequested?.Invoke(this, EventArgs.Empty);
+        HasRun = true;
+        OnPropertyChanged(nameof(PrimaryButtonText));
     }
 
-    private bool CanSetUp() => !IsBusy;
+    private bool CanRunPrimaryAction() => !IsBusy;
 
     [RelayCommand(CanExecute = nameof(CanSkip))]
     private void Skip()
@@ -96,7 +143,11 @@ public sealed partial class SetupViewModel : ObservableObject, IDisposable
 
     private bool CanSkip() => !IsBusy;
 
-    private void MarkFirstRunCompleted() => _settingsStore.Update(s => s.Setup.FirstRunCompleted = true);
+    /// <summary>Marks first-run as shown regardless of how the dialog is closing (Skip, Close after
+    /// a run, or the window's own X button) - see <see cref="SetupWindow"/>'s Closing handler.
+    /// Idempotent, so calling it more than once (e.g. Skip already called it, then the window's
+    /// Closed handler calls it again) is harmless.</summary>
+    public void MarkFirstRunCompleted() => _settingsStore.Update(s => s.Setup.FirstRunCompleted = true);
 
     public void Dispose()
     {

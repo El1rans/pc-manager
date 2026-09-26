@@ -56,8 +56,9 @@
         </ScrollViewer>
 
         <DockPanel Grid.Row="2" Margin="0,16,0,0" LastChildFill="False">
-            <Button DockPanel.Dock="Left" Content="Skip" Command="{Binding SkipCommand}"/>
-            <Button DockPanel.Dock="Right" Content="Set up" Command="{Binding SetUpCommand}"
+            <Button DockPanel.Dock="Left" Content="Skip" Command="{Binding SkipCommand}"
+                    Visibility="{Binding ShowSkip, Converter={StaticResource BoolToVis}}"/>
+            <Button DockPanel.Dock="Right" Content="{Binding PrimaryButtonText}" Command="{Binding PrimaryActionCommand}"
                     Style="{DynamicResource AccentButtonStyle}"/>
         </DockPanel>
     </Grid>
