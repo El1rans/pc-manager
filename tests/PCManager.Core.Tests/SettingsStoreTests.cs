@@ -31,25 +31,24 @@ public sealed class SettingsStoreTests : IDisposable
     {
         var store = CreateStore();
 
-        var settings = store.Load();
-
-        Assert.NotNull(settings);
-        Assert.NotNull(settings.Updates);
-        Assert.NotNull(settings.Hardware);
-        Assert.NotNull(settings.Lighting);
+        Assert.NotNull(store.Current);
+        Assert.NotNull(store.Current.Updates);
+        Assert.NotNull(store.Current.Hardware);
+        Assert.NotNull(store.Current.Lighting);
+        Assert.NotNull(store.Current.RemoteSupport);
+        Assert.NotNull(store.Current.Setup);
+        Assert.False(store.Current.Setup.FirstRunCompleted);
     }
 
     [Fact]
-    public void SaveThenLoad_RoundTrips()
+    public void Update_ThenReloadFromDisk_PersistsTheChange()
     {
         var store = CreateStore();
-        var settings = new AppSettings();
 
-        store.Save(settings);
-        var loaded = store.Load();
+        store.Update(s => s.Setup.FirstRunCompleted = true);
 
-        Assert.NotNull(loaded);
-        Assert.True(File.Exists(_settingsPath));
+        var reloaded = CreateStore();
+        Assert.True(reloaded.Current.Setup.FirstRunCompleted);
     }
 
     [Fact]
@@ -57,10 +56,21 @@ public sealed class SettingsStoreTests : IDisposable
     {
         var store = CreateStore();
 
-        store.Save(new AppSettings());
-        store.Save(new AppSettings());
+        store.Save();
+        store.Update(s => s.Setup.LaunchCount++);
 
-        Assert.False(File.Exists(_settingsPath + ".tmp"));
+        Assert.False(Directory.EnumerateFiles(_directory, "*.tmp").Any());
+        Assert.True(File.Exists(_settingsPath));
+    }
+
+    [Fact]
+    public void Save_WhenTargetFileIsMissing_CreatesIt()
+    {
+        var store = CreateStore();
+        Assert.False(File.Exists(_settingsPath));
+
+        store.Save();
+
         Assert.True(File.Exists(_settingsPath));
     }
 
@@ -68,13 +78,66 @@ public sealed class SettingsStoreTests : IDisposable
     public void Load_CorruptFile_BacksItUpAndReturnsDefaults()
     {
         File.WriteAllText(_settingsPath, "{ this is not valid json");
+
         var store = CreateStore();
 
-        var settings = store.Load();
-
-        Assert.NotNull(settings);
+        Assert.NotNull(store.Current);
         var backupPath = _settingsPath + ".bak";
         Assert.True(File.Exists(backupPath));
         Assert.Equal("{ this is not valid json", File.ReadAllText(backupPath));
+    }
+
+    [Fact]
+    public void Load_UnknownFields_AreIgnored()
+    {
+        File.WriteAllText(_settingsPath, """{"SomethingFromTheFuture": 42, "Setup": {"FirstRunCompleted": true}}""");
+
+        var store = CreateStore();
+
+        Assert.True(store.Current.Setup.FirstRunCompleted);
+    }
+
+    [Fact]
+    public void Load_NullSection_FallsBackToDefaultForThatSection()
+    {
+        File.WriteAllText(_settingsPath, """{"Updates": null}""");
+
+        var store = CreateStore();
+
+        Assert.NotNull(store.Current.Updates);
+    }
+
+    [Fact]
+    public void Save_WithStaleUnrelatedTempFilePresent_StillSucceeds()
+    {
+        File.WriteAllText(Path.Combine(_directory, "settings.json.stale-leftover.tmp"), "garbage from a crashed run");
+        var store = CreateStore();
+
+        store.Update(s => s.Setup.FirstRunCompleted = true);
+
+        Assert.True(File.Exists(_settingsPath));
+        var reloaded = CreateStore();
+        Assert.True(reloaded.Current.Setup.FirstRunCompleted);
+    }
+
+    [Fact]
+    public void Update_FromManyThreadsConcurrently_LosesNoIncrements()
+    {
+        var store = CreateStore();
+        const int threadCount = 8;
+        const int incrementsPerThread = 50;
+
+        Parallel.For(0, threadCount, _ =>
+        {
+            for (var i = 0; i < incrementsPerThread; i++)
+            {
+                store.Update(s => s.Setup.LaunchCount++);
+            }
+        });
+
+        Assert.Equal(threadCount * incrementsPerThread, store.Current.Setup.LaunchCount);
+
+        var reloaded = CreateStore();
+        Assert.Equal(threadCount * incrementsPerThread, reloaded.Current.Setup.LaunchCount);
     }
 }
