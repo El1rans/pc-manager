@@ -166,6 +166,7 @@ public partial class App : System.Windows.Application
         services.AddUpdatesFeature();
         services.AddHardwareFeature();
         services.AddLightingFeature();
+        services.AddHostedService<Features.Lighting.OpenRgbAutoStartHostedService>();
     }
 
     /// <summary>Applies every feature's <see cref="PageRegistration"/> to the view locator. Runs
