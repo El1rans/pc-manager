@@ -26,4 +26,11 @@ public interface IProcessRunner
         IProgress<string>? onLine,
         IProgress<string>? onProgress,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Starts <paramref name="fileName"/> and returns immediately without waiting for it to exit
+    /// or reading its output - for launching a long-running background process (e.g. OpenRGB's
+    /// SDK server) that is meant to keep running after this call returns.
+    /// </summary>
+    void StartDetached(string fileName, IReadOnlyList<string> arguments);
 }

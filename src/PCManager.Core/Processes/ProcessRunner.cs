@@ -56,6 +56,25 @@ public sealed class ProcessRunner : IProcessRunner
         return new ProcessRunResult(process.ExitCode, reader.Lines);
     }
 
+    public void StartDetached(string fileName, IReadOnlyList<string> arguments)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(fileName);
+        ArgumentNullException.ThrowIfNull(arguments);
+
+        var startInfo = new ProcessStartInfo(fileName)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(startInfo);
+    }
+
     private static async Task PumpStandardOutputAsync(
         StreamReader standardOutput, WingetOutputReader reader, CancellationToken cancellationToken)
     {
