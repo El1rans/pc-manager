@@ -10,7 +10,8 @@ trim_trailing_whitespace = true
 
 [*.{cs}]
 csharp_new_line_before_open_brace = all
-csharp_prefer_braces = true:error
+csharp_prefer_braces = when_multiline
+dotnet_diagnostic.IDE0011.severity = error
 csharp_style_var_when_type_is_apparent = true:suggestion
 csharp_style_var_for_built_in_types = true:suggestion
 csharp_style_var_elsewhere = true:suggestion

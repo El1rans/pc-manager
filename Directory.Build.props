@@ -8,8 +8,6 @@
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <!-- WPF0001: the Fluent ThemeMode API is still marked experimental. -->
-    <NoWarn>$(NoWarn);WPF0001</NoWarn>
   </PropertyGroup>
 
 </Project>

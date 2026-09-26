@@ -16,7 +16,7 @@ PC Manager is a Windows 10/11 desktop app for monitoring and maintaining a singl
 | Composition | Microsoft.Extensions.Hosting generic host + DI; `App` builds the host and resolves `MainWindow` |
 | Logging | Microsoft.Extensions.Logging with Serilog file sink at `%APPDATA%\PCManager\logs\pcmanager-.log` (daily roll, 14 files kept) |
 | Settings | JSON at `%APPDATA%\PCManager\settings.json` via an `ISettingsStore`; writes are atomic (write temp file, then replace) |
-| Tests | xUnit v3 + `Microsoft.NET.Test.Sdk`; no UI automation tests |
+| Tests | xUnit v3 on Microsoft.Testing.Platform (`dotnet test` via the `test.runner` setting in `global.json`); no UI automation tests |
 | Packages | Central Package Management (`Directory.Packages.props`), exact versions, no floating versions, no prerelease unless a spec says so |
 
 ## Solution layout
