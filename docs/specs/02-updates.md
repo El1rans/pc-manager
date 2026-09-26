@@ -1,5 +1,7 @@
 # 02 - App updates via winget (branch `feat/updates`)
 
+> **Amended after 01b:** `WingetOutputReader` and the generic process runner (`IProcessRunner`) already exist from milestone 01b (Components). Reuse them; `IWingetClient` builds on `IProcessRunner`. Do not duplicate them.
+
 Goal: port `prototype/WingetUpdater.ps1` into the app as the Updates page, with the same behaviour and better structure. Read the prototype first; its parsing and output-handling logic is proven against real winget output.
 
 ## Core (`PCManager.Core/Winget`)

@@ -1,5 +1,7 @@
 # 05 - RGB lighting (branch `feat/lighting`)
 
+> **Amended after 01b:** OpenRGB is the `openrgb` component from milestone 01b. The setup card below becomes the shared `ComponentCard` (Install -> Start with `--server --startminimized` -> Connect). Honour the "Start OpenRGB with PC Manager" setting from 01b.
+
 Goal: control RGB on all supported devices from one page by talking to OpenRGB, which already supports hundreds of motherboards, RAM sticks, GPUs, keyboards, mice and fans. PC Manager does not talk to RGB hardware directly.
 
 ## Integration
