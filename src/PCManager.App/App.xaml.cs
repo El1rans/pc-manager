@@ -5,11 +5,14 @@ using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using PCManager.App.Controls;
 using PCManager.App.Features.Dashboard;
 using PCManager.App.Features.Hardware;
 using PCManager.App.Features.Lighting;
+using PCManager.App.Features.Setup;
 using PCManager.App.Features.Updates;
 using PCManager.App.Shell;
+using PCManager.Core.Components;
 using PCManager.Core.Elevation;
 using PCManager.Core.Settings;
 using Serilog;
@@ -70,11 +73,17 @@ public partial class App : System.Windows.Application
             var logger = _host.Services.GetRequiredService<ILogger<App>>();
             logger.LogInformation("PC Manager starting up.");
 
-            _host.Services.GetRequiredService<ISettingsStore>().Update(s => s.Setup.LaunchCount++);
+            var settingsStore = _host.Services.GetRequiredService<ISettingsStore>();
+            settingsStore.Update(s => s.Setup.LaunchCount++);
 
             var mainWindow = _host.Services.GetRequiredService<MainWindow>();
             MainWindow = mainWindow;
             mainWindow.Show();
+
+            if (!settingsStore.Current.Setup.FirstRunCompleted)
+            {
+                _host.Services.GetRequiredService<ISetupLauncher>().ShowSetup();
+            }
         }
         catch (Exception ex)
         {
@@ -148,6 +157,10 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IPageViewLocator, PageViewLocator>();
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();
+
+        services.AddComponents();
+        services.AddSingleton<IComponentCardViewModelFactory, ComponentCardViewModelFactory>();
+        services.AddSetupFeature();
 
         services.AddDashboardFeature();
         services.AddUpdatesFeature();

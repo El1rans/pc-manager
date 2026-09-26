@@ -5,6 +5,7 @@
   <c:BoolToVisibilityConverter x:Key="BoolToVis"/>
   <c:BoolToVisibilityConverter x:Key="InverseBoolToVis" Invert="True"/>
   <c:StringToVisibilityConverter x:Key="StringToVis"/>
+  <c:InverseBoolConverter x:Key="InverseBool"/>
 
   <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
 

@@ -3,6 +3,7 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using PCManager.App.Features.Setup;
 
 namespace PCManager.App.Shell;
 
@@ -11,6 +12,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     private readonly IShellService _shellService;
     private readonly IPageViewLocator _pageViewLocator;
+    private readonly ISetupLauncher _setupLauncher;
     private readonly ILogger<MainViewModel> _logger;
     private CancellationTokenSource _navigationCts = new();
     private Task _currentNavigation = Task.CompletedTask;
@@ -25,10 +27,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         IEnumerable<IPage> pages,
         IShellService shellService,
         IPageViewLocator pageViewLocator,
+        ISetupLauncher setupLauncher,
         ILogger<MainViewModel> logger)
     {
         _shellService = shellService;
         _pageViewLocator = pageViewLocator;
+        _setupLauncher = setupLauncher;
         _logger = logger;
         Pages = new ObservableCollection<IPage>(pages.OrderBy(p => p.Order));
     }
@@ -40,6 +44,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public string AdminStatusText => IsElevated ? "Running as administrator" : "Not running as administrator";
 
     public IRelayCommand RestartElevatedCommand => _shellService.RestartElevatedCommand;
+
+    [RelayCommand]
+    private void OpenSetup() => _setupLauncher.ShowSetup();
 
     /// <summary>
     /// Selects and awaits the load of the first page. Called from <see cref="MainWindow"/>'s
