@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using PCManager.Core.Elevation;
 using PCManager.Core.Processes;
 using PCManager.Core.Settings;
 
@@ -12,6 +13,7 @@ public sealed partial class ComponentService : IComponentService
     private readonly IProcessProbe _processProbe;
     private readonly IProcessRunner _processRunner;
     private readonly ISettingsStore _settingsStore;
+    private readonly IElevationService _elevationService;
     private readonly ILogger<ComponentService> _logger;
 
     public ComponentService(
@@ -20,6 +22,7 @@ public sealed partial class ComponentService : IComponentService
         IProcessProbe processProbe,
         IProcessRunner processRunner,
         ISettingsStore settingsStore,
+        IElevationService elevationService,
         ILogger<ComponentService> logger)
     {
         _registryReader = registryReader;
@@ -27,6 +30,7 @@ public sealed partial class ComponentService : IComponentService
         _processProbe = processProbe;
         _processRunner = processRunner;
         _settingsStore = settingsStore;
+        _elevationService = elevationService;
         _logger = logger;
     }
 
@@ -34,20 +38,11 @@ public sealed partial class ComponentService : IComponentService
 
     public event EventHandler<ComponentStatusChangeEventInfo>? StatusChanged;
 
-    public Task<ComponentStatus> GetStatusAsync(string id, CancellationToken cancellationToken)
+    public async Task<ComponentStatus> GetStatusAsync(string id, CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
         var definition = ComponentCatalog.Get(id);
-
-        try
-        {
-            return Task.FromResult(DetectStatus(definition));
-        }
-        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
-        {
-            _logger.LogWarning(ex, "Could not detect status of component {ComponentId}.", id);
-            return Task.FromResult(new ComponentStatus(ComponentState.Error, Message: "Could not check whether this is installed."));
-        }
+        var (status, _) = await DetectAsync(definition, cancellationToken).ConfigureAwait(false);
+        return status;
     }
 
     public async Task<ComponentStatus> InstallAsync(
@@ -56,6 +51,13 @@ public sealed partial class ComponentService : IComponentService
         ArgumentNullException.ThrowIfNull(log);
         ArgumentNullException.ThrowIfNull(progress);
         var definition = ComponentCatalog.Get(id);
+
+        // Cancellation is only honoured up to this point. Once winget actually starts, an install
+        // (especially the PawnIO driver) must run to completion - killing it mid-write can leave a
+        // half-installed kernel driver - so the rest of this call uses CancellationToken.None. A
+        // caller that wants to back out of an in-flight install should not cancel this token; there
+        // is deliberately no way to interrupt an installer once launched.
+        cancellationToken.ThrowIfCancellationRequested();
 
         string[] arguments =
         [
@@ -71,12 +73,18 @@ public sealed partial class ComponentService : IComponentService
         ComponentStatus status;
         try
         {
-            var result = await _processRunner.RunAsync("winget", arguments, log, progress, cancellationToken)
+            var result = await _processRunner.RunAsync("winget", arguments, log, progress, CancellationToken.None)
                 .ConfigureAwait(false);
 
             if (result.ExitCode == 0 || WingetExitCodes.IsAlreadyInstalled(result.ExitCode))
             {
-                status = await GetStatusAsync(id, cancellationToken).ConfigureAwait(false);
+                status = await GetStatusAsync(id, CancellationToken.None).ConfigureAwait(false);
+                LogInstalled(id, result.ExitCode);
+            }
+            else if (WingetExitCodes.IsRebootRequiredToFinish(result.ExitCode))
+            {
+                status = await GetStatusAsync(id, CancellationToken.None).ConfigureAwait(false);
+                status = status with { Message = "Restart your PC to finish setup." };
                 LogInstalled(id, result.ExitCode);
             }
             else if (WingetExitCodes.IsCancelledByUser(result.ExitCode))
@@ -91,10 +99,6 @@ public sealed partial class ComponentService : IComponentService
                     ComponentState.Error,
                     Message: $"Installation failed (winget exit code 0x{unchecked((uint)result.ExitCode):X8}).");
             }
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
@@ -116,7 +120,7 @@ public sealed partial class ComponentService : IComponentService
             return await GetStatusAsync(id, cancellationToken).ConfigureAwait(false);
         }
 
-        var status = await GetStatusAsync(id, cancellationToken).ConfigureAwait(false);
+        var (status, pathIsTrusted) = await DetectAsync(definition, cancellationToken).ConfigureAwait(false);
         if (status.State is ComponentState.NotInstalled or ComponentState.Running)
         {
             return status;
@@ -129,9 +133,24 @@ public sealed partial class ComponentService : IComponentService
             return notFound;
         }
 
+        if (_elevationService.IsElevated && !pathIsTrusted)
+        {
+            LogRefusedUntrustedStart(id, status.Path);
+            var refused = new ComponentStatus(
+                status.State,
+                status.Version,
+                status.Path,
+                $"For safety, PC Manager won't start {definition.DisplayName} from this location while running as administrator.");
+            RaiseStatusChanged(id, refused);
+            return refused;
+        }
+
         try
         {
-            _processRunner.StartDetached(status.Path, definition.StartArguments);
+            // Process.Start() does synchronous work; keep it off whatever thread called us (often
+            // the UI thread, since a ComponentCard's button command awaits this directly).
+            await Task.Run(() => _processRunner.StartDetached(status.Path, definition.StartArguments), cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
@@ -146,46 +165,81 @@ public sealed partial class ComponentService : IComponentService
         return running;
     }
 
-    private ComponentStatus DetectStatus(ComponentDefinition definition)
+    /// <summary>Runs detection off the calling thread (registry enumeration and
+    /// <c>Process.GetProcessesByName</c> are both synchronous I/O) and returns both the resulting
+    /// status and whether its resolved exe path is one only an administrator could have placed
+    /// (Program Files, or an HKLM-registered install location) - see
+    /// <see cref="IComponentService.StartAsync"/>.</summary>
+    private async Task<(ComponentStatus Status, bool PathIsTrusted)> DetectAsync(
+        ComponentDefinition definition, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await Task.Run(() => Detect(definition), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
+        {
+            _logger.LogWarning(ex, "Could not detect status of component {ComponentId}.", definition.Id);
+            return (new ComponentStatus(ComponentState.Error, Message: "Could not check whether this is installed."), false);
+        }
+    }
+
+    private (ComponentStatus Status, bool PathIsTrusted) Detect(ComponentDefinition definition)
     {
         var entry = _registryReader.FindUninstallEntry(definition.UninstallDisplayNameMatch);
-        var exePath = ResolveExePath(definition, entry);
+        var resolution = ResolveExePath(definition, entry);
 
-        var foundByFilesOrRegistry = entry is not null || exePath is not null;
+        var foundByFilesOrRegistry = entry is not null || resolution.Path is not null;
         var installed = definition.ServiceName is null
             ? foundByFilesOrRegistry
             : entry is not null && _registryReader.ServiceExists(definition.ServiceName);
 
         if (!installed)
         {
-            return ComponentStatus.NotInstalled;
+            return (ComponentStatus.NotInstalled, resolution.IsTrusted);
         }
 
         var version = entry?.DisplayVersion;
 
         if (definition.ProcessName is not null && _processProbe.IsRunning(definition.ProcessName))
         {
-            return new ComponentStatus(ComponentState.Running, version, exePath);
+            return (new ComponentStatus(ComponentState.Running, version, resolution.Path), resolution.IsTrusted);
         }
 
-        return new ComponentStatus(ComponentState.Installed, version, exePath);
+        return (new ComponentStatus(ComponentState.Installed, version, resolution.Path), resolution.IsTrusted);
     }
 
-    private string? ResolveExePath(ComponentDefinition definition, UninstallEntry? entry)
-    {
-        var candidates = new List<string>();
+    /// <param name="Path">The resolved executable path, or null if not found.</param>
+    /// <param name="IsTrusted">
+    /// True if only an administrator could have placed the file there: found under a Program
+    /// Files directory, or under an HKLM (per-machine) uninstall entry's <c>InstallLocation</c>.
+    /// False for a user-writable source: the OpenRGB path override in settings, or an HKCU
+    /// (per-user) uninstall entry.
+    /// </param>
+    private sealed record ExePathResolution(string? Path, bool IsTrusted);
 
-        if (definition.Id == ComponentIds.OpenRgb && _settingsStore.Current.Lighting.OpenRgbPathOverride is { Length: > 0 } overridePath)
+    private ExePathResolution ResolveExePath(ComponentDefinition definition, UninstallEntry? entry)
+    {
+        if (definition.Id == ComponentIds.OpenRgb &&
+            _settingsStore.Current.Lighting.OpenRgbPathOverride is { Length: > 0 } overridePath &&
+            _fileSystem.FileExists(overridePath))
         {
-            candidates.Add(overridePath);
+            return new ExePathResolution(overridePath, IsTrusted: false);
         }
 
         if (entry?.InstallLocation is { Length: > 0 } installLocation)
         {
+            List<string> entryCandidates = [];
             foreach (var relative in definition.ExeRelativePaths)
             {
-                candidates.Add(Path.Combine(installLocation, Path.GetFileName(relative)));
-                candidates.Add(Path.Combine(installLocation, relative));
+                entryCandidates.Add(Path.Combine(installLocation, Path.GetFileName(relative)));
+                entryCandidates.Add(Path.Combine(installLocation, relative));
+            }
+
+            var entryPath = entryCandidates.FirstOrDefault(_fileSystem.FileExists);
+            if (entryPath is not null)
+            {
+                return new ExePathResolution(entryPath, IsTrusted: entry.IsPerMachine);
             }
         }
 
@@ -193,11 +247,15 @@ public sealed partial class ComponentService : IComponentService
         {
             foreach (var relative in definition.ExeRelativePaths)
             {
-                candidates.Add(Path.Combine(programFilesDirectory, relative));
+                var candidate = Path.Combine(programFilesDirectory, relative);
+                if (_fileSystem.FileExists(candidate))
+                {
+                    return new ExePathResolution(candidate, IsTrusted: true);
+                }
             }
         }
 
-        return candidates.FirstOrDefault(_fileSystem.FileExists);
+        return new ExePathResolution(null, IsTrusted: false);
     }
 
     private void RaiseStatusChanged(string id, ComponentStatus status) =>
@@ -210,4 +268,7 @@ public sealed partial class ComponentService : IComponentService
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Install of component {ComponentId} was cancelled by the user.")]
     private partial void LogInstallCancelled(string componentId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Refused to start component {ComponentId} at {Path} while elevated: not a trusted (admin-only-writable) location.")]
+    private partial void LogRefusedUntrustedStart(string componentId, string path);
 }

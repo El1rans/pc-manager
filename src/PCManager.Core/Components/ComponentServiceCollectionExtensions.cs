@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using PCManager.Core.Elevation;
 using PCManager.Core.Processes;
 
 namespace PCManager.Core.Components;
@@ -13,6 +15,10 @@ public static class ComponentServiceCollectionExtensions
         services.AddSingleton<IRegistryReader, RegistryReader>();
         services.AddSingleton<IFileSystem, FileSystem>();
         services.AddSingleton<IProcessProbe, ProcessProbe>();
+        // TryAdd: the host may already register IElevationService itself (it is also used
+        // directly by the shell for the "restart as admin" button); either way there is exactly
+        // one instance.
+        services.TryAddSingleton<IElevationService, ElevationService>();
         services.AddSingleton<IComponentService, ComponentService>();
         return services;
     }

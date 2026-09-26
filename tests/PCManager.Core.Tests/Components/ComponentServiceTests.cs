@@ -13,6 +13,7 @@ public sealed class ComponentServiceTests : IDisposable
     private readonly FakeFileSystem _fileSystem = new();
     private readonly FakeProcessProbe _processProbe = new();
     private readonly FakeProcessRunner _processRunner = new();
+    private readonly FakeElevationService _elevationService = new();
 
     public ComponentServiceTests()
     {
@@ -30,7 +31,7 @@ public sealed class ComponentServiceTests : IDisposable
     }
 
     private ComponentService CreateService() =>
-        new(_registryReader, _fileSystem, _processProbe, _processRunner, _settingsStore, NullLogger<ComponentService>.Instance);
+        new(_registryReader, _fileSystem, _processProbe, _processRunner, _settingsStore, _elevationService, NullLogger<ComponentService>.Instance);
 
     // ---------------------------------------------------------------- detection
 
@@ -178,6 +179,7 @@ public sealed class ComponentServiceTests : IDisposable
     [Theory]
     [InlineData(unchecked((int)0x8A150061))] // APPINSTALLER_CLI_ERROR_PACKAGE_ALREADY_INSTALLED
     [InlineData(unchecked((int)0x8A15002B))] // APPINSTALLER_CLI_ERROR_UPDATE_NOT_APPLICABLE
+    [InlineData(unchecked((int)0x8A15010D))] // APPINSTALLER_CLI_ERROR_INSTALL_ALREADY_INSTALLED
     public async Task InstallAsync_AlreadyInstalledExitCodes_CountAsSuccess(int exitCode)
     {
         _registryReader.SetUninstallEntry("AnyDesk", new UninstallEntry("9.7.16", null));
@@ -191,10 +193,13 @@ public sealed class ComponentServiceTests : IDisposable
         Assert.Equal(ComponentState.Installed, status.State);
     }
 
-    [Fact]
-    public async Task InstallAsync_UserCancelledExitCode_ReturnsClearErrorMessage()
+    [Theory]
+    [InlineData(unchecked((int)0x8A15010C))] // APPINSTALLER_CLI_ERROR_INSTALL_CANCELLED_BY_USER
+    [InlineData(unchecked((int)0x800704C7))] // HRESULT_FROM_WIN32(ERROR_CANCELLED) - PawnIO's likely real code
+    [InlineData(1223)] // ERROR_CANCELLED as a raw exit code
+    public async Task InstallAsync_UserCancelledExitCodes_ReturnClearErrorMessage(int exitCode)
     {
-        _processRunner.NextExitCode = unchecked((int)0x8A15010C); // APPINSTALLER_CLI_ERROR_INSTALL_CANCELLED_BY_USER
+        _processRunner.NextExitCode = exitCode;
         var service = CreateService();
 
         var status = await service.InstallAsync(
@@ -202,6 +207,21 @@ public sealed class ComponentServiceTests : IDisposable
 
         Assert.Equal(ComponentState.Error, status.State);
         Assert.Equal("Installation was cancelled.", status.Message);
+    }
+
+    [Fact]
+    public async Task InstallAsync_RebootRequiredExitCode_CountsAsSuccessWithRestartMessage()
+    {
+        _registryReader.SetUninstallEntry("PawnIO", new UninstallEntry("2.2.0", null));
+        _registryReader.SetServiceExists("PawnIO");
+        _processRunner.NextExitCode = unchecked((int)0x8A150109); // APPINSTALLER_CLI_ERROR_INSTALL_REBOOT_REQUIRED_TO_FINISH
+        var service = CreateService();
+
+        var status = await service.InstallAsync(
+            ComponentIds.PawnIo, NullProgress, NullProgress, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ComponentState.Installed, status.State);
+        Assert.Equal("Restart your PC to finish setup.", status.Message);
     }
 
     [Fact]
@@ -215,6 +235,32 @@ public sealed class ComponentServiceTests : IDisposable
 
         Assert.Equal(ComponentState.Error, status.State);
         Assert.Contains("8A150001", status.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task InstallAsync_OnceLaunched_PassesCancellationTokenNoneToProcessRunner()
+    {
+        _processRunner.NextExitCode = 0;
+        var service = CreateService();
+        using var cts = new CancellationTokenSource();
+
+        await service.InstallAsync(ComponentIds.AnyDesk, NullProgress, NullProgress, cts.Token);
+
+        var tokenPassedToWinget = Assert.Single(_processRunner.RunCancellationTokens);
+        Assert.False(tokenPassedToWinget.CanBeCanceled);
+    }
+
+    [Fact]
+    public async Task InstallAsync_TokenAlreadyCancelled_NeverLaunchesWinget()
+    {
+        var service = CreateService();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            service.InstallAsync(ComponentIds.AnyDesk, NullProgress, NullProgress, cts.Token));
+
+        Assert.Empty(_processRunner.RunCalls);
     }
 
     // ---------------------------------------------------------------- start
@@ -275,6 +321,83 @@ public sealed class ComponentServiceTests : IDisposable
 
         Assert.Equal(ComponentState.Running, status.State);
         Assert.Empty(_processRunner.StartDetachedCalls);
+    }
+
+    // ---------------------------------------------------------------- start + elevation safety
+
+    [Fact]
+    public async Task StartAsync_ElevatedWithSettingsOverridePath_RefusesAndDoesNotStart()
+    {
+        const string overridePath = @"E:\Portable\OpenRGB\OpenRGB.exe";
+        _settingsStore.Update(s => s.Lighting.OpenRgbPathOverride = overridePath);
+        _fileSystem.AddFile(overridePath);
+        _elevationService.IsElevated = true;
+        var service = CreateService();
+
+        var status = await service.StartAsync(ComponentIds.OpenRgb, TestContext.Current.CancellationToken);
+
+        Assert.Empty(_processRunner.StartDetachedCalls);
+        Assert.Contains("administrator", status.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task StartAsync_ElevatedWithHkcuUninstallEntry_RefusesAndDoesNotStart()
+    {
+        const string exePath = @"C:\Users\someone\AppData\Local\OpenRGB\OpenRGB.exe";
+        _registryReader.SetUninstallEntry("OpenRGB", new UninstallEntry("1.0.0", @"C:\Users\someone\AppData\Local\OpenRGB", IsPerMachine: false));
+        _fileSystem.AddFile(exePath);
+        _elevationService.IsElevated = true;
+        var service = CreateService();
+
+        var status = await service.StartAsync(ComponentIds.OpenRgb, TestContext.Current.CancellationToken);
+
+        Assert.Empty(_processRunner.StartDetachedCalls);
+        Assert.Contains("administrator", status.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task StartAsync_ElevatedWithProgramFilesPath_StartsNormally()
+    {
+        const string exePath = @"C:\Program Files\OpenRGB\OpenRGB.exe";
+        _registryReader.SetUninstallEntry("OpenRGB", new UninstallEntry("1.0.0", null));
+        _fileSystem.AddFile(exePath);
+        _elevationService.IsElevated = true;
+        var service = CreateService();
+
+        var status = await service.StartAsync(ComponentIds.OpenRgb, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ComponentState.Running, status.State);
+        Assert.Single(_processRunner.StartDetachedCalls);
+    }
+
+    [Fact]
+    public async Task StartAsync_ElevatedWithHklmUninstallEntry_StartsNormally()
+    {
+        const string exePath = @"D:\Apps\OpenRGB\OpenRGB.exe";
+        _registryReader.SetUninstallEntry("OpenRGB", new UninstallEntry("1.0.0", @"D:\Apps\OpenRGB", IsPerMachine: true));
+        _fileSystem.AddFile(exePath);
+        _elevationService.IsElevated = true;
+        var service = CreateService();
+
+        var status = await service.StartAsync(ComponentIds.OpenRgb, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ComponentState.Running, status.State);
+        Assert.Single(_processRunner.StartDetachedCalls);
+    }
+
+    [Fact]
+    public async Task StartAsync_NotElevatedWithSettingsOverridePath_StartsNormally()
+    {
+        const string overridePath = @"E:\Portable\OpenRGB\OpenRGB.exe";
+        _settingsStore.Update(s => s.Lighting.OpenRgbPathOverride = overridePath);
+        _fileSystem.AddFile(overridePath);
+        _elevationService.IsElevated = false;
+        var service = CreateService();
+
+        var status = await service.StartAsync(ComponentIds.OpenRgb, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ComponentState.Running, status.State);
+        Assert.Single(_processRunner.StartDetachedCalls);
     }
 
     private static readonly IProgress<string> NullProgress = new NoOpProgress();

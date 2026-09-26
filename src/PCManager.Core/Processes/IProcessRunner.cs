@@ -17,9 +17,16 @@ public interface IProcessRunner
     /// <param name="arguments">Arguments, passed through <c>ArgumentList</c> so each one is quoted
     /// correctly regardless of embedded spaces.</param>
     /// <param name="onLine">Receives each complete stdout (and stderr) line as it arrives.</param>
-    /// <param name="onProgress">Receives redrawn progress-bar/spinner text; may be null.</param>
-    /// <param name="cancellationToken">Cancelling kills the process and throws
-    /// <see cref="OperationCanceledException"/>.</param>
+    /// <param name="onProgress">Receives redrawn progress-bar/spinner text (stdout only); may be null.</param>
+    /// <param name="cancellationToken">
+    /// <b>Cancelling kills the entire process tree</b> (and then throws
+    /// <see cref="OperationCanceledException"/>) - it is not a graceful "let it finish" request.
+    /// For a process that must not be interrupted mid-write once started (most importantly a
+    /// winget install, which can leave a driver half-installed if killed), start it with this
+    /// token, but switch to <see cref="CancellationToken.None"/> for the call that actually
+    /// launches it, checking <see cref="CancellationToken.ThrowIfCancellationRequested"/> only
+    /// beforehand. See <c>IComponentService.InstallAsync</c>.
+    /// </param>
     Task<ProcessRunResult> RunAsync(
         string fileName,
         IReadOnlyList<string> arguments,

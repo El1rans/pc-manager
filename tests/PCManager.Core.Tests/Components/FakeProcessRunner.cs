@@ -8,6 +8,13 @@ internal sealed class FakeProcessRunner : IProcessRunner
 
     public IReadOnlyList<string> NextLines { get; set; } = [];
 
+    public IReadOnlyList<string> NextErrorLines { get; set; } = [];
+
+    /// <summary>Records the cancellation token each <see cref="RunAsync"/> call actually received,
+    /// so tests can assert that an install passes <see cref="CancellationToken.None"/> once
+    /// launched (see <c>ComponentService.InstallAsync</c>).</summary>
+    public List<CancellationToken> RunCancellationTokens { get; } = [];
+
     /// <summary>Every install/run invocation, so tests can assert on the exact winget arguments used.</summary>
     public List<(string FileName, IReadOnlyList<string> Arguments)> RunCalls { get; } = [];
 
@@ -21,7 +28,8 @@ internal sealed class FakeProcessRunner : IProcessRunner
         CancellationToken cancellationToken)
     {
         RunCalls.Add((fileName, arguments));
-        return Task.FromResult(new ProcessRunResult(NextExitCode, NextLines));
+        RunCancellationTokens.Add(cancellationToken);
+        return Task.FromResult(new ProcessRunResult(NextExitCode, NextLines, NextErrorLines));
     }
 
     public void StartDetached(string fileName, IReadOnlyList<string> arguments) =>

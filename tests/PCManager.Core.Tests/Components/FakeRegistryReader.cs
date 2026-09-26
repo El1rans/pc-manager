@@ -16,4 +16,8 @@ internal sealed class FakeRegistryReader : IRegistryReader
         _uninstallEntries.TryGetValue(displayNameContains, out var entry) ? entry : null;
 
     public bool ServiceExists(string serviceName) => _services.Contains(serviceName);
+
+    public IReadOnlyList<string> InstallerHandledComponentIds { get; set; } = [];
+
+    public IReadOnlyList<string> GetInstallerHandledComponentIds() => InstallerHandledComponentIds;
 }
