@@ -15,7 +15,7 @@ PC Manager is a Windows 10/11 desktop app for monitoring and maintaining a singl
 | MVVM | CommunityToolkit.Mvvm 8.4.x (`ObservableObject`, `[ObservableProperty]`, `[RelayCommand]`) |
 | Composition | Microsoft.Extensions.Hosting generic host + DI; `App` builds the host and resolves `MainWindow` |
 | Logging | Microsoft.Extensions.Logging with Serilog file sink at `%APPDATA%\PCManager\logs\pcmanager-.log` (daily roll, 14 files kept) |
-| Settings | JSON at `%APPDATA%\PCManager\settings.json` via an `ISettingsStore`; writes are atomic (write temp file, then replace) |
+| Settings | JSON at `%APPDATA%\PCManager\settings.json` via the singleton `ISettingsStore`; one shared `Current` instance. Features change settings ONLY through `Update(s => ...)` (mutates + saves under a lock); never mutate `Current` directly |
 | Tests | xUnit v3 on Microsoft.Testing.Platform (`dotnet test` via the `test.runner` setting in `global.json`); no UI automation tests |
 | Packages | Central Package Management (`Directory.Packages.props`), exact versions, no floating versions, no prerelease unless a spec says so |
 
@@ -43,7 +43,9 @@ docs/specs/
 Rules:
 - All logic that can be tested without a window lives in `PCManager.Core` behind an interface. ViewModels depend on interfaces, never on `Process`, WMI, registry, or hardware libraries directly.
 - One public type per file; file name = type name. Namespaces follow folders (`PCManager.Core.Winget`).
-- A feature adds itself to the app by: its own folder in Core and App, one DI registration extension method (`services.AddWingetFeature()`), and one navigation entry. It does not edit other features' files.
+- A feature adds itself to the app by: its own folder in Core and App, and one DI registration extension method (`services.Add<Feature>Feature()`) that calls `services.AddPage<TViewModel, TView>()` and registers its services. It does not edit other features' files.
+- Third-party tools a feature needs (AnyDesk, OpenRGB, PawnIO) are detected, installed and started only through `IComponentService` (milestone 01b), and a missing tool is shown with the shared `ComponentCard` control.
+- Processes (winget, AnyDesk CLI, etc.) are started only through the shared `IProcessRunner` from 01b.
 
 ## Code quality gates (enforced by `Directory.Build.props`)
 

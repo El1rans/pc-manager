@@ -1,5 +1,7 @@
 # 04 - Hardware sensors and fan control (branch `feat/hardware`)
 
+> **Amended after 01b:** the PawnIO driver is the `pawnio` component from milestone 01b. When it is missing, show the shared `ComponentCard` for it (install in place via `IComponentService`, then initialize hardware access without restarting the app, re-opening `Computer` if needed). Replace the "card explaining how to install it" requirement below with this.
+
 Goal: show temperatures, fan speeds, clocks, loads, voltages and power for all hardware, and let the user control fans with curves, with safety that cannot be turned off.
 
 **Fan control can overheat and damage hardware if done wrong. The safety rules below are requirements, not suggestions.**
