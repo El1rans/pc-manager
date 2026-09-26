@@ -1,0 +1,4 @@
+# CA1707 forbids underscores in identifiers; xUnit test method names conventionally use
+# Method_Scenario_Expected underscores for readability, so the rule is suppressed for test code.
+[*.cs]
+dotnet_diagnostic.CA1707.severity = none
