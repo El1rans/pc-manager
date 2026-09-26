@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Microsoft.Extensions.DependencyInjection;
+using PCManager.App.Shell;
 
 namespace PCManager.App.Controls;
 
@@ -20,6 +22,10 @@ public partial class AdminRequiredBanner : UserControl
     public AdminRequiredBanner()
     {
         InitializeComponent();
+
+        // Default to the app-wide restart-elevated command so a page only needs to set
+        // RestartCommand explicitly when it wants different behaviour.
+        Loaded += OnLoaded;
     }
 
     public string Message
@@ -32,5 +38,13 @@ public partial class AdminRequiredBanner : UserControl
     {
         get => (ICommand?)GetValue(RestartCommandProperty);
         set => SetValue(RestartCommandProperty, value);
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (RestartCommand is null && App.Services?.GetService<IShellService>() is { } shellService)
+        {
+            RestartCommand = shellService.RestartElevatedCommand;
+        }
     }
 }

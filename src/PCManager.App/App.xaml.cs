@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
@@ -17,55 +18,123 @@ namespace PCManager.App;
 
 public partial class App : System.Windows.Application
 {
+    /// <summary>How long shutdown waits for the host to stop and dispose before giving up.</summary>
+    private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(5);
+
     private IHost? _host;
+
+    /// <summary>
+    /// Lets controls created outside DI (e.g. a <see cref="System.Windows.FrameworkElement"/>
+    /// instantiated by WPF itself, not resolved from the container) reach shared services, such as
+    /// <see cref="Controls.AdminRequiredBanner"/> resolving its default restart command.
+    /// </summary>
+    public static IServiceProvider? Services { get; private set; }
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
         ThemeMode = ThemeMode.System;
 
+        var logPath = BuildLogPath();
+
+        // A bootstrap logger so a failure before (or during) host construction is still on record,
+        // even though the "real" logger (wired into DI below) does not exist yet.
+        Serilog.Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Debug()
+            .WriteTo.File(
+                logPath,
+                formatProvider: CultureInfo.InvariantCulture,
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 14)
+            .CreateBootstrapLogger();
+
         AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         DispatcherUnhandledException += OnDispatcherUnhandledException;
 
-        var builder = Host.CreateApplicationBuilder(e.Args);
-        ConfigureLogging(builder);
-        ConfigureServices(builder.Services);
+        try
+        {
+            var builder = Host.CreateApplicationBuilder(e.Args);
+            ConfigureLogging(builder, logPath);
+            ConfigureServices(builder.Services);
 
-        _host = builder.Build();
-        _host.Start();
-        _host.Services.GetRequiredService<ILogger<App>>().LogInformation("PC Manager starting up.");
+            _host = builder.Build();
+            Services = _host.Services;
 
-        var mainWindow = _host.Services.GetRequiredService<MainWindow>();
-        MainWindow = mainWindow;
-        mainWindow.Show();
+            // Run off the UI thread: StartAsync should not block the dispatcher, and offloading it
+            // to the thread pool avoids any risk of deadlocking on this thread's context.
+            Task.Run(() => _host.StartAsync()).GetAwaiter().GetResult();
+
+            ApplyPageRegistrations(_host.Services);
+
+            var logger = _host.Services.GetRequiredService<ILogger<App>>();
+            logger.LogInformation("PC Manager starting up.");
+
+            _host.Services.GetRequiredService<ISettingsStore>().Update(s => s.Setup.LaunchCount++);
+
+            var mainWindow = _host.Services.GetRequiredService<MainWindow>();
+            MainWindow = mainWindow;
+            mainWindow.Show();
+        }
+        catch (Exception ex)
+        {
+            // Top-level startup guard: nothing above this point has a UI yet, so a failure here
+            // would otherwise leave an invisible, unkillable-from-the-taskbar zombie process with
+            // no explanation. Log it, tell the user, and exit cleanly instead.
+            Serilog.Log.Fatal(ex, "PC Manager failed to start.");
+            MessageBox.Show(
+                "PC Manager could not start. Details were saved to the log.",
+                "PC Manager - startup error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown(1);
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
         if (_host is not null)
         {
-            _host.StopAsync().GetAwaiter().GetResult();
-            _host.Dispose();
+            try
+            {
+                using var cts = new CancellationTokenSource(ShutdownTimeout);
+
+                // Run off the UI thread and bound it with a timeout: a hung IHostedService or a
+                // singleton whose DisposeAsync never completes must not hang app shutdown forever.
+                Task.Run(async () =>
+                {
+                    await _host.StopAsync(cts.Token).ConfigureAwait(false);
+                    await ((IAsyncDisposable)_host).DisposeAsync().ConfigureAwait(false);
+                }).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                // Best-effort shutdown: the process is exiting either way, but the failure should
+                // still be on record rather than silently swallowed.
+                Serilog.Log.Error(ex, "Error while shutting down the host.");
+            }
         }
 
         Serilog.Log.CloseAndFlush();
         base.OnExit(e);
     }
 
-    private static void ConfigureLogging(HostApplicationBuilder builder)
+    private static string BuildLogPath()
     {
         var logDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "PCManager",
             "logs");
-        var logPath = Path.Combine(logDirectory, "pcmanager-.log");
+        return Path.Combine(logDirectory, "pcmanager-.log");
+    }
 
+    private static void ConfigureLogging(HostApplicationBuilder builder, string logPath)
+    {
         builder.Services.AddSerilog((_, loggerConfiguration) => loggerConfiguration
             .MinimumLevel.Debug()
             .WriteTo.File(
                 logPath,
-                formatProvider: System.Globalization.CultureInfo.InvariantCulture,
+                formatProvider: CultureInfo.InvariantCulture,
                 rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 14));
     }
@@ -74,6 +143,9 @@ public partial class App : System.Windows.Application
     {
         services.AddSingleton<ISettingsStore, SettingsStore>();
         services.AddSingleton<IElevationService, ElevationService>();
+        services.AddSingleton<IAppLifetime, AppLifetime>();
+        services.AddSingleton<IShellService, ShellService>();
+        services.AddSingleton<IPageViewLocator, PageViewLocator>();
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();
 
@@ -83,14 +155,21 @@ public partial class App : System.Windows.Application
         services.AddLightingFeature();
     }
 
+    /// <summary>Applies every feature's <see cref="PageRegistration"/> to the view locator. Runs
+    /// once, after the container is built; adding a feature never requires touching this method.</summary>
+    private static void ApplyPageRegistrations(IServiceProvider services)
+    {
+        var locator = services.GetRequiredService<IPageViewLocator>();
+        foreach (var registration in services.GetServices<PageRegistration>())
+        {
+            locator.RegisterFactory(registration.ViewModelType, registration.CreateView);
+        }
+    }
+
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         LogUnhandledException(e.Exception, "Unhandled dispatcher exception.");
-        MessageBox.Show(
-            e.Exception.Message,
-            "PC Manager - unexpected error",
-            MessageBoxButton.OK,
-            MessageBoxImage.Error);
+        ShowUnexpectedErrorDialog();
         e.Handled = true;
     }
 
@@ -106,6 +185,23 @@ public partial class App : System.Windows.Application
     {
         LogUnhandledException(e.Exception, "Unobserved task exception.");
         e.SetObserved();
+    }
+
+    private void ShowUnexpectedErrorDialog()
+    {
+        // Fixed, friendly text only: the exception itself (which may include file paths or other
+        // details not meant for the user) goes to the log, never into this dialog.
+        const string message = "Something went wrong. Details were saved to the log. You can keep working or restart PC Manager.";
+        const string title = "PC Manager - unexpected error";
+
+        if (MainWindow is { IsLoaded: true } owner)
+        {
+            MessageBox.Show(owner, message, title, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        else
+        {
+            MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void LogUnhandledException(Exception exception, string message)

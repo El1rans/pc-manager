@@ -1,9 +1,11 @@
+using System.ComponentModel;
+
 namespace PCManager.App.Shell;
 
 /// <summary>
 /// A page shown in the navigation rail. Implemented by each feature's top-level view model.
 /// </summary>
-public interface IPage
+public interface IPage : INotifyPropertyChanged
 {
     /// <summary>Display name shown in the navigation rail.</summary>
     string Title { get; }

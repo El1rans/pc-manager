@@ -59,6 +59,6 @@
         </Border>
 
         <!-- Content -->
-        <ContentControl Grid.Column="1" Content="{Binding SelectedPage}" Margin="24"/>
+        <ContentControl Grid.Column="1" Content="{Binding SelectedPageView}" Margin="24"/>
     </Grid>
 </Window>

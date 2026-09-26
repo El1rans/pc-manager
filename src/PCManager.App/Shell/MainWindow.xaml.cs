@@ -8,5 +8,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = viewModel;
+
+        // First navigation happens once the window has loaded, not during DI construction.
+        Loaded += async (_, _) => await viewModel.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
     }
 }

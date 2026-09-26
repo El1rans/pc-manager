@@ -1,29 +1,12 @@
 <Application x:Class="PCManager.App.App"
               xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
               xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-              xmlns:dashboard="clr-namespace:PCManager.App.Features.Dashboard"
-              xmlns:updates="clr-namespace:PCManager.App.Features.Updates"
-              xmlns:hardware="clr-namespace:PCManager.App.Features.Hardware"
-              xmlns:lighting="clr-namespace:PCManager.App.Features.Lighting"
               ShutdownMode="OnMainWindowClose">
   <Application.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="Themes/Styles.xaml"/>
       </ResourceDictionary.MergedDictionaries>
-
-      <DataTemplate DataType="{x:Type dashboard:DashboardViewModel}">
-        <dashboard:DashboardView/>
-      </DataTemplate>
-      <DataTemplate DataType="{x:Type updates:UpdatesViewModel}">
-        <updates:UpdatesView/>
-      </DataTemplate>
-      <DataTemplate DataType="{x:Type hardware:HardwareViewModel}">
-        <hardware:HardwareView/>
-      </DataTemplate>
-      <DataTemplate DataType="{x:Type lighting:LightingViewModel}">
-        <lighting:LightingView/>
-      </DataTemplate>
     </ResourceDictionary>
   </Application.Resources>
 </Application>
