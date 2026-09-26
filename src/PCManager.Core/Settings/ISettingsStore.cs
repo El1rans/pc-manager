@@ -1,17 +1,25 @@
 namespace PCManager.Core.Settings;
 
 /// <summary>
-/// Loads and persists <see cref="AppSettings"/> as JSON under
-/// <c>%APPDATA%\PCManager\settings.json</c>.
+/// Holds the single, shared, in-memory copy of <see cref="AppSettings"/>, persisted as JSON at
+/// <c>%APPDATA%\PCManager\settings.json</c>. Loaded once (on construction); features read and
+/// write through this same instance instead of loading their own copy.
 /// </summary>
 public interface ISettingsStore
 {
     /// <summary>
-    /// Loads settings from disk. Returns defaults when the file is missing; if the file is
-    /// corrupt, it is backed up as <c>settings.json.bak</c> and defaults are returned.
+    /// The current, in-memory settings. Loaded from disk once, at construction; falls back to
+    /// defaults when the file is missing or corrupt.
     /// </summary>
-    AppSettings Load();
+    AppSettings Current { get; }
 
-    /// <summary>Atomically writes settings to disk (write a temp file, then replace).</summary>
-    void Save(AppSettings settings);
+    /// <summary>Atomically persists <see cref="Current"/> as-is (write a temp file, then move it).</summary>
+    void Save();
+
+    /// <summary>
+    /// Atomically mutates <see cref="Current"/> and persists it, serialized with any other
+    /// concurrent call to <see cref="Update"/> or <see cref="Save"/> so concurrent updates are
+    /// never lost.
+    /// </summary>
+    void Update(Action<AppSettings> mutate);
 }

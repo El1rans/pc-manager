@@ -11,4 +11,8 @@ public sealed class AppSettings
     public HardwareSettings Hardware { get; set; } = new();
 
     public LightingSettings Lighting { get; set; } = new();
+
+    public RemoteSupportSettings RemoteSupport { get; set; } = new();
+
+    public SetupSettings Setup { get; set; } = new();
 }

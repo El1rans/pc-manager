@@ -14,8 +14,10 @@ public sealed class SettingsStore : ISettingsStore
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
+    private readonly Lock _lock = new();
     private readonly ILogger<SettingsStore> _logger;
     private readonly string _settingsPath;
+    private readonly AppSettings _current;
 
     public SettingsStore(ILogger<SettingsStore> logger)
         : this(logger, DefaultSettingsPath())
@@ -27,7 +29,10 @@ public sealed class SettingsStore : ISettingsStore
     {
         _logger = logger;
         _settingsPath = settingsPath;
+        _current = LoadFromDisk();
     }
+
+    public AppSettings Current => _current;
 
     private static string DefaultSettingsPath() =>
         Path.Combine(
@@ -35,7 +40,26 @@ public sealed class SettingsStore : ISettingsStore
             "PCManager",
             "settings.json");
 
-    public AppSettings Load()
+    public void Save()
+    {
+        lock (_lock)
+        {
+            SaveToDisk(_current);
+        }
+    }
+
+    public void Update(Action<AppSettings> mutate)
+    {
+        ArgumentNullException.ThrowIfNull(mutate);
+
+        lock (_lock)
+        {
+            mutate(_current);
+            SaveToDisk(_current);
+        }
+    }
+
+    private AppSettings LoadFromDisk()
     {
         if (!File.Exists(_settingsPath))
         {
@@ -47,7 +71,7 @@ public sealed class SettingsStore : ISettingsStore
         {
             json = File.ReadAllText(_settingsPath);
         }
-        catch (IOException ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             _logger.LogWarning(ex, "Could not read settings file at {Path}; using defaults.", _settingsPath);
             return new AppSettings();
@@ -55,7 +79,9 @@ public sealed class SettingsStore : ISettingsStore
 
         try
         {
-            return JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+            var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+            NormalizeSections(settings);
+            return settings;
         }
         catch (JsonException ex)
         {
@@ -65,7 +91,21 @@ public sealed class SettingsStore : ISettingsStore
         }
     }
 
-    public void Save(AppSettings settings)
+    /// <summary>
+    /// An explicit JSON <c>null</c> for a section (e.g. <c>{"Updates": null}</c>) overwrites the
+    /// property initializer during deserialization; put defaults back so callers never see a null
+    /// section.
+    /// </summary>
+    private static void NormalizeSections(AppSettings settings)
+    {
+        settings.Updates ??= new UpdatesSettings();
+        settings.Hardware ??= new HardwareSettings();
+        settings.Lighting ??= new LightingSettings();
+        settings.RemoteSupport ??= new RemoteSupportSettings();
+        settings.Setup ??= new SetupSettings();
+    }
+
+    private void SaveToDisk(AppSettings settings)
     {
         var directory = Path.GetDirectoryName(_settingsPath);
         if (!string.IsNullOrEmpty(directory))
@@ -73,17 +113,19 @@ public sealed class SettingsStore : ISettingsStore
             Directory.CreateDirectory(directory);
         }
 
-        var json = JsonSerializer.Serialize(settings, JsonOptions);
-        var tempPath = _settingsPath + ".tmp";
-        File.WriteAllText(tempPath, json);
-
-        if (File.Exists(_settingsPath))
+        var tempPath = _settingsPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
         {
-            File.Replace(tempPath, _settingsPath, destinationBackupFileName: null);
+            var json = JsonSerializer.Serialize(settings, JsonOptions);
+            File.WriteAllText(tempPath, json);
+            File.Move(tempPath, _settingsPath, overwrite: true);
         }
-        else
+        finally
         {
-            File.Move(tempPath, _settingsPath);
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
         }
     }
 
@@ -94,7 +136,7 @@ public sealed class SettingsStore : ISettingsStore
             var backupPath = _settingsPath + ".bak";
             File.Copy(_settingsPath, backupPath, overwrite: true);
         }
-        catch (IOException ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Best-effort backup; losing it does not prevent falling back to defaults.
             _logger.LogWarning(ex, "Could not back up corrupt settings file at {Path}.", _settingsPath);
