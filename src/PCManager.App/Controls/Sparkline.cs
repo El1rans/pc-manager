@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Media;
 
-namespace PCManager.Controls;
+namespace PCManager.App.Controls;
 
 /// <summary>
 /// A small area chart for the last N samples. New samples enter from the right.
@@ -35,27 +35,36 @@ public sealed class Sparkline : FrameworkElement
     public Brush Stroke { get => (Brush)GetValue(StrokeProperty); set => SetValue(StrokeProperty, value); }
     public Brush BaselineBrush { get => (Brush)GetValue(BaselineBrushProperty); set => SetValue(BaselineBrushProperty, value); }
 
-    protected override void OnRender(DrawingContext dc)
+    protected override void OnRender(DrawingContext drawingContext)
     {
         double w = ActualWidth, h = ActualHeight;
-        if (w <= 0 || h <= 0) return;
+        if (w <= 0 || h <= 0)
+        {
+            return;
+        }
 
-        dc.DrawLine(new Pen(BaselineBrush, 1), new Point(0, h - 0.5), new Point(w, h - 0.5));
+        drawingContext.DrawLine(new Pen(BaselineBrush, 1), new Point(0, h - 0.5), new Point(w, h - 0.5));
 
         var values = Values;
-        if (values is null || values.Count < 2) return;
+        if (values is null || values.Count < 2)
+        {
+            return;
+        }
 
         var max = Maximum;
         if (double.IsNaN(max) || max <= 0)
         {
             max = values.Max() * 1.15;
-            if (max <= 0) max = 1;
+            if (max <= 0)
+            {
+                max = 1;
+            }
         }
 
         var step = w / Math.Max(Capacity - 1, 1);
         var x0 = w - (values.Count - 1) * step;
         const double top = 1.5;
-        double Y(double v) => h - 1 - Math.Clamp(v / max, 0, 1) * (h - 1 - top);
+        double Y(double v) => h - 1 - (Math.Clamp(v / max, 0, 1) * (h - 1 - top));
 
         var line = new StreamGeometry();
         var area = new StreamGeometry();
@@ -68,18 +77,20 @@ public sealed class Sparkline : FrameworkElement
             a.LineTo(first, false, false);
             for (var i = 1; i < values.Count; i++)
             {
-                var p = new Point(x0 + i * step, Y(values[i]));
+                var p = new Point(x0 + (i * step), Y(values[i]));
                 l.LineTo(p, true, true);
                 a.LineTo(p, false, false);
             }
-            a.LineTo(new Point(x0 + (values.Count - 1) * step, h), false, false);
+
+            a.LineTo(new Point(x0 + ((values.Count - 1) * step), h), false, false);
         }
+
         line.Freeze();
         area.Freeze();
 
         var fill = Stroke.CloneCurrentValue();
         fill.Opacity = 0.18;
-        dc.DrawGeometry(fill, null, area);
-        dc.DrawGeometry(null, new Pen(Stroke, 2) { LineJoin = PenLineJoin.Round }, line);
+        drawingContext.DrawGeometry(fill, null, area);
+        drawingContext.DrawGeometry(null, new Pen(Stroke, 2) { LineJoin = PenLineJoin.Round }, line);
     }
 }

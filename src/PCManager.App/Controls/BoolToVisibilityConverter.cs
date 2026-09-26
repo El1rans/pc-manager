@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 
-namespace PCManager.Controls;
+namespace PCManager.App.Controls;
 
 public sealed class BoolToVisibilityConverter : IValueConverter
 {
