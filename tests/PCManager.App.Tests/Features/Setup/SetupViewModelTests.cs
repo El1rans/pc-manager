@@ -1,0 +1,151 @@
+using System.IO;
+using Microsoft.Extensions.Logging.Abstractions;
+using PCManager.App.Features.Setup;
+using PCManager.Core.Components;
+using PCManager.Core.Settings;
+using Xunit;
+
+namespace PCManager.App.Tests.Features.Setup;
+
+public sealed class SetupViewModelTests : IDisposable
+{
+    private readonly string _directory;
+    private readonly SettingsStore _settingsStore;
+    private readonly FakeComponentService _componentService = new();
+    private readonly FakeRegistryReader _registryReader = new();
+
+    public SetupViewModelTests()
+    {
+        _directory = Path.Combine(Path.GetTempPath(), "PCManagerAppTests_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_directory);
+        _settingsStore = new SettingsStore(NullLogger<SettingsStore>.Instance, Path.Combine(_directory, "settings.json"));
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_directory))
+        {
+            Directory.Delete(_directory, recursive: true);
+        }
+    }
+
+    private SetupViewModel CreateViewModel() =>
+        new(_componentService, _registryReader, _settingsStore, NullLogger<SetupViewModel>.Instance);
+
+    [Fact]
+    public void MarkFirstRunCompleted_PersistsToSettings()
+    {
+        Assert.False(_settingsStore.Current.Setup.FirstRunCompleted);
+        var viewModel = CreateViewModel();
+
+        viewModel.MarkFirstRunCompleted();
+
+        Assert.True(_settingsStore.Current.Setup.FirstRunCompleted);
+    }
+
+    [Fact]
+    public void MarkFirstRunCompleted_CalledTwice_StaysTrue()
+    {
+        var viewModel = CreateViewModel();
+
+        viewModel.MarkFirstRunCompleted();
+        viewModel.MarkFirstRunCompleted();
+
+        Assert.True(_settingsStore.Current.Setup.FirstRunCompleted);
+    }
+
+    [Fact]
+    public async Task LoadAsync_InstallerHandledComponent_DefaultsToUnticked()
+    {
+        _registryReader.InstallerHandledComponentIds = [ComponentIds.AnyDesk];
+        var viewModel = CreateViewModel();
+
+        await viewModel.LoadAsync(TestContext.Current.CancellationToken);
+
+        var anyDeskItem = Assert.Single(viewModel.Items, i => i.Definition.Id == ComponentIds.AnyDesk);
+        Assert.False(anyDeskItem.IsSelected);
+        // Still re-detected for real, independent of the installer marker.
+        Assert.Equal(ComponentState.NotInstalled, anyDeskItem.Status.State);
+    }
+
+    [Fact]
+    public async Task LoadAsync_NotHandledByInstallerAndNotInstalled_DefaultsToTicked()
+    {
+        var viewModel = CreateViewModel();
+
+        await viewModel.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.All(viewModel.Items, i => Assert.True(i.IsSelected));
+    }
+
+    [Fact]
+    public async Task LoadAsync_AlreadyInstalled_DefaultsToUnticked()
+    {
+        _componentService.SetStatus(ComponentIds.OpenRgb, new ComponentStatus(ComponentState.Installed, "1.0.0"));
+        var viewModel = CreateViewModel();
+
+        await viewModel.LoadAsync(TestContext.Current.CancellationToken);
+
+        var openRgbItem = Assert.Single(viewModel.Items, i => i.Definition.Id == ComponentIds.OpenRgb);
+        Assert.False(openRgbItem.IsSelected);
+        Assert.True(openRgbItem.IsAlreadyInstalled);
+    }
+
+    [Fact]
+    public async Task PrimaryButtonText_BeforeAnyRun_IsSetUp()
+    {
+        var viewModel = CreateViewModel();
+        await viewModel.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("Set up", viewModel.PrimaryButtonText);
+    }
+
+    [Fact]
+    public async Task PrimaryAction_AllSucceed_SwitchesToCloseAndMarksFirstRunCompleted()
+    {
+        var viewModel = CreateViewModel();
+        await viewModel.LoadAsync(TestContext.Current.CancellationToken);
+        foreach (var id in new[] { ComponentIds.AnyDesk, ComponentIds.OpenRgb, ComponentIds.PawnIo })
+        {
+            _componentService.QueueInstallResult(id, new ComponentStatus(ComponentState.Installed));
+        }
+
+        await viewModel.PrimaryActionCommand.ExecuteAsync(null);
+
+        Assert.Equal("Close", viewModel.PrimaryButtonText);
+        Assert.True(_settingsStore.Current.Setup.FirstRunCompleted);
+        Assert.False(viewModel.ShowSkip);
+    }
+
+    [Fact]
+    public async Task PrimaryAction_OneFails_SwitchesToRetryNotClose()
+    {
+        var viewModel = CreateViewModel();
+        await viewModel.LoadAsync(TestContext.Current.CancellationToken);
+        _componentService.QueueInstallResult(ComponentIds.AnyDesk, new ComponentStatus(ComponentState.Error, Message: "boom"));
+        _componentService.QueueInstallResult(ComponentIds.OpenRgb, new ComponentStatus(ComponentState.Installed));
+        _componentService.QueueInstallResult(ComponentIds.PawnIo, new ComponentStatus(ComponentState.Installed));
+
+        await viewModel.PrimaryActionCommand.ExecuteAsync(null);
+
+        Assert.Equal("Retry", viewModel.PrimaryButtonText);
+    }
+
+    [Fact]
+    public async Task PrimaryAction_Retry_ReinstallsOnlyTheFailedItem()
+    {
+        var viewModel = CreateViewModel();
+        await viewModel.LoadAsync(TestContext.Current.CancellationToken);
+        _componentService.QueueInstallResult(ComponentIds.AnyDesk, new ComponentStatus(ComponentState.Error, Message: "boom"));
+        _componentService.QueueInstallResult(ComponentIds.OpenRgb, new ComponentStatus(ComponentState.Installed));
+        _componentService.QueueInstallResult(ComponentIds.PawnIo, new ComponentStatus(ComponentState.Installed));
+        await viewModel.PrimaryActionCommand.ExecuteAsync(null);
+        _componentService.InstallCalls.Clear();
+        _componentService.QueueInstallResult(ComponentIds.AnyDesk, new ComponentStatus(ComponentState.Installed));
+
+        await viewModel.PrimaryActionCommand.ExecuteAsync(null);
+
+        Assert.Equal([ComponentIds.AnyDesk], _componentService.InstallCalls);
+        Assert.Equal("Close", viewModel.PrimaryButtonText);
+    }
+}

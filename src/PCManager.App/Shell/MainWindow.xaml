@@ -28,6 +28,9 @@
                         <Button Content="Restart as admin"
                                 Command="{Binding RestartElevatedCommand}"
                                 Visibility="{Binding IsElevated, Converter={StaticResource InverseBoolToVis}}"
+                                HorizontalAlignment="Stretch" Margin="0,0,0,8"/>
+                        <Button Content="Set up optional features"
+                                Command="{Binding OpenSetupCommand}"
                                 HorizontalAlignment="Stretch"/>
                     </StackPanel>
                 </Border>

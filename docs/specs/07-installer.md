@@ -14,11 +14,30 @@ Goal: a single `PCManager-Setup-<version>.exe` a family member can download and 
     - "RGB lighting control (OpenRGB)".
     - "Fan control and temperature sensors (PawnIO driver)" - with a short note that it installs a signed hardware driver.
   - For each ticked component, `[Run]` executes `winget install --id <id> --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity` with a status message. If winget is missing, skip with a message; PC Manager's first-run setup can install them later.
-  - Writes a marker so PC Manager's first-run setup pre-checks what the installer already handled (it re-detects anyway).
+  - Writes a marker so PC Manager's first-run setup pre-checks what the installer already handled (it re-detects anyway) - see "Contract with first-run setup" below.
   - Optional "Start PC Manager when Windows starts" task (current user Run key).
   - Uninstall does NOT remove AnyDesk/OpenRGB/PawnIO (they are separate apps; say so on the finish page) and deletes `%APPDATA%\PCManager` only if the user agrees.
 - Versioning: `Version` in `Directory.Build.props`; tag `vX.Y.Z` triggers `.github/workflows/release.yml`: build, test, publish, compile installer, create a GitHub Release with the setup exe and SHA-256 checksum. CHANGELOG section becomes the release notes.
 - Code signing is out of scope for now (document that SmartScreen will warn for unsigned installers).
+
+## Contract with first-run setup
+
+Defined now (01b) so both sides can build against it without either one waiting on the other.
+
+- After running `winget install` for a ticked component, the installer writes
+  `HKLM\Software\PC Manager\Installer`, value `Components` (`REG_SZ`), to a comma-separated list of
+  the component ids (see `PCManager.Core.Components.ComponentIds`: `anydesk`, `openrgb`, `pawnio`)
+  it just ran winget for - regardless of whether that winget call actually succeeded.
+- The value is additive/idempotent: if it already exists (e.g. a repair install), the installer
+  merges its own ids into the existing comma-separated list rather than overwriting it.
+- PC Manager's first-run setup (`SetupViewModel.LoadAsync`, via
+  `IRegistryReader.GetInstallerHandledComponentIds()`) reads this value once, but **always
+  re-detects every component itself** via `IComponentService.GetStatusAsync` - the marker only
+  affects which not-yet-detected-as-installed items default to ticked (an id in the list defaults
+  to unticked, since the installer already attempted it), never a component's reported status.
+- The installer does not need to delete or update this value on uninstall; a stale entry only
+  means first-run setup defaults that item to unticked, which is harmless (the user can still tick
+  it).
 
 ## Acceptance criteria
 

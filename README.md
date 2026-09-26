@@ -35,6 +35,11 @@ milestone specs.
 - Logs written to `%APPDATA%\PCManager\logs`.
 - Admin elevation: the sidebar shows whether the app is running as administrator and can relaunch
   elevated.
+- First-run setup: on first launch (and any time after, via "Set up optional features" in the
+  sidebar), choose which optional third-party tools to install - AnyDesk (remote help), OpenRGB
+  (lighting) and the PawnIO driver (hardware sensors/fan control). Already-installed tools are
+  detected and skipped. Feature pages that need one of these show a shared status card and can
+  install/start it in place, without restarting the app.
 
 ## Planned modules
 
