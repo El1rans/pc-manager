@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,12 +22,23 @@ using Serilog;
 
 namespace PCManager.App;
 
-public partial class App : System.Windows.Application
+public partial class App : System.Windows.Application, IDisposable
 {
     /// <summary>How long shutdown waits for the host to stop and dispose before giving up.</summary>
     private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// Fixed, well-known name for the app's single-instance mutex. The installer's
+    /// <c>[Setup]</c> section references this same name via <c>AppMutex</c>
+    /// (<c>installer/PCManager.iss</c>) so Inno Setup can detect a running PC Manager and ask the
+    /// user to close it before install/uninstall proceeds - see docs/specs/07-installer.md. Held
+    /// for the lifetime of the process only to make the app detectable; it does not enforce
+    /// single-instance behaviour on its own.
+    /// </summary>
+    public const string AppMutexName = "PCManagerAppMutex";
+
     private IHost? _host;
+    private Mutex? _appMutex;
 
     /// <summary>
     /// Lets controls created outside DI (e.g. a <see cref="System.Windows.FrameworkElement"/>
@@ -56,6 +68,12 @@ public partial class App : System.Windows.Application
         AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         DispatcherUnhandledException += OnDispatcherUnhandledException;
+
+        // Named mutex the installer/uninstaller looks for (Inno Setup's AppMutex) so it can ask
+        // the user to close PC Manager before install/uninstall touches its files. Not used here
+        // to enforce single-instance behaviour - just held for the process lifetime so it exists
+        // while the app is running.
+        _appMutex = new Mutex(initiallyOwned: false, name: AppMutexName);
 
         try
         {
@@ -127,7 +145,17 @@ public partial class App : System.Windows.Application
         }
 
         Serilog.Log.CloseAndFlush();
+        Dispose();
         base.OnExit(e);
+    }
+
+    /// <summary>Disposes <see cref="_appMutex"/>. Called from <see cref="OnExit"/> - satisfies
+    /// CA1001 (a type that owns a disposable field must itself be disposable) rather than being
+    /// invoked by the WPF framework itself.</summary>
+    public void Dispose()
+    {
+        _appMutex?.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private static string BuildLogPath()

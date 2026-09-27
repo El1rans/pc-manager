@@ -32,6 +32,8 @@
                         <Button Content="Set up optional features"
                                 Command="{Binding OpenSetupCommand}"
                                 HorizontalAlignment="Stretch"/>
+                        <TextBlock Text="{Binding VersionText}" Style="{StaticResource Secondary}"
+                                   FontSize="11" Margin="4,8,4,0" HorizontalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
