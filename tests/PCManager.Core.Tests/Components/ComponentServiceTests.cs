@@ -170,7 +170,7 @@ public sealed class ComponentServiceTests : IDisposable
         var call = Assert.Single(_processRunner.RunCalls);
         Assert.Equal("winget", call.FileName);
         Assert.Equal(
-            ["install", "--id", "AnyDesk.AnyDesk", "--exact", "--silent",
+            ["install", "--id", "AnyDesk.AnyDesk", "--exact", "--source", "winget", "--silent",
                 "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"],
             call.Arguments);
     }

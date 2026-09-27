@@ -64,6 +64,7 @@ public sealed partial class ComponentService : IComponentService
             "install",
             "--id", definition.WingetId,
             "--exact",
+            "--source", "winget",
             "--silent",
             "--accept-package-agreements",
             "--accept-source-agreements",
