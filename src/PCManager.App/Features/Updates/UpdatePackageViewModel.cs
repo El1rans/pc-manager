@@ -8,7 +8,6 @@ namespace PCManager.App.Features.Updates;
 public sealed partial class UpdatePackageViewModel : ObservableObject
 {
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Notes))]
     private bool _isSelected;
 
     [ObservableProperty]
@@ -27,7 +26,7 @@ public sealed partial class UpdatePackageViewModel : ObservableObject
         Package = package;
     }
 
-    public WingetPackage Package { get; private set; }
+    public WingetPackage Package { get; }
 
     public string Name => Package.Name;
 
@@ -73,13 +72,4 @@ public sealed partial class UpdatePackageViewModel : ObservableObject
         UpdateRowState.Queued => "", // clock
         _ => string.Empty,
     };
-
-    /// <summary>Replaces the underlying package data (e.g. after a re-check finds a new available
-    /// version) without losing this row's identity/selection - used by
-    /// <see cref="UpdatesViewModel"/> when merging a fresh listing.</summary>
-    public void UpdateFrom(WingetPackage package)
-    {
-        Package = package;
-        OnPropertyChanged(string.Empty);
-    }
 }

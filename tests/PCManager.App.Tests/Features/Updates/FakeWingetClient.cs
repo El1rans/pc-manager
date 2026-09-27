@@ -24,9 +24,14 @@ internal sealed class FakeWingetClient : IWingetClient
 
     public List<bool> UpgradeSilentFlags { get; } = [];
 
+    /// <summary>Number of <see cref="GetUpgradesAsync"/> calls made so far - lets a test assert
+    /// that a refresh did (or, per B1, deliberately did not) happen at some point.</summary>
+    public int GetUpgradesCallCount { get; private set; }
+
     public Task<IReadOnlyList<WingetPackage>> GetUpgradesAsync(
         bool includeUnknown, IProgress<string>? progress, CancellationToken cancellationToken)
     {
+        GetUpgradesCallCount++;
         if (UpgradeListResults.Count > 0)
         {
             _lastUpgradeListResult = UpgradeListResults.Dequeue();

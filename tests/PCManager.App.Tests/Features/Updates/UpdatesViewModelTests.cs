@@ -186,11 +186,30 @@ public sealed class UpdatesViewModelTests : IDisposable
 
         // The row disappeared (it succeeded), but the message is asserted via the log instead,
         // since a successful row is not kept around after the quiet recheck.
-        Assert.Contains("Finished: 1 updated, 0 failed, 0 skipped", viewModel.LogText);
+        Assert.Contains("Finished: 1 updated (1 needs a restart), 0 failed, 0 skipped", viewModel.LogText);
     }
 
     [Fact]
-    public async Task Silent_Toggled_PersistsToSettings()
+    public async Task UpdateSelectedAsync_NoApplicableUpdate_IsSkipped()
+    {
+        var package = Package("AlreadyCurrent");
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        _wingetClient.UpgradeListResults.Enqueue([package]); // still listed - nothing was installed
+        _wingetClient.UpgradeResultsById["AlreadyCurrent"] = new WingetResult(unchecked((int)0x8A15002B), []);
+        var viewModel = CreateViewModel();
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+
+        var remaining = Assert.Single(viewModel.Packages);
+        Assert.Equal(UpdateRowState.Skipped, remaining.State);
+        Assert.Equal("No applicable update", remaining.StatusText);
+        Assert.Contains("Finished: 0 updated, 0 failed, 1 skipped", viewModel.LogText);
+    }
+
+    [Fact]
+    public void Silent_Toggled_PersistsToSettings()
     {
         var viewModel = CreateViewModel();
 
@@ -208,10 +227,62 @@ public sealed class UpdatesViewModelTests : IDisposable
         await viewModel.RefreshAsync(quiet: false);
 
         viewModel.IncludeUnknown = false;
-        // OnIncludeUnknownChanged fires a fire-and-forget refresh; give it a turn to complete.
-        await Task.Delay(200, TestContext.Current.CancellationToken);
 
         Assert.False(_settingsStore.Current.Updates.IncludeUnknown);
         Assert.Contains(viewModel.Packages, p => p.Id == "New.Id");
+    }
+
+    /// <summary>
+    /// B1: toggling "Include apps with unknown version" while an update run is in flight must not
+    /// start a competing (non-quiet) refresh - that would clear <c>Packages</c> out from under the
+    /// running loop (orphaning the rows it is still writing status to), clear <c>IsBusy</c> while
+    /// the run is still going, and cause the run's own final quiet re-check to merge from those
+    /// already-reset rows instead of the real in-progress ones, losing every row's outcome.
+    /// </summary>
+    [Fact]
+    public async Task IncludeUnknown_ToggledDuringUpdateRun_DoesNotStartACompetingRefresh()
+    {
+        var packageA = Package("First");
+        var packageB = Package("Second");
+        _wingetClient.UpgradeListResults.Enqueue([packageA, packageB]); // initial listing
+        _wingetClient.UpgradeListResults.Enqueue([packageB]); // the run's own final quiet re-check
+        _wingetClient.UpgradeResultsById["First"] = new WingetResult(0, []);
+        _wingetClient.UpgradeResultsById["Second"] = new WingetResult(unchecked((int)0x87654321), []);
+        var viewModel = CreateViewModel();
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+
+        _wingetClient.OnUpgrading = id =>
+        {
+            if (id == "First")
+            {
+                viewModel.IncludeUnknown = !viewModel.IncludeUnknown;
+            }
+        };
+
+        Assert.Equal(1, _wingetClient.GetUpgradesCallCount);
+
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+
+        // Exactly the initial listing plus the run's own final re-check - no extra refresh
+        // squeezed in by the toggle.
+        Assert.Equal(2, _wingetClient.GetUpgradesCallCount);
+        Assert.Equal(["First", "Second"], _wingetClient.UpgradeCalls);
+
+        // "Second" failed - its real outcome survived to the final merged list.
+        var remaining = Assert.Single(viewModel.Packages);
+        Assert.Equal("Second", remaining.Id);
+        Assert.Equal(UpdateRowState.Failed, remaining.State);
+        Assert.False(viewModel.IsBusy);
+        Assert.False(viewModel.IsUpdating);
+    }
+
+    [Fact]
+    public void IsBusyWithWork_ReflectsIsUpdating()
+    {
+        var viewModel = CreateViewModel();
+
+        Assert.False(viewModel.IsBusyWithWork);
+        Assert.False(string.IsNullOrEmpty(viewModel.BusyMessage));
     }
 }

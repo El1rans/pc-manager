@@ -7,10 +7,12 @@ using System.IO;
 using System.Media;
 using System.Text;
 using System.Windows.Data;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using PCManager.App.Shell;
+using PCManager.Core.Processes;
 using PCManager.Core.Settings;
 using PCManager.Core.Winget;
 
@@ -18,16 +20,26 @@ namespace PCManager.App.Features.Updates;
 
 /// <summary>View model for the Updates page: lists <c>winget upgrade</c> results, lets the user
 /// pick which to install, and runs them one at a time. See <c>docs/specs/02-updates.md</c>.</summary>
-public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
+public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, IBusyGuard
 {
     /// <summary>Log panel cap - see <c>docs/specs/02-updates.md</c>.</summary>
     private const int LogCharacterLimit = 200_000;
 
+    /// <summary>Once <see cref="LogCharacterLimit"/> is exceeded, trim back down to roughly this
+    /// many characters (at the next line boundary at or after this point) rather than trimming to
+    /// the limit itself, so trimming happens in occasional chunks instead of on every single line.</summary>
+    private const int LogTrimTarget = 150_000;
+
+    /// <summary>How often buffered log lines are flushed into <see cref="LogText"/> - batching
+    /// avoids rebuilding the whole (potentially large) log string on every single line.</summary>
+    private static readonly TimeSpan LogFlushInterval = TimeSpan.FromMilliseconds(100);
+
     private readonly IWingetClient _wingetClient;
     private readonly ISettingsStore _settingsStore;
     private readonly ILogger<UpdatesViewModel> _logger;
-    private readonly Lock _logLock = new();
     private readonly StringBuilder _log = new();
+    private readonly List<string> _pendingLogLines = [];
+    private readonly DispatcherTimer _logFlushTimer;
     private readonly Lock _initialCheckLock = new();
 
     private CancellationTokenSource _refreshCts = new();
@@ -46,8 +58,18 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
     [NotifyCanExecuteChangedFor(nameof(StopAfterCurrentCommand))]
     private bool _isStopRequested;
 
+    /// <summary>The current step's description - "Checking for updates...", "[2/5] Updating
+    /// Some.Id", "Stopping after the current app finishes...", or the final "Finished: ..." summary.
+    /// Shown next to <see cref="ProgressLine"/> rather than combined with it - see
+    /// <c>docs/specs/02-updates.md</c>'s "progress row (indeterminate bar + current step + latest
+    /// winget progress line)".</summary>
     [ObservableProperty]
-    private string? _progressText;
+    private string? _currentStep;
+
+    /// <summary>The latest raw progress/status text winget itself reported (e.g. a download
+    /// percentage) for whichever package is currently being checked or updated.</summary>
+    [ObservableProperty]
+    private string? _progressLine;
 
     [ObservableProperty]
     private string _summaryText = "Checking for updates...";
@@ -80,6 +102,14 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
     public string UpdateSelectedButtonText =>
         $"Update selected ({SelectedCount.ToString(CultureInfo.InvariantCulture)})";
 
+    /// <inheritdoc/>
+    public bool IsBusyWithWork => IsUpdating;
+
+    /// <inheritdoc/>
+    public string BusyMessage =>
+        "An update is still running. If you close PC Manager now, the current installer keeps " +
+        "running but you won't see the result. Close anyway?";
+
     public UpdatesViewModel(IWingetClient wingetClient, ISettingsStore settingsStore, ILogger<UpdatesViewModel> logger)
     {
         _wingetClient = wingetClient;
@@ -97,6 +127,13 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
         Packages.CollectionChanged += OnPackagesCollectionChanged;
         PackagesView = CollectionViewSource.GetDefaultView(Packages);
         PackagesView.Filter = FilterPackage;
+
+        // Falls back to the constructing thread's dispatcher when there is no WPF Application (e.g.
+        // unit tests) - harmless there, since it just never ticks; tests instead see up-to-date
+        // log text via the explicit FlushLog() calls at the end of each operation below.
+        _logFlushTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = LogFlushInterval };
+        _logFlushTimer.Tick += (_, _) => FlushLog();
+        _logFlushTimer.Start();
     }
 
     public override string Title => "Updates";
@@ -131,24 +168,28 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
     /// </summary>
     /// <param name="quiet">True for the automatic re-check after an update run finishes: existing
     /// rows keep their last status/state (a row that no longer appears means it updated
-    /// successfully) instead of resetting, and the "Checking for updates..." progress message is
-    /// not shown.</param>
+    /// successfully) instead of resetting, and the "Checking for updates..." step message is not
+    /// shown.</param>
     public async Task RefreshAsync(bool quiet)
     {
         _refreshCts.Cancel();
         _refreshCts.Dispose();
-        _refreshCts = new CancellationTokenSource();
-        var cancellationToken = _refreshCts.Token;
+        var cts = new CancellationTokenSource();
+        _refreshCts = cts;
+        var cancellationToken = cts.Token;
 
         IsBusy = true;
         if (!quiet)
         {
-            ProgressText = "Checking for updates...";
+            CurrentStep = "Checking for updates...";
         }
 
         try
         {
-            var progress = new Progress<string>(text => ProgressText = text);
+            // Only a non-quiet refresh reports progress - a quiet re-check happens right after an
+            // update run's own "Finished: ..." summary is set as the CurrentStep, and a stray
+            // listing-progress line here must not appear to overwrite it.
+            IProgress<string>? progress = quiet ? null : new Progress<string>(text => ProgressLine = text);
             var packages = await _wingetClient.GetUpgradesAsync(IncludeUnknown, progress, cancellationToken)
                 .ConfigureAwait(true);
             MergePackages(packages, quiet);
@@ -161,19 +202,29 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
         {
             AppendLog("ERROR: " + ex.Message);
             SummaryText = ex.Message;
+            FlushLog();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Could not check for updates.");
             AppendLog("ERROR: " + ex.Message);
             SummaryText = "Could not check for updates.";
+            FlushLog();
         }
         finally
         {
-            IsBusy = false;
-            if (!quiet)
+            // Only this call's own token still being the current one means no newer RefreshAsync
+            // (or this same one racing with itself) has already taken over - an older, superseded
+            // call reaching here (e.g. its GetUpgradesAsync happened to return before it noticed
+            // cancellation) must not clear IsBusy out from under the newer one that is still running.
+            if (ReferenceEquals(_refreshCts, cts))
             {
-                ProgressText = null;
+                IsBusy = false;
+                ProgressLine = null;
+                if (!quiet)
+                {
+                    CurrentStep = null;
+                }
             }
         }
     }
@@ -192,8 +243,9 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
             if (previous.TryGetValue(package.Id, out var oldRow))
             {
                 // A row that just finished successfully never reappears here (it no longer has an
-                // upgrade available) - this only matters for a row still mid-run when a concurrent
-                // refresh landed, which should not stay ticked.
+                // upgrade available). One still present (still needs an update, was skipped, or
+                // failed - including one whose installed version is "Unknown" and so can look like
+                // a "new" package every check) keeps its selection unless it already finished.
                 row.IsSelected = oldRow.IsSelected && oldRow.State != UpdateRowState.Updated;
                 if (quiet)
                 {
@@ -264,6 +316,15 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
     partial void OnIncludeUnknownChanged(bool value)
     {
         _settingsStore.Update(s => s.Updates.IncludeUnknown = value);
+
+        // The checkbox is disabled in the view while IsBusy (which covers IsUpdating too), but
+        // guard here as well in case this is ever set programmatically: never contend with an
+        // in-flight update run for ownership of IsBusy/Packages - see RefreshAsync's finally block.
+        if (IsUpdating)
+        {
+            return;
+        }
+
         _ = RefreshAsync(quiet: false);
     }
 
@@ -310,15 +371,27 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
         IsUpdating = true;
 
         var updated = 0;
+        var restartNeeded = 0;
         var failed = 0;
         var skipped = 0;
         var completed = 0;
 
         var logProgress = new Progress<string>(AppendLog);
-        var stepProgress = new Progress<string>(text => ProgressText = text);
+        var stepProgress = new Progress<string>(text => ProgressLine = text);
 
         foreach (var row in selected)
         {
+            // Ignoring a row (from the context menu) while it is still queued must actually skip
+            // it - the selection above was captured once, at the start of the run, so without this
+            // check an ignore mid-run would have no effect on a row not yet reached.
+            if (row.IsIgnored)
+            {
+                row.State = UpdateRowState.Skipped;
+                row.StatusText = "Ignored";
+                skipped++;
+                continue;
+            }
+
             if (IsStopRequested)
             {
                 row.State = UpdateRowState.Skipped;
@@ -330,7 +403,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
             completed++;
             row.State = UpdateRowState.Updating;
             row.StatusText = "Updating...";
-            ProgressText = $"[{completed}/{selected.Count}] Updating {row.Id}";
+            CurrentStep = $"[{completed}/{selected.Count}] Updating {row.Id}";
             AppendLog($"> winget upgrade --id {row.Id} --exact");
 
             try
@@ -361,6 +434,11 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
                 {
                     case PackageOutcome.Success:
                         updated++;
+                        if (message.Contains("restart", StringComparison.OrdinalIgnoreCase))
+                        {
+                            restartNeeded++;
+                        }
+
                         break;
                     case PackageOutcome.Skipped:
                         skipped++;
@@ -370,7 +448,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
                         break;
                 }
 
-                AppendLog($"<< {row.Id}: exit 0x{unchecked((uint)result.ExitCode):X8}");
+                AppendLog($"<< {row.Id}: {message} (exit 0x{unchecked((uint)result.ExitCode):X8})");
                 AppendLog(string.Empty);
             }
             catch (WingetNotFoundException ex)
@@ -388,11 +466,24 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
                 failed++;
                 AppendLog("ERROR: " + ex.Message);
             }
+
+            // Flushed after every package (rather than left to the ~100ms timer alone) so the log
+            // never looks stale for longer than one package's worth of output, and so tests never
+            // need to wait on the real timer to see a completed package's log lines.
+            FlushLog();
         }
 
-        var summary = $"Finished: {updated} updated, {failed} failed, {skipped} skipped";
-        ProgressText = summary;
+        var restartSuffix = restartNeeded switch
+        {
+            0 => string.Empty,
+            1 => " (1 needs a restart)",
+            _ => $" ({restartNeeded.ToString(CultureInfo.InvariantCulture)} need a restart)",
+        };
+        var summary = $"Finished: {updated} updated{restartSuffix}, {failed} failed, {skipped} skipped";
+        CurrentStep = summary;
+        ProgressLine = null;
         AppendLog(summary);
+        FlushLog();
         PlayFinishedSound();
 
         IsUpdating = false;
@@ -407,14 +498,16 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
     private void StopAfterCurrent()
     {
         IsStopRequested = true;
-        ProgressText = "Stopping after the current app finishes...";
+        CurrentStep = "Stopping after the current app finishes...";
     }
 
     private bool CanStopAfterCurrent() => IsUpdating && !IsStopRequested;
 
     /// <summary>Adds the given ids to the ignore list (persisted), unselects and marks those rows
     /// ignored, and refreshes the summary/badge/filter. Called from the view's context menu with
-    /// the DataGrid's currently selected rows.</summary>
+    /// the DataGrid's currently selected rows. If a row is currently queued or in-flight as part of
+    /// an update run, ignoring it here still lets the run notice - see the <c>IsIgnored</c> check
+    /// in <see cref="UpdateSelectedAsync"/>.</summary>
     public void Ignore(IEnumerable<UpdatePackageViewModel> rows)
     {
         var list = rows.ToList();
@@ -468,7 +561,8 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
     }
 
     /// <summary>Runs <c>winget show</c> for one package into the Log panel (expanding it first) -
-    /// the "Show package info" context menu item.</summary>
+    /// the "Show package info" context menu item. Disabled in the view while an update is running
+    /// (<see cref="IsUpdating"/>) so it never interleaves with a running upgrade's own log lines.</summary>
     public async Task ShowPackageInfoAsync(UpdatePackageViewModel row, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(row);
@@ -494,6 +588,10 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
             _logger.LogError(ex, "Could not show package info for {PackageId}.", row.Id);
             AppendLog("ERROR: " + ex.Message);
         }
+        finally
+        {
+            FlushLog();
+        }
     }
 
     [RelayCommand]
@@ -515,31 +613,60 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
     [RelayCommand]
     private void ClearLog()
     {
-        lock (_logLock)
-        {
-            _log.Clear();
-        }
-
+        _pendingLogLines.Clear();
+        _log.Clear();
         LogText = string.Empty;
     }
 
-    /// <summary>Appends one line to the Log panel (capped at <see cref="LogCharacterLimit"/>
-    /// characters) and mirrors it to the app log - see <c>docs/specs/02-updates.md</c>: "Everything
-    /// written to the Log panel also goes to the app log."</summary>
+    /// <summary>Queues one line for the Log panel and mirrors it immediately to the app log - see
+    /// <c>docs/specs/02-updates.md</c>: "Everything written to the Log panel also goes to the app
+    /// log." <see cref="LogText"/> itself is only rebuilt when <see cref="FlushLog"/> runs (every
+    /// <see cref="LogFlushInterval"/>, or explicitly at the end of an operation), not on every call
+    /// to this method - rebuilding the whole log string on every single line would be O(n) per line
+    /// (O(n<sup>2</sup>) overall for a run with many lines). Called only from the UI thread (every
+    /// caller is a <see cref="Progress{T}"/> callback created on it, or code already running on
+    /// it), so the pending-lines buffer needs no locking.</summary>
     private void AppendLog(string line)
     {
         LogAppendedLine(line);
+        _pendingLogLines.Add(line);
+    }
 
-        lock (_logLock)
+    /// <summary>Moves every pending line (see <see cref="AppendLog"/>) into <see cref="_log"/>,
+    /// trims it back down to <see cref="LogTrimTarget"/> characters (at a line boundary) if it grew
+    /// past <see cref="LogCharacterLimit"/>, and republishes <see cref="LogText"/>. A no-op if
+    /// nothing is pending, so the ~100ms timer tick is cheap between bursts of log activity.</summary>
+    private void FlushLog()
+    {
+        if (_pendingLogLines.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var line in _pendingLogLines)
         {
             _log.Append(line).Append('\n');
-            if (_log.Length > LogCharacterLimit)
-            {
-                _log.Remove(0, _log.Length - LogCharacterLimit);
-            }
-
-            LogText = _log.ToString();
         }
+
+        _pendingLogLines.Clear();
+
+        if (_log.Length > LogCharacterLimit)
+        {
+            TrimLogToLineBoundary();
+        }
+
+        LogText = _log.ToString();
+    }
+
+    /// <summary>Drops whole lines from the front of <see cref="_log"/> until it is at or below
+    /// <see cref="LogTrimTarget"/> characters, cutting only at a <c>'\n'</c> so no line is left
+    /// half-truncated.</summary>
+    private void TrimLogToLineBoundary()
+    {
+        var excess = _log.Length - LogTrimTarget;
+        var text = _log.ToString();
+        var cut = text.IndexOf('\n', Math.Min(excess, text.Length));
+        _log.Remove(0, cut < 0 ? _log.Length : cut + 1);
     }
 
     private static void PlayFinishedSound()
@@ -593,6 +720,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable
 
     public void Dispose()
     {
+        _logFlushTimer.Stop();
         Packages.CollectionChanged -= OnPackagesCollectionChanged;
         foreach (var row in Packages)
         {
