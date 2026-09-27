@@ -12,6 +12,11 @@ public enum SensorType
     Voltage,
     Power,
     Data,
+    SmallData,
+    Throughput,
+    Current,
+    Energy,
+    Level,
     Factor,
     Other,
 }

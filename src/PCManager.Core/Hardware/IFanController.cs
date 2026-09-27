@@ -18,6 +18,23 @@ public interface IFanController
     /// <summary>Whether this fan actually accepts software control (some report RPM only).</summary>
     bool CanControl { get; }
 
+    /// <summary>
+    /// Id of the paired RPM/tachometer sensor shown alongside this control in the sensors tree and
+    /// fan card, or null if this control channel has no matching tachometer (rare, but the LHM
+    /// control and fan/RPM sensors are reported separately and are only "paired" by convention -
+    /// same hardware, same sensor index).
+    /// </summary>
+    string? RpmSensorId { get; }
+
+    /// <summary>Lowest duty cycle this control channel accepts, per the hardware/driver (LHM's
+    /// <c>IControl.MinSoftwareValue</c>). <see cref="SetPercent"/> callers must not assume 0 is
+    /// always valid.</summary>
+    double MinSoftwarePercent { get; }
+
+    /// <summary>Highest duty cycle this control channel accepts (LHM's
+    /// <c>IControl.MaxSoftwareValue</c>) - usually 100, but not guaranteed.</summary>
+    double MaxSoftwarePercent { get; }
+
     /// <summary>Sets software control to the given duty cycle (0-100). Throws if the underlying
     /// write fails; callers must treat that as fan-control rule 4 (restore all, disable, alert).</summary>
     void SetPercent(double percent);

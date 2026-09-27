@@ -35,4 +35,21 @@ public interface IHardwareService
     /// <summary>Resets every sensor's observed min/max (the sensors tab's "Reset min/max"
     /// button). Applied on the next tick, from the dedicated background thread.</summary>
     void ResetMinMax();
+
+    /// <summary>
+    /// Runs <paramref name="action"/> on the dedicated hardware thread and blocks the caller until
+    /// it completes (or <paramref name="timeout"/> elapses). Every <see cref="IFanController"/> call
+    /// that does not originate from a <see cref="SnapshotUpdated"/> handler - restoring fans on
+    /// exit/suspend/session-end, re-arming after a failure - must go through this instead of calling
+    /// the controller directly, so it never races the hardware thread's own tick.
+    /// </summary>
+    /// <remarks>
+    /// If the calling thread already <em>is</em> the hardware thread (e.g. called from within a
+    /// <see cref="SnapshotUpdated"/> handler), <paramref name="action"/> runs inline with no
+    /// queuing. If the hardware thread does not pick up the command within <paramref name="timeout"/>
+    /// (stuck, or not running), <paramref name="action"/> is run directly on the calling thread as a
+    /// last-resort fallback - a safety action (like restoring every fan to default) must still
+    /// happen somewhere rather than silently never running.
+    /// </remarks>
+    void RunOnOwnerThread(Action action, TimeSpan timeout);
 }
