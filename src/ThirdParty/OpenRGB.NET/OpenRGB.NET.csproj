@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Vendored copy of OpenRGB.NET 3.1.1 (MIT license, see LICENSE in this folder), with a small,
+    targeted patch applied - see THIRD-PARTY-NOTICES.md at the repo root and
+    docs/upstream/openrgb-net.md for why, and every changed line is marked with a
+    "// PC Manager patch:" comment. Vendored instead of referenced as a NuGet package because the
+    upstream release has a bug (a graceful remote close is never detected - see
+    docs/upstream/openrgb-net.md) with no released fix at time of writing.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>OpenRGB.NET</RootNamespace>
+    <AssemblyName>OpenRGB.NET</AssemblyName>
+    <Nullable>enable</Nullable>
+    <!-- Vendored, third-party-owned code: hold it to its own original style, not this repo's. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <AnalysisLevel>none</AnalysisLevel>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PCManager.Core.Tests" />
+  </ItemGroup>
+
+</Project>

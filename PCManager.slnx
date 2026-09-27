@@ -3,6 +3,9 @@
     <Project Path="src/PCManager.Core/PCManager.Core.csproj" />
     <Project Path="src/PCManager.App/PCManager.App.csproj" />
   </Folder>
+  <Folder Name="/src/ThirdParty/">
+    <Project Path="src/ThirdParty/OpenRGB.NET/OpenRGB.NET.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/PCManager.Core.Tests/PCManager.Core.Tests.csproj" />
     <Project Path="tests/PCManager.App.Tests/PCManager.App.Tests.csproj" />

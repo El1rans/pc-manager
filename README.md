@@ -69,6 +69,14 @@ milestone specs.
   under software control, that fan stays at its last commanded speed - only restarting the PC (not
   relaunching PC Manager) hands it back to BIOS control. PC Manager warns about this before you turn
   software fan control on, and shows a banner at the next launch if it detects this happened.
+- Lighting: control RGB devices (motherboard, RAM, GPU, keyboard, ...) through OpenRGB - apply a
+  color and brightness to every device at once or to one device at a time, switch a device's mode,
+  save up to 8 favorite colors, and load OpenRGB profiles. Shows the shared setup card until OpenRGB
+  is installed and running, and an optional "Start OpenRGB with PC Manager" toggle; a dropped
+  connection (including a silent remote close, caught by a periodic heartbeat) returns to a
+  reconnect state instead of crashing the page. Talks to OpenRGB through a vendored, patched copy
+  of `OpenRGB.NET` at `src/ThirdParty/OpenRGB.NET/` - see `THIRD-PARTY-NOTICES.md` and
+  `docs/upstream/openrgb-net.md` for why.
 
 ## Planned modules
 

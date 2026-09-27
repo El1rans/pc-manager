@@ -1,8 +1,208 @@
 <UserControl x:Class="PCManager.App.Features.Lighting.LightingView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <StackPanel>
-        <TextBlock Text="Lighting" Style="{StaticResource PageTitle}"/>
-        <TextBlock Text="Coming soon." Style="{StaticResource Secondary}" Margin="0,8,0,0"/>
-    </StackPanel>
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="clr-namespace:PCManager.App.Controls"
+             xmlns:lighting="clr-namespace:PCManager.App.Features.Lighting"
+             d:DataContext="{d:DesignInstance lighting:LightingViewModel}"
+             mc:Ignorable="d">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel MaxWidth="820" HorizontalAlignment="Left">
+            <DockPanel>
+                <TextBlock Text="Lighting" Style="{StaticResource PageTitle}" DockPanel.Dock="Top"/>
+            </DockPanel>
+
+            <DockPanel Margin="0,4,0,4">
+                <TextBlock Margin="0,0,6,0" VerticalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                            <Setter Property="Text" Value="&#xE783;"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                    <Setter Property="Text" Value="&#xE73E;"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <TextBlock Text="{Binding ConnectionStatusText}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            </DockPanel>
+
+            <TextBlock Text="{Binding LastActionMessage}" Style="{StaticResource Secondary}"
+                       Foreground="{DynamicResource SystemFillColorCautionBrush}" TextWrapping="Wrap"
+                       Margin="0,0,0,12"
+                       Visibility="{Binding LastActionMessage, Converter={StaticResource StringToVis}}"/>
+
+            <!-- Setup card: shown until the openrgb component is installed and running. -->
+            <StackPanel Visibility="{Binding ShowSetup, Converter={StaticResource BoolToVis}}">
+                <controls:ComponentCard DataContext="{Binding OpenRgbCard}" Margin="0,0,0,16"/>
+                <CheckBox Content="Start OpenRGB with PC Manager"
+                          IsChecked="{Binding AutoStartOpenRgb, Mode=TwoWay}"
+                          Margin="0,0,0,12"/>
+                <Button Content="Retry connection" Command="{Binding RetryCommand}"
+                        HorizontalAlignment="Left" Margin="0,0,0,16"
+                        ToolTip="Recheck whether OpenRGB is installed and running"/>
+            </StackPanel>
+
+            <StackPanel Visibility="{Binding ShowSetup, Converter={StaticResource InverseBoolToVis}}">
+
+                <!-- All devices -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="All devices" Style="{StaticResource CardTitle}"/>
+
+                        <ItemsControl ItemsSource="{x:Static lighting:LightingViewModel.PresetSwatches}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Width="28" Height="28" Margin="0,0,6,6" Padding="0"
+                                            Background="{Binding Converter={StaticResource HexToBrush}}"
+                                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            Command="{Binding DataContext.SelectSwatchCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}"
+                                            ToolTip="{Binding StringFormat='Apply {0} to all devices'}"
+                                            AutomationProperties.Name="{Binding StringFormat='Swatch {0}'}"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="32" Height="32" Margin="0,0,10,0"
+                                    Background="{Binding SelectedColorHex, Converter={StaticResource HexToBrush}}"
+                                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"/>
+                            <TextBox Grid.Column="1" Text="{Binding SelectedColorHex, UpdateSourceTrigger=PropertyChanged}"
+                                     VerticalAlignment="Center" MaxLength="7"
+                                     AutomationProperties.Name="Color (hex)"/>
+                        </Grid>
+
+                        <DockPanel Margin="0,10,0,0">
+                            <TextBlock DockPanel.Dock="Left" Text="Brightness" Style="{StaticResource Secondary}" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding BrightnessPercent, StringFormat={}{0:F0}%}"
+                                       Style="{StaticResource Secondary}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                            <Slider Minimum="0" Maximum="100" Value="{Binding BrightnessPercent}" VerticalAlignment="Center"
+                                    AutomationProperties.Name="Brightness"/>
+                        </DockPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                            <Button Content="Apply to all" Command="{Binding ApplyToAllCommand}" Margin="0,0,8,0"/>
+                            <Button Content="Turn off all" Command="{Binding TurnOffAllCommand}" Margin="0,0,8,0"/>
+                            <Button Content="Save as favorite" Command="{Binding SaveFavoriteCommand}"/>
+                        </StackPanel>
+
+                        <ItemsControl ItemsSource="{Binding FavoriteColors}" Margin="0,12,0,0"
+                                      Visibility="{Binding FavoriteColors.Count, Converter={StaticResource CountToVis}}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,10,10">
+                                        <Button Width="28" Height="28" Padding="0"
+                                                Background="{Binding Converter={StaticResource HexToBrush}}"
+                                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                                                Command="{Binding DataContext.SelectSwatchCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="{Binding StringFormat='Apply favorite {0} to all devices'}"
+                                                AutomationProperties.Name="{Binding StringFormat='Favorite {0}'}"/>
+                                        <Button Width="18" Height="18" Padding="0"
+                                                HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                Margin="0,-8,-8,0"
+                                                Command="{Binding DataContext.RemoveFavoriteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="Remove favorite"
+                                                AutomationProperties.Name="{Binding StringFormat='Remove favorite {0}'}">
+                                            <TextBlock Text="&#xE711;" Style="{StaticResource Icon}" FontSize="10"/>
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- Device list -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="Devices" Style="{StaticResource CardTitle}"/>
+                        <ItemsControl ItemsSource="{Binding Devices}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="160"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Glyph}" Style="{StaticResource Icon}"
+                                                   FontSize="18" Margin="0,0,10,0"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <ComboBox Grid.Column="2" ItemsSource="{Binding Modes}"
+                                                  SelectedItem="{Binding SelectedMode, Mode=TwoWay}"
+                                                  Margin="8,0"
+                                                  AutomationProperties.Name="{Binding Name, StringFormat='Mode for {0}'}"/>
+                                        <Button Grid.Column="3" Width="26" Height="26" Padding="0"
+                                                Command="{Binding SetColorCommand}"
+                                                ToolTip="Set this device to the color above"
+                                                AutomationProperties.Name="{Binding Name, StringFormat='Set {0} to selected color'}"
+                                                Background="{Binding DataContext.SelectedColorHex,
+                                                    RelativeSource={RelativeSource AncestorType=lighting:LightingView},
+                                                    Converter={StaticResource HexToBrush}}"
+                                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="No devices found." Style="{StaticResource Secondary}"
+                                   Visibility="{Binding Devices.Count, Converter={StaticResource InverseCountToVis}}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Profiles -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="Profiles" Style="{StaticResource CardTitle}"/>
+                        <ItemsControl ItemsSource="{Binding Profiles}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="0,0,0,8">
+                                        <Button DockPanel.Dock="Right" Content="Load"
+                                                Command="{Binding DataContext.LoadProfileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                AutomationProperties.Name="{Binding StringFormat='Load profile {0}'}"/>
+                                        <TextBlock Text="{Binding}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="No saved profiles." Style="{StaticResource Secondary}"
+                                   Visibility="{Binding Profiles.Count, Converter={StaticResource InverseCountToVis}}"/>
+                    </StackPanel>
+                </Border>
+
+                <CheckBox Content="Start OpenRGB with PC Manager"
+                          IsChecked="{Binding AutoStartOpenRgb, Mode=TwoWay}"
+                          Margin="0,0,0,16"/>
+
+                <Button Content="Retry connection" Command="{Binding RetryCommand}"
+                        HorizontalAlignment="Left" Margin="0,0,0,16"
+                        Visibility="{Binding IsConnected, Converter={StaticResource InverseBoolToVis}}"/>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>
