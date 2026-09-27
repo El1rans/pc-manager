@@ -151,6 +151,21 @@ public sealed class FanControlEngineTests
     }
 
     [Fact]
+    public void Evaluate_OverheatSensorBecomesMissing_StaysLatched()
+    {
+        // S1: a missing/NaN reading is not evidence of cooling - if the sensor that tripped the
+        // failsafe stops reporting entirely, the failsafe must not clear just because it can no
+        // longer see a value above the threshold from that sensor.
+        var engine = CreateEngine();
+        engine.Evaluate(CurveInput(cpuTemp: 95, failsafeC: 90));
+
+        var decision = engine.Evaluate(CurveInput(cpuTemp: null, failsafeC: 90));
+
+        Assert.True(decision.IsOverheatFailsafeActive);
+        Assert.Equal(100, decision.Targets[FanId].Percent);
+    }
+
+    [Fact]
     public void Evaluate_GpuAtFailsafeTemperature_AlsoTripsFailsafe()
     {
         var engine = CreateEngine();

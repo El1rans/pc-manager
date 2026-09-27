@@ -82,6 +82,28 @@ public sealed class FanCurveTests
     }
 
     [Fact]
+    public void TryCreate_NaNTemperature_Fails()
+    {
+        FanCurvePoint[] points = [new(double.NaN, 30), new(70, 100)];
+
+        var ok = FanCurve.TryCreate(points, minPercent: 20, out _, out var error);
+
+        Assert.False(ok);
+        Assert.Contains("finite", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TryCreate_InfinitePercent_Fails()
+    {
+        FanCurvePoint[] points = [new(30, double.PositiveInfinity), new(70, 100)];
+
+        var ok = FanCurve.TryCreate(points, minPercent: 20, out _, out var error);
+
+        Assert.False(ok);
+        Assert.Contains("finite", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Evaluate_BelowFirstPoint_ReturnsFirstPercent()
     {
         Assert.True(FanCurve.TryCreate(ValidPoints, 30, out var curve, out _));
