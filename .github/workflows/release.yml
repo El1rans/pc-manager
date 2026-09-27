@@ -12,10 +12,19 @@ jobs:
     # repo keeps the default read-only GITHUB_TOKEN.
     permissions:
       contents: write
+    env:
+      # Read once here rather than inlined as ${{ github.ref_name }} in each step's script body -
+      # keeps every step's PowerShell working with a plain environment variable instead of
+      # interpolating a GitHub Actions expression directly into script text.
+      TAG: ${{ github.ref_name }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Full history (not just the tagged commit) so the "tag is on main" ancestor check below
+          # has origin/main's commits to check against.
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
@@ -30,6 +39,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
 
+      - name: Verify the tagged commit is on main
+        shell: pwsh
+        run: |
+          git fetch origin main
+          $isAncestor = & git merge-base --is-ancestor "$env:TAG" origin/main; $LASTEXITCODE -eq 0
+          if (-not $isAncestor) {
+            throw "Tag '$env:TAG' is not an ancestor of origin/main - refusing to release a commit that was never merged."
+          }
+          Write-Host "Tag '$env:TAG' is on origin/main."
+
       - name: Verify tag matches Directory.Build.props Version
         id: version
         shell: pwsh
@@ -40,14 +59,13 @@ jobs:
           }
           $version = $Matches[1]
 
-          $tag = "${{ github.ref_name }}"
-          $tagVersion = $tag.TrimStart("v")
+          $tagVersion = $env:TAG.TrimStart("v")
           if ($tagVersion -ne $version) {
-            throw "Tag '$tag' (version '$tagVersion') does not match Directory.Build.props <Version>$version</Version>."
+            throw "Tag '$env:TAG' (version '$tagVersion') does not match Directory.Build.props <Version>$version</Version>."
           }
 
           "version=$version" >> $env:GITHUB_OUTPUT
-          Write-Host "Releasing version $version (tag $tag)."
+          Write-Host "Releasing version $version (tag $env:TAG)."
 
       - name: Restore
         run: dotnet restore
@@ -69,29 +87,32 @@ jobs:
 
       - name: Compile installer
         shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          $version = "${{ steps.version.outputs.version }}"
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
             installer\PCManager.iss `
-            "/DMyAppVersion=$version" `
+            "/DMyAppVersion=$env:VERSION" `
             "/DPublishDir=$PWD\publish" `
             "/O$PWD\dist"
 
       - name: Compute SHA-256 checksum
         shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          $version = "${{ steps.version.outputs.version }}"
-          $exe = "dist\PCManager-Setup-$version.exe"
+          $exe = "dist\PCManager-Setup-$env:VERSION.exe"
           $hash = (Get-FileHash -Path $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash *PCManager-Setup-$version.exe" | Set-Content -Path "$exe.sha256" -NoNewline
+          "$hash *PCManager-Setup-$env:VERSION.exe" | Set-Content -Path "$exe.sha256" -NoNewline
 
       - name: Extract CHANGELOG section for this version
         id: notes
         shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          $version = "${{ steps.version.outputs.version }}"
           $lines = Get-Content CHANGELOG.md
-          $heading = "## [$version]"
+          $heading = "## [$env:VERSION]"
           $startIndex = -1
           for ($i = 0; $i -lt $lines.Count; $i++) {
             if ($lines[$i].StartsWith($heading)) {
@@ -112,6 +133,10 @@ jobs:
           }
 
           $notes = ($lines[$startIndex..($endIndex - 1)] -join "`n").Trim()
+          if ([string]::IsNullOrWhiteSpace($notes)) {
+            throw "The '$heading' CHANGELOG.md section is empty - add release notes before tagging."
+          }
+
           $notesPath = "release-notes.md"
           Set-Content -Path $notesPath -Value $notes
           "notesPath=$notesPath" >> $env:GITHUB_OUTPUT
@@ -119,11 +144,13 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          NOTES_PATH: ${{ steps.notes.outputs.notesPath }}
         shell: pwsh
         run: |
-          $version = "${{ steps.version.outputs.version }}"
-          $exe = "dist\PCManager-Setup-$version.exe"
-          gh release create "${{ github.ref_name }}" `
+          $exe = "dist\PCManager-Setup-$env:VERSION.exe"
+          gh release create "$env:TAG" `
             "$exe" "$exe.sha256" `
-            --title "PC Manager $version" `
-            --notes-file "${{ steps.notes.outputs.notesPath }}"
+            --title "PC Manager $env:VERSION" `
+            --notes-file "$env:NOTES_PATH" `
+            --verify-tag

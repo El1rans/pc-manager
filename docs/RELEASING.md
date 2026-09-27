@@ -43,13 +43,17 @@ sanity-check the installer before ever cutting a release. A real release is only
    ```
 
    Pushing the tag triggers `.github/workflows/release.yml`, which:
+   - Verifies the tagged commit is an ancestor of `origin/main` (fails if you tagged a commit that
+     was never merged).
    - Verifies the tag's version matches `Directory.Build.props`'s `<Version>` (fails loudly if
      someone forgot step 1, or tagged the wrong commit).
    - Builds, tests, publishes the self-contained single-file win-x64 build, and compiles the
      installer.
    - Computes the installer's SHA-256 checksum.
+   - Verifies the matching `CHANGELOG.md` section is non-empty (fails if step 2 was skipped or left
+     the section blank).
    - Creates a GitHub Release named `PC Manager <version>` with the setup exe, its `.sha256` file,
-     and the matching `CHANGELOG.md` section as the release notes.
+     and that `CHANGELOG.md` section as the release notes.
 
 5. **Verify the release** on GitHub: download the setup exe, confirm its SHA-256 matches the
    published `.sha256` file, and (ideally, on a real or virtual Windows PC - never the machine
@@ -61,8 +65,9 @@ sanity-check the installer before ever cutting a release. A real release is only
   warning ("Windows protected your PC" > **More info** > **Run anyway**). This is documented in
   the README's "Install" section for end users.
 - If a release build or the installer compile fails, nothing is published - fix the issue, delete
-  the bad local tag (`git tag -d vX.Y.Z`) if you already created one, and start again from step 4
-  once `main` is fixed.
+  the bad tag both locally and on the remote (`git tag -d vX.Y.Z` and
+  `git push --delete origin vX.Y.Z`) so a re-push of the same tag name triggers the workflow again,
+  and start again from step 4 once `main` is fixed.
 - The Inno Setup version used in CI (`choco install innosetup --version=...`) is pinned in both
   `.github/workflows/ci.yml` and `.github/workflows/release.yml` - bump both together if you need a
   newer Inno Setup.
