@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using PCManager.Core.Hardware;
 using PCManager.Core.Settings;
 using Xunit;
@@ -15,6 +16,7 @@ public sealed class FanControlManagerTests : IDisposable
     private readonly FakeFanController _fan = new(FanId);
     private readonly FakeFanControlActivityMarker _marker = new();
     private readonly FanControlEngine _engine = new(new FakeClock());
+    private readonly FakeTimeProvider _timeProvider = new();
 
     public FanControlManagerTests()
     {
@@ -39,7 +41,8 @@ public sealed class FanControlManagerTests : IDisposable
             _marker,
             NullLogger<FanControlManager>.Instance,
             watchdogTimeout ?? TimeSpan.FromMinutes(10),
-            watchdogPollInterval ?? TimeSpan.FromMinutes(10));
+            watchdogPollInterval ?? TimeSpan.FromMinutes(10),
+            _timeProvider);
 
     private void EnableFixedFan(double fixedPercent = 40)
     {
@@ -352,6 +355,9 @@ public sealed class FanControlManagerTests : IDisposable
         // R3-2: the watchdog's clock was last advanced before the pause - a real system sleep can
         // easily exceed the watchdog timeout, so without resetting the clock on resume, the very
         // first tick after resuming would look like a multi-hour stall and immediately re-trip.
+        // Deterministic root-cause fix: a FakeTimeProvider drives both "now" reads and the watchdog's
+        // own periodic timer, so advancing it fires the watchdog synchronously on this thread -
+        // no real Thread.Sleep/wall-clock Timer, so this can never be flaky under CI load.
         EnableFixedFan(40);
         using var manager = CreateManager(TimeSpan.FromMilliseconds(80), TimeSpan.FromMilliseconds(20));
         manager.Activate();
@@ -359,8 +365,9 @@ public sealed class FanControlManagerTests : IDisposable
 
         manager.Suspend("system suspend", resumableBySystemResume: true);
 
-        // Simulate a "long sleep" - well past the watchdog timeout - while paused.
-        Thread.Sleep(TimeSpan.FromMilliseconds(300));
+        // Simulate a "long sleep" - well past the watchdog timeout - while paused. While paused the
+        // watchdog is inactive by design (N3), so this must not trip it on its own.
+        _timeProvider.Advance(TimeSpan.FromMilliseconds(300));
 
         FanControlAlert? alert = null;
         manager.StatusChanged += (_, e) => alert = e;
@@ -368,11 +375,11 @@ public sealed class FanControlManagerTests : IDisposable
         manager.ResumeFromSuspend();
         _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
 
-        // A short wait - well under the 80ms watchdog timeout - just to give its timer thread a
-        // chance to run at least once and prove it does *not* immediately re-trip. A longer wait
-        // with no further snapshots would eventually be a real (and correctly detected) stall in
-        // its own right, which is not what this test is about.
-        Thread.Sleep(TimeSpan.FromMilliseconds(30));
+        // Advance a little further - well under the 80ms watchdog timeout - to prove the watchdog
+        // does *not* immediately re-trip right after resuming. Advancing further with no further
+        // snapshots would eventually be a real (and correctly detected) stall in its own right,
+        // which is not what this test is about.
+        _timeProvider.Advance(TimeSpan.FromMilliseconds(30));
 
         Assert.Equal(40, _fan.CurrentPercent); // resumed normally, not immediately re-paused
         Assert.Null(alert);
@@ -421,7 +428,9 @@ public sealed class FanControlManagerTests : IDisposable
         FanControlAlert? alert = null;
         manager.StatusChanged += (_, e) => alert = e;
 
-        Thread.Sleep(TimeSpan.FromMilliseconds(300));
+        // Deterministic: advancing the FakeTimeProvider fires the watchdog's periodic timer
+        // synchronously on this thread, so this needs no real Thread.Sleep/wall-clock Timer.
+        _timeProvider.Advance(TimeSpan.FromMilliseconds(300));
 
         Assert.Null(alert);
         Assert.Equal(0, _fan.SetPercentCallCount);
@@ -431,6 +440,10 @@ public sealed class FanControlManagerTests : IDisposable
     [Fact]
     public void Watchdog_ActiveAndOwningButNoSnapshotForTooLong_PausesAndRestoresOwnedFans()
     {
+        // Deterministic root-cause fix: the watchdog is driven by an injected FakeTimeProvider
+        // (both its "now" reads and its own TimeProvider.CreateTimer-based periodic timer), so
+        // advancing fake time fires it synchronously and predictably instead of relying on a real
+        // Thread.Sleep racing a real System.Threading.Timer under CI load.
         EnableFixedFan(40);
         using var manager = CreateManager(TimeSpan.FromMilliseconds(80), TimeSpan.FromMilliseconds(20));
         manager.Activate();
@@ -441,7 +454,7 @@ public sealed class FanControlManagerTests : IDisposable
         manager.StatusChanged += (_, e) => alert = e;
 
         // No further snapshots are raised - simulating a stuck/dead hardware thread.
-        Thread.Sleep(TimeSpan.FromMilliseconds(400));
+        _timeProvider.Advance(TimeSpan.FromMilliseconds(400));
 
         Assert.Null(_fan.CurrentPercent);
         Assert.NotNull(alert);

@@ -75,7 +75,8 @@ public sealed class FanControlManager : IDisposable
     /// this set - see the type-level remarks.</summary>
     private readonly HashSet<string> _ownedControllerIds = [];
 
-    private readonly Timer _watchdogTimer;
+    private readonly TimeProvider _timeProvider;
+    private readonly ITimer _watchdogTimer;
     private readonly TimeSpan _watchdogTimeout;
 
     private bool _armed;
@@ -90,7 +91,7 @@ public sealed class FanControlManager : IDisposable
     private bool _noTempFailsafeActive;
     private bool _forceRewriteAfterResume;
     private bool _activityMarkerActive;
-    private long _lastActiveEvaluationUtcTicks = DateTime.UtcNow.Ticks;
+    private long _lastActiveEvaluationUtcTicks;
     private bool _watchdogTripped;
 
     public FanControlManager(
@@ -99,12 +100,15 @@ public sealed class FanControlManager : IDisposable
         FanControlEngine engine,
         IFanControlActivityMarker activityMarker,
         ILogger<FanControlManager> logger)
-        : this(hardwareService, settingsStore, engine, activityMarker, logger, DefaultWatchdogTimeout, DefaultWatchdogPollInterval)
+        : this(hardwareService, settingsStore, engine, activityMarker, logger, DefaultWatchdogTimeout, DefaultWatchdogPollInterval, TimeProvider.System)
     {
     }
 
-    /// <summary>Test seam: lets tests use a short watchdog timeout/poll interval instead of waiting
-    /// out the real 5-second default.</summary>
+    /// <summary>Test seam: lets tests use a short watchdog timeout/poll interval - and a fake
+    /// <see cref="TimeProvider"/> (e.g. <c>Microsoft.Extensions.Time.Testing.FakeTimeProvider</c>) -
+    /// instead of a real clock/timer, so the watchdog's "now" reads and its timer never depend on
+    /// wall-clock timing. Production behaviour is unchanged: the public constructor always passes
+    /// <see cref="TimeProvider.System"/>.</summary>
     internal FanControlManager(
         IHardwareService hardwareService,
         ISettingsStore settingsStore,
@@ -112,7 +116,8 @@ public sealed class FanControlManager : IDisposable
         IFanControlActivityMarker activityMarker,
         ILogger<FanControlManager> logger,
         TimeSpan watchdogTimeout,
-        TimeSpan watchdogPollInterval)
+        TimeSpan watchdogPollInterval,
+        TimeProvider timeProvider)
     {
         _hardwareService = hardwareService;
         _settingsStore = settingsStore;
@@ -120,6 +125,8 @@ public sealed class FanControlManager : IDisposable
         _activityMarker = activityMarker;
         _logger = logger;
         _watchdogTimeout = watchdogTimeout;
+        _timeProvider = timeProvider;
+        _lastActiveEvaluationUtcTicks = _timeProvider.GetUtcNow().UtcDateTime.Ticks;
 
         // S8: a marker still present at construction means the previous session ended without
         // going through any restore path (forced kill, crash, BSOD, power loss) - surface it once,
@@ -131,7 +138,7 @@ public sealed class FanControlManager : IDisposable
         }
 
         _hardwareService.SnapshotUpdated += OnSnapshot;
-        _watchdogTimer = new Timer(OnWatchdogTick, null, watchdogTimeout, watchdogPollInterval);
+        _watchdogTimer = _timeProvider.CreateTimer(OnWatchdogTick, null, watchdogTimeout, watchdogPollInterval);
     }
 
     /// <summary>
@@ -233,7 +240,7 @@ public sealed class FanControlManager : IDisposable
                 // the clock still holding its pre-sleep value - and a sleep longer than the
                 // watchdog's timeout (easily true for a real system suspend) would then look like an
                 // immediate, multi-hour stall and re-trip before this method has even returned.
-                Interlocked.Exchange(ref _lastActiveEvaluationUtcTicks, DateTime.UtcNow.Ticks);
+                Interlocked.Exchange(ref _lastActiveEvaluationUtcTicks, _timeProvider.GetUtcNow().UtcDateTime.Ticks);
                 _paused = false;
                 _pausedByResumableSuspend = false;
             }
@@ -258,7 +265,7 @@ public sealed class FanControlManager : IDisposable
             _armed = true;
         }
 
-        Interlocked.Exchange(ref _lastActiveEvaluationUtcTicks, DateTime.UtcNow.Ticks);
+        Interlocked.Exchange(ref _lastActiveEvaluationUtcTicks, _timeProvider.GetUtcNow().UtcDateTime.Ticks);
     }
 
     /// <summary>N1/N3: whether fan control is currently meant to be doing anything at all. Every
@@ -320,7 +327,7 @@ public sealed class FanControlManager : IDisposable
         // an extended-but-legitimate non-Ready period (e.g. running non-elevated for a while with a
         // profile saved from an earlier elevated session) must not itself look like a stuck hardware
         // thread to the watchdog - see R3-1/R3-3.
-        Interlocked.Exchange(ref _lastActiveEvaluationUtcTicks, DateTime.UtcNow.Ticks);
+        Interlocked.Exchange(ref _lastActiveEvaluationUtcTicks, _timeProvider.GetUtcNow().UtcDateTime.Ticks);
 
         if (snapshot.Status == HardwareStatus.Error)
         {
@@ -710,7 +717,7 @@ public sealed class FanControlManager : IDisposable
         }
 
         var lastActive = new DateTime(Interlocked.Read(ref _lastActiveEvaluationUtcTicks), DateTimeKind.Utc);
-        var stalledFor = DateTime.UtcNow - lastActive;
+        var stalledFor = _timeProvider.GetUtcNow().UtcDateTime - lastActive;
         if (stalledFor <= _watchdogTimeout)
         {
             _watchdogTripped = false;

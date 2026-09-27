@@ -26,6 +26,7 @@ public sealed class SettingsStore : ISettingsStore
     private readonly ILogger<SettingsStore> _logger;
     private readonly string _settingsPath;
     private readonly AppSettings _current;
+    private readonly Action<TimeSpan> _sleeper;
 
     public SettingsStore(ILogger<SettingsStore> logger)
         : this(logger, DefaultSettingsPath())
@@ -34,9 +35,19 @@ public sealed class SettingsStore : ISettingsStore
 
     /// <summary>Test seam: lets tests point the store at a temp directory.</summary>
     public SettingsStore(ILogger<SettingsStore> logger, string settingsPath)
+        : this(logger, settingsPath, Thread.Sleep)
+    {
+    }
+
+    /// <summary>Test seam: lets a test replace the real <see cref="Thread.Sleep(TimeSpan)"/> backoff
+    /// between <see cref="MoveWithRetry"/> attempts with a deterministic action - e.g. one that
+    /// releases a file lock held by the test itself on the first retry, instead of racing a real
+    /// timer against the retry budget. Production always uses <see cref="Thread.Sleep(TimeSpan)"/>.</summary>
+    internal SettingsStore(ILogger<SettingsStore> logger, string settingsPath, Action<TimeSpan> sleeper)
     {
         _logger = logger;
         _settingsPath = settingsPath;
+        _sleeper = sleeper;
         _current = LoadFromDisk();
     }
 
@@ -184,7 +195,7 @@ public sealed class SettingsStore : ISettingsStore
                     return;
                 }
 
-                Thread.Sleep(MoveRetryDelaysMs[attempt]);
+                _sleeper(TimeSpan.FromMilliseconds(MoveRetryDelaysMs[attempt]));
             }
         }
     }
