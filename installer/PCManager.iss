@@ -298,8 +298,9 @@ begin
   if DirExists(DataDir) then
   begin
     if SuppressibleMsgBox(
-      'Delete PC Manager settings and logs for the current Windows account?' + #13#10 + DataDir +
-      #13#10#13#10 + 'This only affects the account you are using now - if another Windows ' +
+      'Delete PC Manager settings and logs for the current Windows account?' + #13#10 +
+      DataDir + #13#10#13#10 +
+      'This only affects the account you are using now - if another Windows ' +
       'account on this PC used PC Manager, its data is left in place.',
       mbConfirmation, MB_YESNO, IDNO) = IDYES then
       DelTree(DataDir, True, True, True);
