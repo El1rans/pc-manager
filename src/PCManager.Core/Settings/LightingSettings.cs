@@ -12,4 +12,14 @@ public sealed class LightingSettings
     /// <summary>Whether PC Manager should start OpenRGB (minimized, with its SDK server) if it is
     /// not already running.</summary>
     public bool AutoStartOpenRgb { get; set; }
+
+    /// <summary>OpenRGB SDK server host. Defaults to loopback - the server almost always runs on
+    /// the same machine as PC Manager.</summary>
+    public string OpenRgbHost { get; set; } = "127.0.0.1";
+
+    /// <summary>OpenRGB SDK server port (OpenRGB's own default is 6742).</summary>
+    public int OpenRgbPort { get; set; } = 6742;
+
+    /// <summary>Up to 8 saved favorite colors, each as a <c>#RRGGBB</c> string, oldest first.</summary>
+    public List<string> FavoriteColors { get; set; } = [];
 }
