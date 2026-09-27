@@ -13,7 +13,7 @@
                 <TextBlock Text="Lighting" Style="{StaticResource PageTitle}" DockPanel.Dock="Top"/>
             </DockPanel>
 
-            <DockPanel Margin="0,4,0,16">
+            <DockPanel Margin="0,4,0,4">
                 <TextBlock Margin="0,0,6,0" VerticalAlignment="Center">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
@@ -28,15 +28,23 @@
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
-                <TextBlock Text="{Binding ConnectionStatusText}" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding ConnectionStatusText}" VerticalAlignment="Center" TextWrapping="Wrap"/>
             </DockPanel>
+
+            <TextBlock Text="{Binding LastActionMessage}" Style="{StaticResource Secondary}"
+                       Foreground="{DynamicResource SystemFillColorCautionBrush}" TextWrapping="Wrap"
+                       Margin="0,0,0,12"
+                       Visibility="{Binding LastActionMessage, Converter={StaticResource StringToVis}}"/>
 
             <!-- Setup card: shown until the openrgb component is installed and running. -->
             <StackPanel Visibility="{Binding ShowSetup, Converter={StaticResource BoolToVis}}">
                 <controls:ComponentCard DataContext="{Binding OpenRgbCard}" Margin="0,0,0,16"/>
                 <CheckBox Content="Start OpenRGB with PC Manager"
                           IsChecked="{Binding AutoStartOpenRgb, Mode=TwoWay}"
-                          Margin="0,0,0,16"/>
+                          Margin="0,0,0,12"/>
+                <Button Content="Retry connection" Command="{Binding RetryCommand}"
+                        HorizontalAlignment="Left" Margin="0,0,0,16"
+                        ToolTip="Recheck whether OpenRGB is installed and running"/>
             </StackPanel>
 
             <StackPanel Visibility="{Binding ShowSetup, Converter={StaticResource InverseBoolToVis}}">
@@ -60,7 +68,8 @@
                                             BorderThickness="1"
                                             Command="{Binding DataContext.SelectSwatchCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                             CommandParameter="{Binding}"
-                                            ToolTip="{Binding}"/>
+                                            ToolTip="{Binding StringFormat='Apply {0} to all devices'}"
+                                            AutomationProperties.Name="{Binding StringFormat='Swatch {0}'}"/>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -74,14 +83,16 @@
                                     Background="{Binding SelectedColorHex, Converter={StaticResource HexToBrush}}"
                                     BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"/>
                             <TextBox Grid.Column="1" Text="{Binding SelectedColorHex, UpdateSourceTrigger=PropertyChanged}"
-                                     VerticalAlignment="Center" MaxLength="7"/>
+                                     VerticalAlignment="Center" MaxLength="7"
+                                     AutomationProperties.Name="Color (hex)"/>
                         </Grid>
 
                         <DockPanel Margin="0,10,0,0">
                             <TextBlock DockPanel.Dock="Left" Text="Brightness" Style="{StaticResource Secondary}" Margin="0,0,10,0" VerticalAlignment="Center"/>
                             <TextBlock DockPanel.Dock="Right" Text="{Binding BrightnessPercent, StringFormat={}{0:F0}%}"
                                        Style="{StaticResource Secondary}" Margin="10,0,0,0" VerticalAlignment="Center"/>
-                            <Slider Minimum="0" Maximum="100" Value="{Binding BrightnessPercent}" VerticalAlignment="Center"/>
+                            <Slider Minimum="0" Maximum="100" Value="{Binding BrightnessPercent}" VerticalAlignment="Center"
+                                    AutomationProperties.Name="Brightness"/>
                         </DockPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
@@ -99,19 +110,23 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="0,0,8,8">
+                                    <Grid Margin="0,0,10,10">
                                         <Button Width="28" Height="28" Padding="0"
                                                 Background="{Binding Converter={StaticResource HexToBrush}}"
                                                 BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                                                 Command="{Binding DataContext.SelectSwatchCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}"
-                                                ToolTip="{Binding}"/>
-                                        <Button Width="14" Height="14" Padding="0" FontSize="9"
+                                                ToolTip="{Binding StringFormat='Apply favorite {0} to all devices'}"
+                                                AutomationProperties.Name="{Binding StringFormat='Favorite {0}'}"/>
+                                        <Button Width="18" Height="18" Padding="0"
                                                 HorizontalAlignment="Right" VerticalAlignment="Top"
-                                                Margin="0,-6,-6,0" Content="&#xE711;"
+                                                Margin="0,-8,-8,0"
                                                 Command="{Binding DataContext.RemoveFavoriteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}"
-                                                ToolTip="Remove favorite"/>
+                                                ToolTip="Remove favorite"
+                                                AutomationProperties.Name="{Binding StringFormat='Remove favorite {0}'}">
+                                            <TextBlock Text="&#xE711;" Style="{StaticResource Icon}" FontSize="10"/>
+                                        </Button>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
@@ -139,10 +154,12 @@
                                                    TextTrimming="CharacterEllipsis"/>
                                         <ComboBox Grid.Column="2" ItemsSource="{Binding Modes}"
                                                   SelectedItem="{Binding SelectedMode, Mode=TwoWay}"
-                                                  Margin="8,0"/>
+                                                  Margin="8,0"
+                                                  AutomationProperties.Name="{Binding Name, StringFormat='Mode for {0}'}"/>
                                         <Button Grid.Column="3" Width="26" Height="26" Padding="0"
                                                 Command="{Binding SetColorCommand}"
                                                 ToolTip="Set this device to the color above"
+                                                AutomationProperties.Name="{Binding Name, StringFormat='Set {0} to selected color'}"
                                                 Background="{Binding DataContext.SelectedColorHex,
                                                     RelativeSource={RelativeSource AncestorType=lighting:LightingView},
                                                     Converter={StaticResource HexToBrush}}"
@@ -166,7 +183,8 @@
                                     <DockPanel Margin="0,0,0,8">
                                         <Button DockPanel.Dock="Right" Content="Load"
                                                 Command="{Binding DataContext.LoadProfileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding}"/>
+                                                CommandParameter="{Binding}"
+                                                AutomationProperties.Name="{Binding StringFormat='Load profile {0}'}"/>
                                         <TextBlock Text="{Binding}" VerticalAlignment="Center" Margin="0,0,10,0"/>
                                     </DockPanel>
                                 </DataTemplate>
@@ -182,7 +200,7 @@
                           Margin="0,0,0,16"/>
 
                 <Button Content="Retry connection" Command="{Binding RetryCommand}"
-                        HorizontalAlignment="Left"
+                        HorizontalAlignment="Left" Margin="0,0,0,16"
                         Visibility="{Binding IsConnected, Converter={StaticResource InverseBoolToVis}}"/>
             </StackPanel>
         </StackPanel>

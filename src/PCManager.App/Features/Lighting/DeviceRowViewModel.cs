@@ -17,10 +17,17 @@ public sealed partial class DeviceRowViewModel : ObservableObject
     private readonly Func<RgbColor?> _getSelectedColor;
     private readonly ILogger _logger;
 
+    /// <summary>Set while applying <see cref="SyncSelectedModeAfterColorApplied"/>'s own update, so
+    /// it does not loop back into <see cref="OnSelectedModeChanged"/> and re-send the mode OpenRGB
+    /// was just told to use.</summary>
+    private bool _suppressModeChangeHandler;
+
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SetColorCommand))]
     private string _selectedMode;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SetColorCommand))]
     private bool _isBusy;
 
     public DeviceRowViewModel(
@@ -47,9 +54,17 @@ public sealed partial class DeviceRowViewModel : ObservableObject
 
     public ObservableCollection<string> Modes { get; }
 
-    partial void OnSelectedModeChanged(string value) => _ = ApplyModeAsync(value);
+    partial void OnSelectedModeChanged(string value)
+    {
+        if (_suppressModeChangeHandler)
+        {
+            return;
+        }
 
-    [RelayCommand]
+        _ = ApplyModeAsync(value);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanSetColor))]
     private async Task SetColorAsync()
     {
         var color = _getSelectedColor();
@@ -61,12 +76,37 @@ public sealed partial class DeviceRowViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            await _lightingService.SetDeviceColorAsync(Index, color.Value, CancellationToken.None)
+            var succeeded = await _lightingService.SetDeviceColorAsync(Index, color.Value, CancellationToken.None)
                 .ConfigureAwait(true);
+            if (succeeded)
+            {
+                // SetDeviceColorAsync may itself have switched the device to "Direct" or "Static"
+                // (see LightingModeSelector) - reflect that in the combo box without re-sending it.
+                SyncSelectedModeAfterColorApplied();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The page navigated away mid-call; expected, not an error.
         }
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    private bool CanSetColor() => !IsBusy;
+
+    private void SyncSelectedModeAfterColorApplied()
+    {
+        var preferred = Modes.FirstOrDefault(m => string.Equals(m, "Direct", StringComparison.OrdinalIgnoreCase))
+            ?? Modes.FirstOrDefault(m => string.Equals(m, "Static", StringComparison.OrdinalIgnoreCase));
+
+        if (preferred is not null && !string.Equals(preferred, SelectedMode, StringComparison.OrdinalIgnoreCase))
+        {
+            _suppressModeChangeHandler = true;
+            SelectedMode = preferred;
+            _suppressModeChangeHandler = false;
         }
     }
 

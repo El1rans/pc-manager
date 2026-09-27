@@ -22,6 +22,9 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
 {
     private const int MaxFavoriteColors = 8;
 
+    private const string NotConnectedMessage =
+        "Not connected. In OpenRGB, open SDK Server and click Start Server, then Retry.";
+
     /// <summary>Preset swatches shown in the "All devices" card's grid, alongside the hex box.</summary>
     public static readonly IReadOnlyList<string> PresetSwatches =
     [
@@ -36,11 +39,20 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
     private readonly Dispatcher _dispatcher;
     private CancellationTokenSource _cts = new();
 
+    /// <summary>Tracks whether <see cref="OpenRgbCard"/> was already ready before the most recent
+    /// <see cref="OnNavigatedToAsync"/> call, so that call and the false-&gt;true edge handled by
+    /// <see cref="OnOpenRgbCardPropertyChanged"/> never both trigger a refresh for the same
+    /// transition (which raced two concurrent <c>ConnectAsync</c> calls - see PR review).</summary>
+    private bool _wasOpenRgbCardReady;
+
     [ObservableProperty]
     private bool _isConnected;
 
     [ObservableProperty]
     private string _connectionStatusText = "Not connected";
+
+    [ObservableProperty]
+    private string? _lastActionMessage;
 
     [ObservableProperty]
     private string _selectedColorHex = "#FFFFFF";
@@ -55,6 +67,7 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
     [NotifyCanExecuteChangedFor(nameof(RetryCommand))]
     [NotifyCanExecuteChangedFor(nameof(ApplyToAllCommand))]
     [NotifyCanExecuteChangedFor(nameof(TurnOffAllCommand))]
+    [NotifyCanExecuteChangedFor(nameof(LoadProfileCommand))]
     private bool _isBusy;
 
     public LightingViewModel(
@@ -71,11 +84,13 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
 
         OpenRgbCard = componentCardFactory.Create(ComponentIds.OpenRgb);
         OpenRgbCard.PropertyChanged += OnOpenRgbCardPropertyChanged;
+        _wasOpenRgbCardReady = OpenRgbCard.IsReady;
 
         AutoStartOpenRgb = settingsStore.Current.Lighting.AutoStartOpenRgb;
-        FavoriteColors = new ObservableCollection<string>(settingsStore.Current.Lighting.FavoriteColors);
+        FavoriteColors = new ObservableCollection<string>(NormalizeFavorites(settingsStore.Current.Lighting.FavoriteColors));
 
         _lightingService.Disconnected += OnLightingServiceDisconnected;
+        _lightingService.DevicesChanged += OnLightingServiceDevicesChanged;
     }
 
     public override string Title => "Lighting";
@@ -100,15 +115,29 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
 
     public override async Task OnNavigatedToAsync(CancellationToken cancellationToken)
     {
+        var wasReady = OpenRgbCard.IsReady;
         await OpenRgbCard.LoadAsync(cancellationToken).ConfigureAwait(true);
-        if (OpenRgbCard.IsReady)
+
+        // A false->true transition here already triggered exactly one RefreshAsync via
+        // OnOpenRgbCardPropertyChanged (LoadAsync's own Status assignment raises that
+        // synchronously); starting a second one from here would race two concurrent
+        // ConnectAsync calls against the same client. Only re-navigating while it was *already*
+        // ready needs its own explicit refresh.
+        if (wasReady && OpenRgbCard.IsReady)
         {
             await RefreshAsync().ConfigureAwait(true);
         }
     }
 
     [RelayCommand(CanExecute = nameof(CanRunCommand))]
-    private Task Retry() => RefreshAsync();
+    private async Task Retry()
+    {
+        await OpenRgbCard.LoadAsync(_cts.Token).ConfigureAwait(true);
+        if (OpenRgbCard.IsReady)
+        {
+            await RefreshAsync().ConfigureAwait(true);
+        }
+    }
 
     [RelayCommand(CanExecute = nameof(CanRunCommand))]
     private async Task ApplyToAll()
@@ -122,7 +151,12 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
         try
         {
             var scaled = color.Scale(BrightnessPercent / 100.0);
-            await _lightingService.SetAllColorAsync(scaled, _cts.Token).ConfigureAwait(true);
+            var result = await _lightingService.SetAllColorAsync(scaled, _cts.Token).ConfigureAwait(true);
+            LastActionMessage = DescribeFailure(result, "apply the color to");
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogDebug(ex, "Apply-to-all was cancelled (page navigated away or retried).");
         }
         finally
         {
@@ -136,7 +170,12 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
         IsBusy = true;
         try
         {
-            await _lightingService.TurnOffAllAsync(_cts.Token).ConfigureAwait(true);
+            var result = await _lightingService.TurnOffAllAsync(_cts.Token).ConfigureAwait(true);
+            LastActionMessage = DescribeFailure(result, "turn off");
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogDebug(ex, "Turn-off-all was cancelled (page navigated away or retried).");
         }
         finally
         {
@@ -144,8 +183,14 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
         }
     }
 
-    [RelayCommand]
-    private void SelectSwatch(string hex) => SelectedColorHex = hex;
+    /// <summary>Sets the swatch as the selected color and immediately applies it to every device,
+    /// matching the spec's "apply on button press (and on swatch click)".</summary>
+    [RelayCommand(CanExecute = nameof(CanRunCommand))]
+    private async Task SelectSwatch(string hex)
+    {
+        SelectedColorHex = hex;
+        await ApplyToAll().ConfigureAwait(true);
+    }
 
     [RelayCommand(CanExecute = nameof(CanSaveFavorite))]
     private void SaveFavorite()
@@ -178,13 +223,18 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanRunCommand))]
     private async Task LoadProfile(string name)
     {
         IsBusy = true;
         try
         {
-            await _lightingService.LoadProfileAsync(name, _cts.Token).ConfigureAwait(true);
+            var succeeded = await _lightingService.LoadProfileAsync(name, _cts.Token).ConfigureAwait(true);
+            LastActionMessage = succeeded ? null : $"Couldn't load profile \"{name}\".";
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogDebug(ex, "Load profile was cancelled (page navigated away or retried).");
         }
         finally
         {
@@ -207,6 +257,41 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
         return color.Scale(BrightnessPercent / 100.0);
     }
 
+    private static string? DescribeFailure(LightingApplyResult result, string verb)
+    {
+        if (result.FailedCount == 0)
+        {
+            return null;
+        }
+
+        return result.SucceededCount == 0
+            ? $"Couldn't {verb} any device."
+            : $"Couldn't {verb} {result.FailedCount} device(s).";
+    }
+
+    private static List<string> NormalizeFavorites(IEnumerable<string> favorites)
+    {
+        var normalized = new List<string>();
+        foreach (var favorite in favorites)
+        {
+            if (RgbColor.TryParse(favorite, out var color))
+            {
+                var hex = color.ToHex();
+                if (!normalized.Contains(hex))
+                {
+                    normalized.Add(hex);
+                }
+            }
+
+            if (normalized.Count >= MaxFavoriteColors)
+            {
+                break;
+            }
+        }
+
+        return normalized;
+    }
+
     private async Task RefreshAsync()
     {
         _cts.Cancel();
@@ -222,7 +307,7 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
 
             if (!connected)
             {
-                ConnectionStatusText = "Not connected";
+                ConnectionStatusText = NotConnectedMessage;
                 Devices.Clear();
                 Profiles.Clear();
                 return;
@@ -255,7 +340,7 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
             // a bug there so the page shows "not connected" instead of an unhandled exception.
             _logger.LogError(ex, "Unexpected failure refreshing the Lighting page.");
             IsConnected = false;
-            ConnectionStatusText = "Not connected";
+            ConnectionStatusText = NotConnectedMessage;
         }
         finally
         {
@@ -274,17 +359,33 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
         }
 
         OnPropertyChanged(nameof(ShowSetup));
-        if (OpenRgbCard.IsReady)
+
+        var isReadyNow = OpenRgbCard.IsReady;
+        if (isReadyNow && !_wasOpenRgbCardReady)
         {
+            // The false->true edge - the only transition that should kick off a refresh from here;
+            // OnNavigatedToAsync handles the "was already ready" case itself so the two never both
+            // fire for the same becoming-ready moment.
             _ = RefreshAsync();
         }
+
+        _wasOpenRgbCardReady = isReadyNow;
     }
 
     private void OnLightingServiceDisconnected(object? sender, EventArgs e) =>
         _dispatcher.InvokeAsync(() =>
         {
             IsConnected = false;
-            ConnectionStatusText = "Not connected";
+            ConnectionStatusText = NotConnectedMessage;
+        });
+
+    private void OnLightingServiceDevicesChanged(object? sender, EventArgs e) =>
+        _dispatcher.InvokeAsync(async () =>
+        {
+            if (IsConnected)
+            {
+                await RefreshAsync().ConfigureAwait(true);
+            }
         });
 
     public void Dispose()
@@ -292,6 +393,7 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
         OpenRgbCard.PropertyChanged -= OnOpenRgbCardPropertyChanged;
         OpenRgbCard.Dispose();
         _lightingService.Disconnected -= OnLightingServiceDisconnected;
+        _lightingService.DevicesChanged -= OnLightingServiceDevicesChanged;
         _cts.Cancel();
         _cts.Dispose();
     }
