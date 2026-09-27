@@ -123,20 +123,51 @@ public sealed class FanControlManagerTests : IDisposable
     }
 
     [Fact]
-    public void OnSnapshot_NotElevatedWithSavedFixedProfile_ArmedAndEnabled_StillAppliesNoTempFailsafe()
+    public void OnSnapshot_NotElevatedWithSavedFixedProfile_ArmedAndEnabled_NeverCallsSetPercent()
     {
-        // Unlike the master-off/never-activated cases above, once the user HAS armed and enabled
-        // control, a NotElevated (no CPU temperature visible) snapshot is exactly rule 3's "no
-        // trustworthy temperature" case and correctly forces the owned fan to 100% - the N1 bug was
-        // that this fired even when control was never armed/enabled in the first place, not that it
-        // should never fire at all once armed.
+        // R3-1: even with control armed+enabled (e.g. a profile saved during an earlier *elevated*
+        // session), a NotElevated/DriverMissing snapshot must never call SetPercent at all - a
+        // vendor-API-only fan (NVIDIA/AMD GPU fans, controllable without PawnIO) would otherwise
+        // still get commanded while every UI element says fan control is unavailable. Control is
+        // only ever active while the snapshot's own Status is Ready.
         EnableFixedFan(40);
         using var manager = CreateManager();
         manager.Activate();
 
         _hardwareService.RaiseSnapshot(HardwareSnapshot.Empty(HardwareStatus.NotElevated));
 
-        Assert.Equal(100, _fan.CurrentPercent);
+        Assert.Equal(0, _fan.SetPercentCallCount);
+        Assert.Null(_fan.CurrentPercent);
+    }
+
+    [Fact]
+    public void OnSnapshot_DriverMissingWithSavedFixedProfile_ArmedAndEnabled_NeverCallsSetPercent()
+    {
+        EnableFixedFan(40);
+        using var manager = CreateManager();
+        manager.Activate();
+
+        _hardwareService.RaiseSnapshot(HardwareSnapshot.Empty(HardwareStatus.DriverMissing));
+
+        Assert.Equal(0, _fan.SetPercentCallCount);
+    }
+
+    [Fact]
+    public void OnSnapshot_ReadyThenDropsToNotElevated_RestoresOwnedFan_WithoutDisablingSetting()
+    {
+        // R3-1's Ready->NotElevated transition: a fan already owned from an earlier Ready tick must
+        // be handed back, but this is not the user's fault (unlike rule 4) - the persisted setting
+        // stays on so it resumes on its own once elevation/the driver come back.
+        EnableFixedFan(40);
+        using var manager = CreateManager();
+        manager.Activate();
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+        Assert.Equal(40, _fan.CurrentPercent);
+
+        _hardwareService.RaiseSnapshot(HardwareSnapshot.Empty(HardwareStatus.NotElevated));
+
+        Assert.Null(_fan.CurrentPercent); // restored, not left at 40 and not forced to 100
+        Assert.True(_settingsStore.Current.Hardware.FanControlEnabled); // not disabled - not rule 4
     }
 
     // ---------------------------------------------------------------- N1b: never restore a fan we don't own
@@ -196,6 +227,31 @@ public sealed class FanControlManagerTests : IDisposable
 
         var snapshotWithNoTemps = new HardwareSnapshot(HardwareStatus.Ready, null, [], DateTimeOffset.UtcNow);
         _hardwareService.RaiseSnapshot(snapshotWithNoTemps);
+
+        Assert.Equal(100, _fan.CurrentPercent);
+    }
+
+    [Fact]
+    public void OnSnapshot_GpuTemperatureButNoCpuTemperature_StillForcesTo100()
+    {
+        // R3-3: the no-reliable-temperature failsafe is specifically about CPU temperature (matching
+        // its own banner text) - a GPU-only reading (e.g. from a vendor API with no CPU sensor
+        // exposed) must not count as "something trustworthy", even though rule 2's overheat failsafe
+        // legitimately watches both CPU and GPU.
+        EnableFixedFan(30);
+        using var manager = CreateManager();
+        manager.Activate();
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+        Assert.Equal(30, _fan.CurrentPercent);
+
+        var gpuOnlySnapshot = new HardwareSnapshot(
+            HardwareStatus.Ready,
+            null,
+            [new HardwareNode("gpu", "GPU", HardwareNodeType.Gpu,
+                [new SensorReading("gpu/temp", "GPU Core", SensorType.Temperature, 60, null, null, DateTimeOffset.UtcNow)],
+                [])],
+            DateTimeOffset.UtcNow);
+        _hardwareService.RaiseSnapshot(gpuOnlySnapshot);
 
         Assert.Equal(100, _fan.CurrentPercent);
     }
@@ -288,6 +344,39 @@ public sealed class FanControlManagerTests : IDisposable
         _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
 
         Assert.Equal(40, _fan.CurrentPercent);
+    }
+
+    [Fact]
+    public void ResumeFromSuspend_AfterLongPause_DoesNotImmediatelyTripWatchdog()
+    {
+        // R3-2: the watchdog's clock was last advanced before the pause - a real system sleep can
+        // easily exceed the watchdog timeout, so without resetting the clock on resume, the very
+        // first tick after resuming would look like a multi-hour stall and immediately re-trip.
+        EnableFixedFan(40);
+        using var manager = CreateManager(TimeSpan.FromMilliseconds(80), TimeSpan.FromMilliseconds(20));
+        manager.Activate();
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+
+        manager.Suspend("system suspend", resumableBySystemResume: true);
+
+        // Simulate a "long sleep" - well past the watchdog timeout - while paused.
+        Thread.Sleep(TimeSpan.FromMilliseconds(300));
+
+        FanControlAlert? alert = null;
+        manager.StatusChanged += (_, e) => alert = e;
+
+        manager.ResumeFromSuspend();
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+
+        // A short wait - well under the 80ms watchdog timeout - just to give its timer thread a
+        // chance to run at least once and prove it does *not* immediately re-trip. A longer wait
+        // with no further snapshots would eventually be a real (and correctly detected) stall in
+        // its own right, which is not what this test is about.
+        Thread.Sleep(TimeSpan.FromMilliseconds(30));
+
+        Assert.Equal(40, _fan.CurrentPercent); // resumed normally, not immediately re-paused
+        Assert.Null(alert);
+        Assert.True(_settingsStore.Current.Hardware.FanControlEnabled);
     }
 
     [Fact]

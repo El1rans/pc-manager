@@ -213,6 +213,13 @@ public sealed class FanControlManager : IDisposable
             shouldResume = _paused && _pausedByResumableSuspend;
             if (shouldResume)
             {
+                // R3-2: reset the watchdog's clock *before* clearing the pause, both under the same
+                // lock the watchdog itself reads _paused under (see OnWatchdogTick). Otherwise a
+                // watchdog tick landing in between the two could observe "not paused any more" with
+                // the clock still holding its pre-sleep value - and a sleep longer than the
+                // watchdog's timeout (easily true for a real system suspend) would then look like an
+                // immediate, multi-hour stall and re-trip before this method has even returned.
+                Interlocked.Exchange(ref _lastActiveEvaluationUtcTicks, DateTime.UtcNow.Ticks);
                 _paused = false;
                 _pausedByResumableSuspend = false;
             }
@@ -289,14 +296,12 @@ public sealed class FanControlManager : IDisposable
             return;
         }
 
-        // Only reached while control is genuinely active - safe to advance the watchdog's clock and
-        // (below) to react to an unhealthy snapshot, since there is now something real to protect.
+        // Only reached while control is genuinely active - safe to advance the watchdog's clock.
+        // Deliberately advanced here, before the Ready check below, rather than only while Ready:
+        // an extended-but-legitimate non-Ready period (e.g. running non-elevated for a while with a
+        // profile saved from an earlier elevated session) must not itself look like a stuck hardware
+        // thread to the watchdog - see R3-1/R3-3.
         Interlocked.Exchange(ref _lastActiveEvaluationUtcTicks, DateTime.UtcNow.Ticks);
-
-        var hardwareSettings = _settingsStore.Current.Hardware;
-        var cpuGpuTemperatures = new Dictionary<string, SensorSample>();
-        CollectTemperatures(snapshot.Nodes, cpuGpuTemperatures);
-        var hasAnyCpuGpuReading = cpuGpuTemperatures.Values.Any(s => s.ValueC is not null);
 
         if (snapshot.Status == HardwareStatus.Error)
         {
@@ -307,11 +312,36 @@ public sealed class FanControlManager : IDisposable
             return;
         }
 
-        if (!hasAnyCpuGpuReading)
+        if (snapshot.Status != HardwareStatus.Ready)
         {
-            // A live snapshot with no CPU temperature reading at all (rule 2/3's territory: the
-            // engine has nothing trustworthy to reason about) - force every owned, controlled fan to
-            // full speed rather than leave it at whatever percent (e.g. a Fixed 30%) it last had.
+            // R3-1: hardware access has dropped (not elevated, or the driver is missing) - most
+            // commonly a fan profile saved during an earlier *elevated* session, now running
+            // non-elevated. This is not the user's fault and must not disable the persisted setting
+            // (unlike rule 4) - just hand back anything this instance is actively driving. Without
+            // this check, a vendor-API-only fan (e.g. an NVIDIA GPU fan, controllable without
+            // PawnIO) could still be commanded by SetPercent while every UI element says fan control
+            // is unavailable, which is exactly what round 3's live probe proved.
+            RestoreAllCore();
+            return;
+        }
+
+        var hardwareSettings = _settingsStore.Current.Hardware;
+        var cpuGpuTemperatures = new Dictionary<string, SensorSample>();
+        CollectTemperatures(snapshot.Nodes, cpuGpuTemperatures);
+
+        // R3-3: the no-reliable-temperature failsafe below is specifically about *CPU* temperature -
+        // matching its own banner text ("No reliable CPU temperature reading") - not "CPU or GPU".
+        // A GPU-only reading (e.g. from a vendor API with no CPU sensor exposed at all) must not
+        // count as "we have something trustworthy to reason about" for this check; rule 2's
+        // overheat failsafe below still legitimately watches both CPU and GPU temperatures.
+        var hasLiveCpuTemperature = HasLiveCpuTemperature(snapshot.Nodes);
+
+        if (!hasLiveCpuTemperature)
+        {
+            // A live (Ready) snapshot with no CPU temperature reading at all (rule 2/3's territory:
+            // the engine has nothing trustworthy to reason about) - force every owned, controlled
+            // fan to full speed rather than leave it at whatever percent (e.g. a Fixed 30%) it last
+            // had.
             ForceAllOwnedControlledFansTo100(controllers, hardwareSettings);
             if (!_noTempFailsafeActive)
             {
@@ -695,6 +725,15 @@ public sealed class FanControlManager : IDisposable
             CollectTemperatures(node.Children, into);
         }
     }
+
+    /// <summary>R3-3: specifically a *CPU* temperature - see the call site's comment. Does not
+    /// consider an inverted-scale sensor (S1, e.g. Intel's "Distance to TjMax") live, for the same
+    /// reason those are excluded everywhere else.</summary>
+    private static bool HasLiveCpuTemperature(IReadOnlyList<HardwareNode> nodes) =>
+        nodes.Any(n =>
+            (n.Type == HardwareNodeType.Cpu &&
+                n.Sensors.Any(s => s.Type == SensorType.Temperature && s.Value is not null && !SensorNaming.IsInvertedTemperature(s.Name))) ||
+            HasLiveCpuTemperature(n.Children));
 
     private readonly record struct PendingCheck(double ExpectedPercent, int MismatchStreak);
 }
