@@ -47,9 +47,13 @@ public interface IHardwareService
     /// If the calling thread already <em>is</em> the hardware thread (e.g. called from within a
     /// <see cref="SnapshotUpdated"/> handler), <paramref name="action"/> runs inline with no
     /// queuing. If the hardware thread does not pick up the command within <paramref name="timeout"/>
-    /// (stuck, or not running), <paramref name="action"/> is run directly on the calling thread as a
-    /// last-resort fallback - a safety action (like restoring every fan to default) must still
-    /// happen somewhere rather than silently never running.
+    /// (stuck, or not running) and <paramref name="allowDirectFallback"/> is true,
+    /// <paramref name="action"/> is run directly on the calling thread as a last-resort fallback - a
+    /// safety action (like restoring every fan to default) must still happen somewhere rather than
+    /// silently never running. Pass <paramref name="allowDirectFallback"/> as false for a
+    /// non-safety command (e.g. arming/re-arming) where running twice - once here, once later when
+    /// the queued copy is eventually picked up - would itself be a correctness problem; on timeout
+    /// such a command is logged and dropped instead, relying on the queued copy to run eventually.
     /// </remarks>
-    void RunOnOwnerThread(Action action, TimeSpan timeout);
+    void RunOnOwnerThread(Action action, TimeSpan timeout, bool allowDirectFallback = true);
 }

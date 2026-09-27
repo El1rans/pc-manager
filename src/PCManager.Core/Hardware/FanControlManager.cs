@@ -14,6 +14,19 @@ namespace PCManager.Core.Hardware;
 /// <see cref="ResumeFromSuspend"/>) is marshalled onto that same thread via
 /// <see cref="IHardwareService.RunOnOwnerThread"/> so nothing ever races the tick.
 /// </summary>
+/// <remarks>
+/// N1: nothing in this class ever touches a fan unless control is actually meant to be active right
+/// now - <see cref="IsControlActive"/> (armed, not paused, the persisted setting is on, and the
+/// engine is not disabled from a previous failure) gates every path that would otherwise call
+/// <see cref="IFanController.SetPercent"/> or <see cref="IFanController.RestoreDefault"/>, including
+/// the unhealthy-snapshot failsafe. When control was never active, an unhealthy snapshot (not
+/// elevated, driver missing, an error, or briefly no temperature reading) does precisely nothing -
+/// there is nothing to protect and nothing this app is entitled to touch.
+/// N1b: <see cref="RestoreDefault"/> is only ever called on a fan this instance has itself put into
+/// software mode this session (<see cref="_ownedControllerIds"/>) - never on a fan some other
+/// application already had under its own software control, and never as a reflexive "just in case"
+/// on every launch.
+/// </remarks>
 public sealed class FanControlManager : IDisposable
 {
     /// <summary>How long an external call (restore on exit/suspend, re-arm) waits for the hardware
@@ -28,9 +41,9 @@ public sealed class FanControlManager : IDisposable
 
     private const int ReadBackFailureStreak = 3;
 
-    /// <summary>Independent watchdog default: if no snapshot has been successfully processed for
-    /// this long, the hardware thread itself may be stuck or dead, so this fires without depending
-    /// on it. Overridable by the internal test constructor only.</summary>
+    /// <summary>Independent watchdog default: if no evaluation has happened while control was
+    /// actually active for this long, the hardware thread itself may be stuck or dead. Overridable
+    /// by the internal test constructor only.</summary>
     private static readonly TimeSpan DefaultWatchdogTimeout = TimeSpan.FromSeconds(5);
 
     private static readonly TimeSpan DefaultWatchdogPollInterval = TimeSpan.FromSeconds(1);
@@ -42,16 +55,28 @@ public sealed class FanControlManager : IDisposable
     private readonly ILogger<FanControlManager> _logger;
     private readonly Lock _stateLock = new();
     private readonly Dictionary<string, PendingCheck> _pendingReadBacks = [];
+
+    /// <summary>N1b: ids of fans this instance has itself called <see cref="IFanController.SetPercent"/>
+    /// on this session. <see cref="IFanController.RestoreDefault"/> is only ever called for an id in
+    /// this set - see the type-level remarks.</summary>
+    private readonly HashSet<string> _ownedControllerIds = [];
+
     private readonly Timer _watchdogTimer;
     private readonly TimeSpan _watchdogTimeout;
 
     private bool _armed;
     private bool _paused;
+
+    /// <summary>N5: only a pause raised for <c>PowerModes.Suspend</c> is eligible to be cleared by
+    /// <see cref="ResumeFromSuspend"/>; a pause from a crash handler or session-ending stays until
+    /// the user explicitly re-arms.</summary>
+    private bool _pausedByResumableSuspend;
+
     private bool _failureAlertRaised;
     private bool _noTempFailsafeActive;
     private bool _forceRewriteAfterResume;
     private bool _activityMarkerActive;
-    private long _lastSnapshotProcessedUtcTicks = DateTime.UtcNow.Ticks;
+    private long _lastActiveEvaluationUtcTicks = DateTime.UtcNow.Ticks;
     private bool _watchdogTripped;
 
     public FanControlManager(
@@ -115,7 +140,7 @@ public sealed class FanControlManager : IDisposable
     /// profiles, so control never resumes silently at app startup before the page has shown it is
     /// active.
     /// </summary>
-    public void Activate() => _hardwareService.RunOnOwnerThread(ArmCore, OwnerThreadTimeout);
+    public void Activate() => _hardwareService.RunOnOwnerThread(ArmCore, OwnerThreadTimeout, allowDirectFallback: false);
 
     /// <summary>Clears any rule-4 disabled state and (re-)arms control. Called when the user turns
     /// the master switch on - whether for the first time this session or after a set failure had
@@ -128,30 +153,43 @@ public sealed class FanControlManager : IDisposable
             _pendingReadBacks.Clear();
             _failureAlertRaised = false;
             _watchdogTripped = false;
+            lock (_stateLock)
+            {
+                _paused = false;
+                _pausedByResumableSuspend = false;
+            }
+
             ArmCore();
         },
-        OwnerThreadTimeout);
+        OwnerThreadTimeout,
+        allowDirectFallback: false);
 
-    /// <summary>Rule 5: restores every known fan to default/BIOS control. Called by the app on
-    /// exit, crash, system suspend, and session end - independent of the snapshot loop, so it works
-    /// even if the hardware thread is not ticking right now. Always runs on the hardware thread
-    /// (falling back to a direct call if that thread does not respond in time) so it never races a
-    /// concurrent tick re-applying software control right after this restores it.</summary>
+    /// <summary>Rule 5: restores every fan this instance owns (N1b) to default/BIOS control. Called
+    /// by the app on exit, crash, system suspend, and session end - independent of the snapshot
+    /// loop, so it works even if the hardware thread is not ticking right now. Always runs on the
+    /// hardware thread (falling back to a direct call if that thread does not respond in time) so it
+    /// never races a concurrent tick re-applying software control right after this restores it.</summary>
     public void RestoreAll() => _hardwareService.RunOnOwnerThread(RestoreAllCore, OwnerThreadTimeout);
 
     /// <summary>
-    /// B2: pauses fan control (as if the master switch were off) and immediately restores every
-    /// fan, *without* clearing the persisted "enabled" setting - unlike a set failure, this is not
-    /// the user's fault and should not require re-confirming the risk warning. Stays paused across
-    /// further ticks (a suspend/resume can complete within one tick, especially Modern Standby)
-    /// until <see cref="ResumeFromSuspend"/> or <see cref="Rearm"/> explicitly clears it. Safe to
-    /// call from any thread.
+    /// B2: pauses fan control (as if the master switch were off) and immediately restores every fan
+    /// this instance owns, *without* clearing the persisted "enabled" setting - unlike a set
+    /// failure, this is not the user's fault and should not require re-confirming the risk warning.
+    /// Stays paused across further ticks (a suspend/resume can complete within one tick, especially
+    /// Modern Standby) until <see cref="ResumeFromSuspend"/> (only when <paramref name="reason"/> was
+    /// itself a resumable system suspend) or <see cref="Rearm"/> explicitly clears it. Safe to call
+    /// from any thread.
     /// </summary>
-    public void Suspend(string reason)
+    /// <param name="reason">Shown in the banner.</param>
+    /// <param name="resumableBySystemResume">N5: true only for an actual <c>PowerModes.Suspend</c> -
+    /// a crash handler or session-ending pause must stay paused until the user re-arms, never
+    /// clearing automatically.</param>
+    public void Suspend(string reason, bool resumableBySystemResume)
     {
         lock (_stateLock)
         {
             _paused = true;
+            _pausedByResumableSuspend = resumableBySystemResume;
         }
 
         RestoreAll();
@@ -159,24 +197,30 @@ public sealed class FanControlManager : IDisposable
     }
 
     /// <summary>
-    /// Clears a pause from <see cref="Suspend"/>. Per B2, this must be the *only* automatic way a
-    /// pause clears - call this specifically for <c>PowerModes.Resume</c>, never on a timer or on
-    /// the next tick regardless of cause. Forces a real hardware write on the next tick even if the
-    /// engine's target happens to match what was last commanded before the pause, since LHM's
-    /// <c>SetSoftware</c> is a no-op when the value has not changed from its own point of view.
+    /// Clears a pause raised by <see cref="Suspend"/> with <c>resumableBySystemResume: true</c> -
+    /// per N5, this must be the *only* automatic way such a pause clears, and it must never clear a
+    /// pause from a crash handler or session-ending. Call this specifically for
+    /// <c>PowerModes.Resume</c>, never on a timer or on the next tick regardless of cause. Forces a
+    /// real hardware write on the next tick even if the engine's target happens to match what was
+    /// last commanded before the pause, since LHM's <c>SetSoftware</c> is a no-op when the value has
+    /// not changed from its own point of view.
     /// </summary>
     public void ResumeFromSuspend()
     {
-        bool wasPaused;
+        bool shouldResume;
         lock (_stateLock)
         {
-            wasPaused = _paused;
-            _paused = false;
+            shouldResume = _paused && _pausedByResumableSuspend;
+            if (shouldResume)
+            {
+                _paused = false;
+                _pausedByResumableSuspend = false;
+            }
         }
 
-        if (wasPaused)
+        if (shouldResume)
         {
-            _hardwareService.RunOnOwnerThread(() => _forceRewriteAfterResume = true, OwnerThreadTimeout);
+            _hardwareService.RunOnOwnerThread(() => _forceRewriteAfterResume = true, OwnerThreadTimeout, allowDirectFallback: false);
         }
     }
 
@@ -192,6 +236,20 @@ public sealed class FanControlManager : IDisposable
         {
             _armed = true;
         }
+
+        Interlocked.Exchange(ref _lastActiveEvaluationUtcTicks, DateTime.UtcNow.Ticks);
+    }
+
+    /// <summary>N1/N3: whether fan control is currently meant to be doing anything at all. Every
+    /// path that could call <see cref="IFanController.SetPercent"/> - including the unhealthy-
+    /// snapshot failsafe - is gated on this; when it is false, an unhealthy snapshot is expected
+    /// (e.g. simply not elevated yet) and must never itself start touching fans.</summary>
+    private bool IsControlActive()
+    {
+        lock (_stateLock)
+        {
+            return _armed && !_paused && _settingsStore.Current.Hardware.FanControlEnabled && !_engine.IsDisabledDueToError;
+        }
     }
 
     private void OnSnapshot(object? sender, HardwareSnapshot snapshot)
@@ -199,15 +257,17 @@ public sealed class FanControlManager : IDisposable
         try
         {
             OnSnapshotCore(snapshot);
-            Interlocked.Exchange(ref _lastSnapshotProcessedUtcTicks, DateTime.UtcNow.Ticks);
         }
         catch (Exception ex)
         {
-            // B3: an unhandled exception here (e.g. a duplicate sensor id, an unexpected null) must
-            // never just vanish into the hardware-thread's own catch-all, which would silently skip
-            // this tick's fan safety enforcement entirely. Treat it exactly like a set failure.
-            _logger.LogError(ex, "Unexpected failure evaluating fan control; restoring every fan and disabling software control.");
-            HandleSeriousFailure("Something went wrong evaluating fan control. Every fan was restored to automatic control and software fan control was turned off.");
+            // An unhandled exception here (e.g. a duplicate sensor id, an unexpected null) must
+            // never just vanish into the hardware thread's own catch-all, which would silently skip
+            // this tick's fan safety enforcement entirely.
+            _logger.LogError(ex, "Unexpected failure evaluating fan control.");
+            if (IsControlActive())
+            {
+                HandleSeriousFailure("Something went wrong evaluating fan control. Every fan under software control was restored to automatic control and software fan control was turned off.");
+            }
         }
     }
 
@@ -219,31 +279,45 @@ public sealed class FanControlManager : IDisposable
             return;
         }
 
-        bool armed;
-        bool paused;
-        lock (_stateLock)
+        var controlActive = IsControlActive();
+
+        if (!controlActive)
         {
-            armed = _armed;
-            paused = _paused;
+            // N1: nothing to evaluate, and nothing to touch. In particular, an unhealthy snapshot
+            // (not elevated, driver missing, an error) while control was never armed/enabled must do
+            // precisely nothing to any fan - there is no software-commanded state to protect.
+            return;
         }
+
+        // Only reached while control is genuinely active - safe to advance the watchdog's clock and
+        // (below) to react to an unhealthy snapshot, since there is now something real to protect.
+        Interlocked.Exchange(ref _lastActiveEvaluationUtcTicks, DateTime.UtcNow.Ticks);
 
         var hardwareSettings = _settingsStore.Current.Hardware;
         var cpuGpuTemperatures = new Dictionary<string, SensorSample>();
         CollectTemperatures(snapshot.Nodes, cpuGpuTemperatures);
-
-        // B3: if the hardware read itself is unhealthy, or we cannot see any CPU/GPU temperature at
-        // all, the engine has nothing trustworthy to reason about - force every software-controlled
-        // fan to full speed rather than let it keep whatever percent (e.g. a Fixed 30%) it last had
-        // with no idea whether that is safe right now.
         var hasAnyCpuGpuReading = cpuGpuTemperatures.Values.Any(s => s.ValueC is not null);
-        if (snapshot.Status != HardwareStatus.Ready || !hasAnyCpuGpuReading)
+
+        if (snapshot.Status == HardwareStatus.Error)
         {
-            ForceAllControlledFansTo100(controllers, hardwareSettings);
+            // The hardware read itself failed - nothing here is trustworthy, including whether the
+            // fans we think we own are even the same physical fans any more. Restore what we own
+            // (rule 4's response) rather than guessing at 100%.
+            HandleSeriousFailure("Could not read hardware sensors. Every fan under software control was restored to automatic control and software fan control was turned off.");
+            return;
+        }
+
+        if (!hasAnyCpuGpuReading)
+        {
+            // A live snapshot with no CPU temperature reading at all (rule 2/3's territory: the
+            // engine has nothing trustworthy to reason about) - force every owned, controlled fan to
+            // full speed rather than leave it at whatever percent (e.g. a Fixed 30%) it last had.
+            ForceAllOwnedControlledFansTo100(controllers, hardwareSettings);
             if (!_noTempFailsafeActive)
             {
                 _noTempFailsafeActive = true;
                 RaiseStatus(FanControlAlertLevel.Critical,
-                    "No reliable CPU/GPU temperature reading is available - every controlled fan is at 100% until it is.");
+                    "No reliable CPU temperature reading is available - every controlled fan is at 100% until it is.");
             }
 
             return;
@@ -256,8 +330,7 @@ public sealed class FanControlManager : IDisposable
             return;
         }
 
-        var softwareControlEnabled = armed && !paused && hardwareSettings.FanControlEnabled;
-        var input = BuildInput(snapshot, hardwareSettings, cpuGpuTemperatures, controllers, softwareControlEnabled);
+        var input = BuildInput(snapshot, hardwareSettings, cpuGpuTemperatures, controllers, softwareControlEnabled: true);
         var decision = _engine.Evaluate(input);
 
         var forceRewrite = _forceRewriteAfterResume;
@@ -267,13 +340,13 @@ public sealed class FanControlManager : IDisposable
         foreach (var controller in controllers)
         {
             var target = decision.Targets.GetValueOrDefault(controller.Id, FanTarget.RestoreDefault);
-            if (!Apply(controller, target, forceRewrite))
+            if (!Apply(controller, target, forceRewrite, out var clampedPercent))
             {
                 HandleSetFailure(controller);
                 return;
             }
 
-            TrackReadBack(controller, target);
+            TrackReadBack(controller, target, clampedPercent);
             appliedAnySetPercent |= target.Kind == FanTargetKind.SetPercent;
         }
 
@@ -287,10 +360,11 @@ public sealed class FanControlManager : IDisposable
     }
 
     /// <summary>S3: compares each controlled fan's actual duty cycle against what was last
-    /// commanded; a fan stuck more than <see cref="ReadBackToleranceLevel"/> points off target for
-    /// <see cref="ReadBackFailureStreak"/> consecutive ticks is a silent set failure some SuperIO/
-    /// NVAPI backends can produce without ever throwing. Returns true if a failure was handled (and
-    /// the caller should stop processing this tick).</summary>
+    /// commanded (the *clamped* value actually sent - N6); a fan stuck more than
+    /// <see cref="ReadBackToleranceLevel"/> points off target for <see cref="ReadBackFailureStreak"/>
+    /// consecutive ticks is a silent set failure some SuperIO/NVAPI backends can produce without
+    /// ever throwing. Returns true if a failure was handled (and the caller should stop processing
+    /// this tick).</summary>
     private bool VerifyReadBacksAndHandleFailure(IReadOnlyList<IFanController> controllers)
     {
         foreach (var controller in controllers)
@@ -325,11 +399,11 @@ public sealed class FanControlManager : IDisposable
         return false;
     }
 
-    private void TrackReadBack(IFanController controller, FanTarget target)
+    private void TrackReadBack(IFanController controller, FanTarget target, double clampedPercent)
     {
         if (target.Kind == FanTargetKind.SetPercent)
         {
-            _pendingReadBacks[controller.Id] = new PendingCheck(target.Percent, 0);
+            _pendingReadBacks[controller.Id] = new PendingCheck(clampedPercent, 0);
         }
         else
         {
@@ -337,40 +411,64 @@ public sealed class FanControlManager : IDisposable
         }
     }
 
-    private void ForceAllControlledFansTo100(IReadOnlyList<IFanController> controllers, HardwareSettings settings)
+    private void ForceAllOwnedControlledFansTo100(IReadOnlyList<IFanController> controllers, HardwareSettings settings)
     {
         var appliedAnySetPercent = false;
         foreach (var controller in controllers)
         {
             var profile = BuildProfile(controller.Id, settings);
             var target = profile.Mode == FanMode.Default ? FanTarget.RestoreDefault : FanTarget.SetPercent(100);
-            Apply(controller, target, forceRewrite: false);
+            if (!Apply(controller, target, forceRewrite: false, out _))
+            {
+                // N6: a failure here must not be silently ignored either.
+                HandleSetFailure(controller);
+                return;
+            }
+
             appliedAnySetPercent |= target.Kind == FanTargetKind.SetPercent;
         }
 
         UpdateActivityMarker(appliedAnySetPercent);
     }
 
-    private bool Apply(IFanController controller, FanTarget target, bool forceRewrite)
+    /// <summary>
+    /// N1b: only ever calls <see cref="IFanController.RestoreDefault"/> on a fan already in
+    /// <see cref="_ownedControllerIds"/> - one this instance itself previously set into software
+    /// mode. N6: the percent actually sent to <see cref="IFanController.SetPercent"/> (and returned
+    /// via <paramref name="clampedPercent"/> for read-back tracking) is clamped against the
+    /// controller's own <see cref="IFanController.MinSoftwarePercent"/>/<see cref="IFanController.MaxSoftwarePercent"/>
+    /// here, matching what <see cref="LhmFanController.SetPercent"/> will itself clamp to - so the
+    /// two can never disagree and produce a false read-back mismatch.
+    /// </summary>
+    private bool Apply(IFanController controller, FanTarget target, bool forceRewrite, out double clampedPercent)
     {
+        clampedPercent = 0;
+
         try
         {
             if (target.Kind == FanTargetKind.RestoreDefault)
             {
-                controller.RestoreDefault();
-            }
-            else
-            {
-                if (forceRewrite)
+                if (_ownedControllerIds.Contains(controller.Id))
                 {
-                    // B2: after a resume, LHM may consider the target "already set" from its last
-                    // pre-suspend value and skip the hardware write - force a real one.
                     controller.RestoreDefault();
                 }
 
-                controller.SetPercent(target.Percent);
+                return true;
             }
 
+            var lowerBound = Math.Max(FanControlOptions.LowestAllowedMinPercent, controller.MinSoftwarePercent);
+            var upperBound = Math.Max(lowerBound, controller.MaxSoftwarePercent);
+            clampedPercent = double.IsNaN(target.Percent) ? upperBound : Math.Clamp(target.Percent, lowerBound, upperBound);
+
+            if (forceRewrite && _ownedControllerIds.Contains(controller.Id))
+            {
+                // B2: after a resume, LHM may consider the target "already set" from its last
+                // pre-suspend value and skip the hardware write - force a real one.
+                controller.RestoreDefault();
+            }
+
+            controller.SetPercent(clampedPercent);
+            _ownedControllerIds.Add(controller.Id);
             return true;
         }
         catch (Exception ex)
@@ -380,12 +478,12 @@ public sealed class FanControlManager : IDisposable
         }
     }
 
-    /// <summary>Rule 4: the first time this fires, restores every fan, disables the persisted
+    /// <summary>Rule 4: the first time this fires, restores every owned fan, disables the persisted
     /// setting, and raises one critical banner. If the engine is already disabled (this is a repeat
     /// failure - e.g. <see cref="RestoreDefault"/> itself keeps throwing), it still tries to restore
     /// but does not re-alert or write settings again every tick.</summary>
     private void HandleSetFailure(IFanController failedController) =>
-        HandleSeriousFailure($"Could not set {failedController.Name}'s speed. Every fan was restored to automatic control and software fan control was turned off.");
+        HandleSeriousFailure($"Could not set {failedController.Name}'s speed. Every fan under software control was restored to automatic control and software fan control was turned off.");
 
     private void HandleSeriousFailure(string message)
     {
@@ -411,10 +509,18 @@ public sealed class FanControlManager : IDisposable
         RaiseStatus(FanControlAlertLevel.Critical, message);
     }
 
+    /// <summary>N1b: restores only fans in <see cref="_ownedControllerIds"/> - see the type-level
+    /// remarks. A session where control was never enabled has an empty owned set, so this is a
+    /// complete no-op, touching nothing.</summary>
     private void RestoreAllCore()
     {
         foreach (var controller in _hardwareService.Controllers)
         {
+            if (!_ownedControllerIds.Contains(controller.Id))
+            {
+                continue;
+            }
+
             try
             {
                 controller.RestoreDefault();
@@ -442,18 +548,36 @@ public sealed class FanControlManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// N3: only ever acts while control is genuinely active right now (armed, enabled, not paused,
+    /// not already disabled, and actually owning at least one fan) - otherwise it silently resets its
+    /// own tripped state and does nothing, so it can never itself be the reason software fan control
+    /// gets turned off in a session where it was never turned on. Its clock
+    /// (<see cref="_lastActiveEvaluationUtcTicks"/>) is only ever advanced from
+    /// <see cref="OnSnapshotCore"/> while active, and reset the moment control is (re-)armed, so time
+    /// spent inactive (or during a brief re-initialization, which still produces a snapshot well
+    /// under the timeout in practice) never counts as a stall.
+    /// </summary>
     private void OnWatchdogTick(object? state)
     {
-        var lastProcessed = new DateTime(Interlocked.Read(ref _lastSnapshotProcessedUtcTicks), DateTimeKind.Utc);
-        var stalledFor = DateTime.UtcNow - lastProcessed;
+        bool active;
+        lock (_stateLock)
+        {
+            active = _armed && !_paused && _settingsStore.Current.Hardware.FanControlEnabled &&
+                !_engine.IsDisabledDueToError && _ownedControllerIds.Count > 0;
+        }
 
+        if (!active)
+        {
+            _watchdogTripped = false;
+            return;
+        }
+
+        var lastActive = new DateTime(Interlocked.Read(ref _lastActiveEvaluationUtcTicks), DateTimeKind.Utc);
+        var stalledFor = DateTime.UtcNow - lastActive;
         if (stalledFor <= _watchdogTimeout)
         {
-            if (_watchdogTripped)
-            {
-                _watchdogTripped = false;
-            }
-
+            _watchdogTripped = false;
             return;
         }
 
@@ -463,8 +587,14 @@ public sealed class FanControlManager : IDisposable
         }
 
         _watchdogTripped = true;
-        _logger.LogError("No hardware snapshot processed for {Elapsed}; the hardware thread may be stuck. Restoring every fan.", stalledFor);
-        HandleSeriousFailure("The hardware monitor stopped responding. Every fan was restored to automatic control and software fan control was turned off.");
+        _logger.LogError("No active fan-control evaluation for {Elapsed}; the hardware thread may be stuck. Pausing and restoring every owned fan.", stalledFor);
+
+        // N3: a stall pauses (like a suspend) rather than disabling the persisted setting - the
+        // hardware thread recovering on its own (or the user restarting the app) should not require
+        // re-confirming the risk warning, unlike an actual rule-4 set failure.
+        Suspend("hardware monitor stopped responding", resumableBySystemResume: false);
+        RaiseStatus(FanControlAlertLevel.Critical,
+            "The hardware monitor stopped responding. Every fan under software control was restored to automatic control.");
     }
 
     private void RaiseStatus(FanControlAlertLevel level, string message) =>

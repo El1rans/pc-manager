@@ -365,6 +365,7 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
             card.UpdateReadings(controller, rpmSensor);
             card.UpdateAvailableTemperatureSensors(temperatureSensors);
             card.UpdateMinFanPercent(MinFanPercent);
+            card.UpdateModeEditable(CanToggleSoftwareFanControl && SoftwareFanControlEnabled);
         }
     }
 

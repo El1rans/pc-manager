@@ -150,7 +150,9 @@
                                                 </TextBlock>
                                             </DockPanel>
 
-                                            <ComboBox ItemsSource="{Binding Modes}" SelectedItem="{Binding Mode}" Margin="0,8,0,0" HorizontalAlignment="Left" MinWidth="120"/>
+                                            <ComboBox ItemsSource="{Binding Modes}" SelectedItem="{Binding Mode}" Margin="0,8,0,0" HorizontalAlignment="Left" MinWidth="120"
+                                                      IsEnabled="{Binding CanEditMode}"
+                                                      ToolTip="{Binding ModeEditDisabledReason}"/>
 
                                             <StackPanel Margin="0,10,0,0"
                                                         Visibility="{Binding Mode, Converter={StaticResource FanModeToVisibility}, ConverterParameter=Fixed}">

@@ -37,6 +37,12 @@ public sealed partial class FanCardViewModel : ObservableObject
     [ObservableProperty]
     private string? _curveError;
 
+    [ObservableProperty]
+    private bool _canEditMode;
+
+    [ObservableProperty]
+    private string _modeEditDisabledReason = "Turn on software fan control to change this.";
+
     public FanCardViewModel(string fanId, string name, ISettingsStore settingsStore)
     {
         FanId = fanId;
@@ -71,6 +77,14 @@ public sealed partial class FanCardViewModel : ObservableObject
 
     public void UpdateAvailableTemperatureSensors(IReadOnlyList<SensorOption> options) =>
         TemperatureSensorOptions = options;
+
+    /// <summary>Recommended follow-up from the safety review: the mode selector should not look
+    /// editable when nothing would actually happen if the user changed it - profiles can still be
+    /// viewed either way.</summary>
+    public void UpdateModeEditable(bool canEdit)
+    {
+        CanEditMode = canEdit;
+    }
 
     public void UpdateMinFanPercent(int minFanPercent)
     {

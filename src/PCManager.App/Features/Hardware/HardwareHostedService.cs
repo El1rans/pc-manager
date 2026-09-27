@@ -47,7 +47,9 @@ public sealed class HardwareHostedService : IHostedService
     {
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         SystemEvents.SessionEnding -= OnSessionEnding;
-        SuspendBestEffort("app shutdown");
+        // N5: app exit is not a resumable system suspend - stays paused (there is nothing to resume
+        // it anyway, since the process is exiting).
+        SuspendBestEffort("app shutdown", resumableBySystemResume: false);
         _hardwareService.Stop();
         return Task.CompletedTask;
     }
@@ -57,7 +59,7 @@ public sealed class HardwareHostedService : IHostedService
         switch (e.Mode)
         {
             case PowerModes.Suspend:
-                SuspendBestEffort("system suspend");
+                SuspendBestEffort("system suspend", resumableBySystemResume: true);
                 break;
             case PowerModes.Resume:
                 try
@@ -73,13 +75,16 @@ public sealed class HardwareHostedService : IHostedService
         }
     }
 
-    private void OnSessionEnding(object sender, SessionEndingEventArgs e) => SuspendBestEffort("session ending");
+    // N5: session-ending is not a resumable system suspend either - stays paused until the user
+    // explicitly re-arms from the Hardware page (which will not happen before the session ends, but
+    // matches the same reasoning as app shutdown above for consistency).
+    private void OnSessionEnding(object sender, SessionEndingEventArgs e) => SuspendBestEffort("session ending", resumableBySystemResume: false);
 
-    private void SuspendBestEffort(string reason)
+    private void SuspendBestEffort(string reason, bool resumableBySystemResume)
     {
         try
         {
-            _fanControlManager.Suspend(reason);
+            _fanControlManager.Suspend(reason, resumableBySystemResume);
         }
         catch (Exception ex)
         {

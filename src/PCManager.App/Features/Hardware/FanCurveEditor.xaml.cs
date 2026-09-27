@@ -45,6 +45,13 @@ public partial class FanCurveEditor : UserControl
         // handled here by repositioning only the dragged point instead of a full Redraw().
         PART_Canvas.MouseMove += OnCanvasMouseMove;
         PART_Canvas.MouseLeftButtonUp += OnCanvasMouseUp;
+
+        // S9 (recommended follow-up): capture can be lost without a MouseUp ever firing - alt-Tab,
+        // a modal dialog stealing focus, or the mouse leaving the window while a button is still
+        // down. Without handling this, _dragging would stay set forever, silently ignoring every
+        // future click until the app restarts. Commit whatever the point's current position already
+        // is (it was live-updated during the drag regardless) and clear drag state cleanly.
+        PART_Canvas.LostMouseCapture += OnCanvasLostMouseCapture;
     }
 
     public System.Collections.ObjectModel.ObservableCollection<EditableCurvePoint>? Points
@@ -217,9 +224,21 @@ public partial class FanCurveEditor : UserControl
             return;
         }
 
+        // ReleaseMouseCapture() below raises LostMouseCapture synchronously, which does the actual
+        // "clear _dragging and commit" work - see OnCanvasLostMouseCapture - so both the normal
+        // mouse-up path and an abnormal capture loss end up in exactly one place.
         PART_Canvas.ReleaseMouseCapture();
-        _dragging = null;
         e.Handled = true;
+    }
+
+    private void OnCanvasLostMouseCapture(object sender, MouseEventArgs e)
+    {
+        if (_dragging is null)
+        {
+            return;
+        }
+
+        _dragging = null;
 
         if (CommitCommand?.CanExecute(null) == true)
         {

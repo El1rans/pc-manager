@@ -210,7 +210,9 @@ public partial class App : System.Windows.Application
     {
         try
         {
-            _host?.Services.GetService<FanControlManager>()?.Suspend("unhandled exception");
+            // N5: a crash is not a resumable system suspend - stays paused until the user
+            // explicitly re-arms from the Hardware page.
+            _host?.Services.GetService<FanControlManager>()?.Suspend("unhandled exception", resumableBySystemResume: false);
         }
         catch (Exception ex)
         {

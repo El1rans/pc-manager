@@ -27,7 +27,7 @@ public sealed class FakeHardwareService : IHardwareService
 
     public void ResetMinMax() => ResetMinMaxCallCount++;
 
-    public void RunOnOwnerThread(Action action, TimeSpan timeout) => action();
+    public void RunOnOwnerThread(Action action, TimeSpan timeout, bool allowDirectFallback = true) => action();
 
     public void RaiseSnapshot(HardwareSnapshot snapshot)
     {

@@ -62,7 +62,7 @@ public sealed class HardwareService : IHardwareService, IDisposable
         _wake.Set();
     }
 
-    public void RunOnOwnerThread(Action action, TimeSpan timeout)
+    public void RunOnOwnerThread(Action action, TimeSpan timeout, bool allowDirectFallback = true)
     {
         ArgumentNullException.ThrowIfNull(action);
 
@@ -92,6 +92,15 @@ public sealed class HardwareService : IHardwareService, IDisposable
 
         if (done.Wait(timeout))
         {
+            return;
+        }
+
+        if (!allowDirectFallback)
+        {
+            // N4: a non-safety command (e.g. arming/re-arming) must not run twice - once here, once
+            // later when the queued copy is eventually picked up. Drop this attempt and rely on the
+            // queued copy running eventually instead of racing it.
+            _logger.LogWarning("Owner-thread command timed out after {Timeout}; dropping it (not a safety command).", timeout);
             return;
         }
 
@@ -261,22 +270,15 @@ public sealed class HardwareService : IHardwareService, IDisposable
             return;
         }
 
-        // S6: each fan gets its own try/catch - one throwing must not stop the others from being
-        // restored - and closing the computer is attempted regardless (it is the most reliable way
-        // to hand every control back to the BIOS/EC, even for a fan whose RestoreDefault() above
-        // just failed).
-        foreach (var controller in Controllers)
-        {
-            try
-            {
-                controller.RestoreDefault();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to restore fan {FanId} while closing the hardware monitor.", controller.Id);
-            }
-        }
-
+        // N1b: this thin adapter has no notion of which fans PC Manager's own fan-control ever
+        // actually put into software mode - only FanControlManager tracks that ownership, and it is
+        // the one that must decide whether a restore is warranted. Blindly restoring every
+        // controller here (as an earlier revision did) would call SetDefault() on a fan some other
+        // application (e.g. a vendor fan-curve tool) already had in software mode, even in a session
+        // where PC Manager's fan control was never enabled. FanControlManager.Suspend() already
+        // restores everything it owns before HardwareHostedService calls Stop() (which is what
+        // leads here), so there is nothing safe left for this method to do beyond closing the
+        // library itself.
         try
         {
             _computer.Close();
@@ -312,22 +314,23 @@ public sealed class HardwareService : IHardwareService, IDisposable
         var nodes = _computer.Hardware.Select(hw => BuildNode(hw, controllers, _lastObserved)).ToList();
         Controllers = controllers;
 
-        if (!_driverConfirmedActive && HasLiveCpuOrGpuTemperature(nodes))
+        if (!_driverConfirmedActive && HasLiveCpuTemperature(nodes))
         {
             // S7: registry/service presence (what IComponentService checks) only means PawnIO is
             // installed, not that LHM actually loaded and is using it this session. A populated
-            // CPU/GPU temperature reading is a cheap, reasonably strong proxy that the driver is
-            // genuinely active, since those specifically require it.
+            // *CPU* temperature reading specifically requires it - a GPU temperature does not (NVAPI
+            // and ADL both expose it without any PawnIO involvement), so checking "CPU or GPU" could
+            // falsely confirm the driver on a PC where it was never actually loaded.
             _driverConfirmedActive = true;
         }
 
         Publish(new HardwareSnapshot(ComputeStatus(), null, nodes, DateTimeOffset.UtcNow));
     }
 
-    private static bool HasLiveCpuOrGpuTemperature(IEnumerable<HardwareNode> nodes) =>
+    private static bool HasLiveCpuTemperature(IEnumerable<HardwareNode> nodes) =>
         nodes.Any(n =>
-            (n.Type is HardwareNodeType.Cpu or HardwareNodeType.Gpu && n.Sensors.Any(s => s.Type == SensorType.Temperature && s.Value is not null)) ||
-            HasLiveCpuOrGpuTemperature(n.Children));
+            (n.Type == HardwareNodeType.Cpu && n.Sensors.Any(s => s.Type == SensorType.Temperature && s.Value is not null)) ||
+            HasLiveCpuTemperature(n.Children));
 
     private HardwareStatus ComputeStatus()
     {
@@ -363,7 +366,7 @@ public sealed class HardwareService : IHardwareService, IDisposable
     /// matching <see cref="ISensor.Index"/> with an RPM sensor on the same hardware when one exists
     /// (a bare tachometer with no matching control stays a plain read-only sensor row).
     /// </summary>
-    private static HardwareNode BuildNode(
+    internal static HardwareNode BuildNode(
         IHardware hardware,
         List<IFanController> controllers,
         Dictionary<string, (double? Value, DateTimeOffset ObservedUtc)> lastObserved)
@@ -412,35 +415,29 @@ public sealed class HardwareService : IHardwareService, IDisposable
     }
 
     /// <summary>
-    /// B3: stamps a sensor with "now" only the first time it is seen or when its value has actually
-    /// changed; an unchanged value keeps its original timestamp. Without this, every reading was
-    /// stamped "now" on every tick regardless of whether it had genuinely refreshed, which made the
-    /// rule-3 stale-sensor check mathematically unable to ever fire for a sensor whose value got
-    /// stuck at its last successful reading instead of going null.
+    /// N2 (revised after review): freshness is based on whether this sensor was actually read this
+    /// tick (a non-null <see cref="ISensor.Value"/> right after <see cref="IHardware.Update"/>), not
+    /// on whether its value happened to change. An earlier revision treated an unchanged value as
+    /// "not observed", which ages a perfectly healthy sensor holding a steady integer-degree
+    /// temperature at idle - a real false positive for rule 3's stale check, cycling a curve fan
+    /// between its real target and 100%. A value going null is already rule 3's separate, direct
+    /// "no reading" check - this timestamp only needs to track "the last time we could read a
+    /// number", so it stamps "now" whenever it read one and simply carries the previous timestamp
+    /// forward (letting it age, which rule 3 already handles) when it could not.
     /// </summary>
-    private static DateTimeOffset StampObservationTime(
+    internal static DateTimeOffset StampObservationTime(
         string id,
         double? value,
         DateTimeOffset now,
         Dictionary<string, (double? Value, DateTimeOffset ObservedUtc)> lastObserved)
     {
-        if (lastObserved.TryGetValue(id, out var previous) && ValuesEqual(previous.Value, value))
+        if (value is not null)
         {
-            return previous.ObservedUtc;
+            lastObserved[id] = (value, now);
+            return now;
         }
 
-        lastObserved[id] = (value, now);
-        return now;
-    }
-
-    private static bool ValuesEqual(double? a, double? b)
-    {
-        if (a is null || b is null)
-        {
-            return a is null && b is null;
-        }
-
-        return a.Value.Equals(b.Value);
+        return lastObserved.TryGetValue(id, out var previous) ? previous.ObservedUtc : now;
     }
 
     private static HardwareNodeType MapNodeType(LibreHardwareMonitor.Hardware.HardwareType type) => type switch
