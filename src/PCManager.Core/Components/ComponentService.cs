@@ -203,10 +203,14 @@ public sealed partial class ComponentService : IComponentService
 
         if (definition.ProcessName is not null && _processProbe.IsRunning(definition.ProcessName))
         {
-            return (new ComponentStatus(ComponentState.Running, version, resolution.Path), resolution.IsTrusted);
+            return (
+                new ComponentStatus(ComponentState.Running, version, resolution.Path, PathIsTrusted: resolution.IsTrusted),
+                resolution.IsTrusted);
         }
 
-        return (new ComponentStatus(ComponentState.Installed, version, resolution.Path), resolution.IsTrusted);
+        return (
+            new ComponentStatus(ComponentState.Installed, version, resolution.Path, PathIsTrusted: resolution.IsTrusted),
+            resolution.IsTrusted);
     }
 
     /// <param name="Path">The resolved executable path, or null if not found.</param>

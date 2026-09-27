@@ -35,10 +35,11 @@ public static class AnyDeskIdFormatter
         var digitsOnly = DigitsOnly(trimmed);
 
         // Accept both a bare ID ("123456789") and an already-grouped one ("123 456 789") - the
-        // digits are the same either way once whitespace is stripped, so if the only non-digit
-        // characters were spaces (grouping), this is still a numeric ID.
-        var isGroupedNumericId = digitsOnly.Length > 0 &&
-            trimmed.Replace(" ", string.Empty, StringComparison.Ordinal) == digitsOnly;
+        // digits are the same either way once whitespace is stripped (any whitespace, not just a
+        // plain space - e.g. a stray tab), so if the only non-digit characters were whitespace
+        // (grouping), this is still a numeric ID.
+        var withoutWhitespace = new string([.. trimmed.Where(c => !char.IsWhiteSpace(c))]);
+        var isGroupedNumericId = digitsOnly.Length > 0 && withoutWhitespace == digitsOnly;
 
         return isGroupedNumericId ? digitsOnly : trimmed;
     }

@@ -16,14 +16,6 @@ public interface IAnyDeskService
     /// </summary>
     Task<AnyDeskState> GetStateAsync(CancellationToken cancellationToken);
 
-    /// <summary>
-    /// Installs AnyDesk via <c>IComponentService.InstallAsync</c>, streaming its output to
-    /// <paramref name="log"/>, then polls <see cref="GetStateAsync"/> until an ID appears (up to
-    /// 60 seconds), starting AnyDesk once along the way if it has not registered an ID yet -
-    /// AnyDesk only generates its ID on first start.
-    /// </summary>
-    Task<AnyDeskState> InstallAsync(IProgress<string> log, CancellationToken cancellationToken);
-
     /// <summary>Starts AnyDesk normally (via <c>IComponentService.StartAsync</c>), so incoming
     /// connection requests show AnyDesk's own accept dialog. Never changes any AnyDesk security
     /// setting.</summary>

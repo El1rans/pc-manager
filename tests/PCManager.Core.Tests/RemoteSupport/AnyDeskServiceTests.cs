@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using PCManager.Core.Components;
 using PCManager.Core.RemoteSupport;
+using PCManager.Core.Tests.Components;
 using Xunit;
 
 namespace PCManager.Core.Tests.RemoteSupport;
@@ -8,17 +9,17 @@ namespace PCManager.Core.Tests.RemoteSupport;
 public sealed class AnyDeskServiceTests
 {
     private const string ExePath = @"C:\Program Files (x86)\AnyDesk\AnyDesk.exe";
+    private const string ValidAlias = "mom-laptop@ad";
 
     private readonly FakeComponentService _componentService = new();
     private readonly FakeProcessRunner _processRunner = new();
     private readonly FakeAnyDeskConfigReader _configReader = new();
+    private readonly FakeElevationService _elevationService = new();
 
     private AnyDeskService CreateService() =>
         new(
-            _componentService, _processRunner, _configReader, NullLogger<AnyDeskService>.Instance,
-            cliCallTimeout: TimeSpan.FromSeconds(5),
-            installIdPollTimeout: TimeSpan.FromMilliseconds(200),
-            installIdPollInterval: TimeSpan.FromMilliseconds(20));
+            _componentService, _processRunner, _configReader, _elevationService,
+            NullLogger<AnyDeskService>.Instance, cliCallTimeout: TimeSpan.FromMilliseconds(50));
 
     [Fact]
     public async Task GetStateAsync_NotInstalled_ReturnsNotInstalledWithNoAddress()
@@ -36,9 +37,9 @@ public sealed class AnyDeskServiceTests
     [Fact]
     public async Task GetStateAsync_CliCallsSucceed_ReadsIdAndAliasFromCli()
     {
-        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Running, "9.7.16", ExePath);
+        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Running, "9.7.16", ExePath, PathIsTrusted: true);
         _processRunner.SetResult("--get-id", 0, "123456789");
-        _processRunner.SetResult("--get-alias", 0, "mom-laptop");
+        _processRunner.SetResult("--get-alias", 0, ValidAlias);
         var service = CreateService();
 
         var state = await service.GetStateAsync(TestContext.Current.CancellationToken);
@@ -46,15 +47,15 @@ public sealed class AnyDeskServiceTests
         Assert.True(state.IsInstalled);
         Assert.True(state.IsRunning);
         Assert.Equal("123456789", state.Id);
-        Assert.Equal("mom-laptop", state.Alias);
+        Assert.Equal(ValidAlias, state.Alias);
         // Alias is preferred as the shown address once set.
-        Assert.Equal("mom-laptop", state.Address);
+        Assert.Equal(ValidAlias, state.Address);
     }
 
     [Fact]
     public async Task GetStateAsync_NoAliasSet_AddressFallsBackToId()
     {
-        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath);
+        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath, PathIsTrusted: true);
         _processRunner.SetResult("--get-id", 0, "123456789");
         _processRunner.SetResult("--get-alias", 0, string.Empty);
         var service = CreateService();
@@ -69,7 +70,7 @@ public sealed class AnyDeskServiceTests
     [Fact]
     public async Task GetStateAsync_CliFails_FallsBackToConfigFile()
     {
-        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath);
+        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath, PathIsTrusted: true);
         _processRunner.SetResult("--get-id", 1);
         _processRunner.SetResult("--get-alias", 1);
         _configReader.SetFile(_configReader.SystemConfPath, "ad.anynet.id=987654321\nad.anynet.alias=\n");
@@ -83,7 +84,7 @@ public sealed class AnyDeskServiceTests
     [Fact]
     public async Task GetStateAsync_SystemConfHasNoId_FallsBackToServiceConf()
     {
-        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath);
+        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath, PathIsTrusted: true);
         _processRunner.SetResult("--get-id", 1);
         _processRunner.SetResult("--get-alias", 1);
         _configReader.SetFile(_configReader.SystemConfPath, "ad.security.update_channel=main\n");
@@ -121,70 +122,9 @@ public sealed class AnyDeskServiceTests
     }
 
     [Fact]
-    public async Task InstallAsync_Fails_ReturnsErrorWithoutPolling()
-    {
-        _componentService.InstallResult = new ComponentStatus(ComponentState.Error, Message: "Installation failed.");
-        var service = CreateService();
-
-        var state = await service.InstallAsync(new Progress<string>(), TestContext.Current.CancellationToken);
-
-        Assert.True(state.IsError);
-        Assert.Equal(0, _componentService.StartCallCount);
-    }
-
-    [Fact]
-    public async Task InstallAsync_InstalledWithNoIdYet_StartsOnceThenPollsUntilIdAppears()
-    {
-        _componentService.InstallResult = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath);
-        // Right after install, AnyDesk has never run, so it has no ID yet; queue that as the first
-        // --get-id result (used by the initial BuildStateAsync), then a second poll after it has
-        // been started where the ID has registered.
-        _processRunner.QueueResults("--get-id", (ExitCode: 1, Line: null), (ExitCode: 0, Line: "123456789"));
-        _processRunner.SetResult("--get-alias", 0, string.Empty);
-        _componentService.StatusAfterStart = new ComponentStatus(ComponentState.Running, "9.7.16", ExePath);
-        var service = CreateService();
-
-        var state = await service.InstallAsync(new Progress<string>(), TestContext.Current.CancellationToken);
-
-        Assert.Equal(1, _componentService.StartCallCount);
-        Assert.Equal("123456789", state.Id);
-        Assert.True(state.IsInstalled);
-    }
-
-    [Fact]
-    public async Task InstallAsync_IdNeverAppears_GivesUpAfterPollTimeoutWithoutAnId()
-    {
-        _componentService.InstallResult = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath);
-        _componentService.StatusAfterStart = new ComponentStatus(ComponentState.Running, "9.7.16", ExePath);
-        _processRunner.SetResult("--get-id", 1);
-        _processRunner.SetResult("--get-alias", 1);
-        var service = CreateService();
-
-        var state = await service.InstallAsync(new Progress<string>(), TestContext.Current.CancellationToken);
-
-        Assert.Null(state.Id);
-        Assert.True(state.IsInstalled);
-        Assert.Equal(1, _componentService.StartCallCount);
-    }
-
-    [Fact]
-    public async Task InstallAsync_AlreadyRunningWithId_DoesNotStartAgain()
-    {
-        _componentService.InstallResult = new ComponentStatus(ComponentState.Running, "9.7.16", ExePath);
-        _processRunner.SetResult("--get-id", 0, "123456789");
-        _processRunner.SetResult("--get-alias", 0, string.Empty);
-        var service = CreateService();
-
-        var state = await service.InstallAsync(new Progress<string>(), TestContext.Current.CancellationToken);
-
-        Assert.Equal(0, _componentService.StartCallCount);
-        Assert.Equal("123456789", state.Id);
-    }
-
-    [Fact]
     public async Task LaunchAsync_DelegatesToComponentServiceStart()
     {
-        _componentService.StatusAfterStart = new ComponentStatus(ComponentState.Running, "9.7.16", ExePath);
+        _componentService.StatusAfterStart = new ComponentStatus(ComponentState.Running, "9.7.16", ExePath, PathIsTrusted: true);
         _processRunner.SetResult("--get-id", 0, "123456789");
         _processRunner.SetResult("--get-alias", 0, string.Empty);
         var service = CreateService();
@@ -194,5 +134,134 @@ public sealed class AnyDeskServiceTests
         Assert.Equal(1, _componentService.StartCallCount);
         Assert.True(state.IsRunning);
         Assert.Equal("123456789", state.Id);
+    }
+
+    // ---------------------------------------------------------------- B1: elevation trust
+
+    [Fact]
+    public async Task GetStateAsync_ElevatedAndPathNotTrusted_SkipsCliUsesConfigFileOnly()
+    {
+        _elevationService.IsElevated = true;
+        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath, PathIsTrusted: false);
+        _configReader.SetFile(_configReader.SystemConfPath, "ad.anynet.id=111222333\n");
+        var service = CreateService();
+
+        var state = await service.GetStateAsync(TestContext.Current.CancellationToken);
+
+        Assert.Empty(_processRunner.RunArguments);
+        Assert.Equal("111222333", state.Id);
+    }
+
+    [Fact]
+    public async Task GetStateAsync_ElevatedAndPathTrusted_StillUsesCli()
+    {
+        _elevationService.IsElevated = true;
+        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath, PathIsTrusted: true);
+        _processRunner.SetResult("--get-id", 0, "123456789");
+        _processRunner.SetResult("--get-alias", 0, string.Empty);
+        var service = CreateService();
+
+        var state = await service.GetStateAsync(TestContext.Current.CancellationToken);
+
+        Assert.NotEmpty(_processRunner.RunArguments);
+        Assert.Equal("123456789", state.Id);
+    }
+
+    [Fact]
+    public async Task GetStateAsync_NotElevated_UsesCliEvenWhenPathNotTrusted()
+    {
+        _elevationService.IsElevated = false;
+        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath, PathIsTrusted: false);
+        _processRunner.SetResult("--get-id", 0, "123456789");
+        _processRunner.SetResult("--get-alias", 0, string.Empty);
+        var service = CreateService();
+
+        var state = await service.GetStateAsync(TestContext.Current.CancellationToken);
+
+        Assert.NotEmpty(_processRunner.RunArguments);
+        Assert.Equal("123456789", state.Id);
+    }
+
+    // ---------------------------------------------------------------- S4: output validation
+
+    [Fact]
+    public async Task GetStateAsync_CliOutputIsBlankLineThenId_TakesFirstNonBlankLine()
+    {
+        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath, PathIsTrusted: true);
+        _processRunner.SetLines("--get-id", 0, ["", "   ", "123456789"]);
+        _processRunner.SetResult("--get-alias", 0, string.Empty);
+        var service = CreateService();
+
+        var state = await service.GetStateAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("123456789", state.Id);
+    }
+
+    [Fact]
+    public async Task GetStateAsync_CliOutputWrappedInAnsiCodes_IsStrippedAndValidated()
+    {
+        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath, PathIsTrusted: true);
+        _processRunner.SetResult("--get-id", 0, "\u001b[32m123456789\u001b[0m");
+        _processRunner.SetResult("--get-alias", 0, string.Empty);
+        var service = CreateService();
+
+        var state = await service.GetStateAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("123456789", state.Id);
+    }
+
+    [Fact]
+    public async Task GetStateAsync_CliOutputIsJunk_TreatedAsUnknownFallsBackToConfig()
+    {
+        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath, PathIsTrusted: true);
+        _processRunner.SetResult("--get-id", 0, "not-an-id-at-all");
+        _processRunner.SetResult("--get-alias", 0, string.Empty);
+        _configReader.SetFile(_configReader.SystemConfPath, "ad.anynet.id=444555666\n");
+        var service = CreateService();
+
+        var state = await service.GetStateAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("444555666", state.Id);
+    }
+
+    [Fact]
+    public async Task GetStateAsync_ConfigFileIdIsJunk_TreatedAsUnknown()
+    {
+        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath, PathIsTrusted: true);
+        _processRunner.SetResult("--get-id", 1);
+        _processRunner.SetResult("--get-alias", 1);
+        _configReader.SetFile(_configReader.SystemConfPath, "ad.anynet.id=not-numeric\n");
+        var service = CreateService();
+
+        var state = await service.GetStateAsync(TestContext.Current.CancellationToken);
+
+        Assert.Null(state.Id);
+    }
+
+    [Fact]
+    public async Task GetStateAsync_AliasWithoutAtSign_TreatedAsUnknown()
+    {
+        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath, PathIsTrusted: true);
+        _processRunner.SetResult("--get-id", 0, "123456789");
+        _processRunner.SetResult("--get-alias", 0, "just-a-name-no-at-sign");
+        var service = CreateService();
+
+        var state = await service.GetStateAsync(TestContext.Current.CancellationToken);
+
+        Assert.Null(state.Alias);
+        Assert.Equal("123456789", state.Address);
+    }
+
+    [Fact]
+    public async Task GetStateAsync_GetIdTimesOut_SkipsGetAliasCall()
+    {
+        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath, PathIsTrusted: true);
+        _processRunner.Hang("--get-id");
+        var service = CreateService();
+
+        await service.GetStateAsync(TestContext.Current.CancellationToken);
+
+        Assert.Contains("--get-id", _processRunner.RunArguments);
+        Assert.DoesNotContain("--get-alias", _processRunner.RunArguments);
     }
 }

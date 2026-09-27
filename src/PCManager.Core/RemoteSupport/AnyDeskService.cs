@@ -1,5 +1,7 @@
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using PCManager.Core.Components;
+using PCManager.Core.Elevation;
 using PCManager.Core.Processes;
 
 namespace PCManager.Core.RemoteSupport;
@@ -11,49 +13,53 @@ public sealed partial class AnyDeskService : IAnyDeskService
     /// treated as failed and the config-file fallback is used instead.</summary>
     private static readonly TimeSpan DefaultCliCallTimeout = TimeSpan.FromSeconds(5);
 
-    /// <summary>How long <see cref="InstallAsync"/> polls for an ID to appear after install, before
-    /// giving up and returning whatever state it last saw.</summary>
-    private static readonly TimeSpan DefaultInstallIdPollTimeout = TimeSpan.FromSeconds(60);
+    // AnyDesk numeric IDs are 9-10 digits; a licensed alias looks like "name@ad" (an
+    // alphanumeric/dot/dash/underscore name, an "@", then the same for the namespace). Anything
+    // else from the CLI or a config file is untrusted output (garbage, a truncated line, a stray
+    // ANSI-wrapped prompt) and is treated as "unknown" rather than shown to the user or copied.
+    [GeneratedRegex(@"^\d{9,10}$")]
+    private static partial Regex IdPattern();
 
-    private static readonly TimeSpan DefaultInstallIdPollInterval = TimeSpan.FromSeconds(2);
+    [GeneratedRegex(@"^[\w.-]+@[\w.-]+$")]
+    private static partial Regex AliasPattern();
+
+    // Strips ANSI/VT escape sequences (e.g. a color-coded CLI prompt) and other control characters
+    // that a terminal would interpret but that have no business in an ID/alias value.
+    [GeneratedRegex(@"\x1B\[[0-9;]*[a-zA-Z]|[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")]
+    private static partial Regex ControlAndAnsiSequences();
 
     private readonly IComponentService _componentService;
     private readonly IProcessRunner _processRunner;
     private readonly IAnyDeskConfigReader _configReader;
+    private readonly IElevationService _elevationService;
     private readonly ILogger<AnyDeskService> _logger;
     private readonly TimeSpan _cliCallTimeout;
-    private readonly TimeSpan _installIdPollTimeout;
-    private readonly TimeSpan _installIdPollInterval;
 
     public AnyDeskService(
         IComponentService componentService,
         IProcessRunner processRunner,
         IAnyDeskConfigReader configReader,
+        IElevationService elevationService,
         ILogger<AnyDeskService> logger)
-        : this(
-            componentService, processRunner, configReader, logger,
-            DefaultCliCallTimeout, DefaultInstallIdPollTimeout, DefaultInstallIdPollInterval)
+        : this(componentService, processRunner, configReader, elevationService, logger, DefaultCliCallTimeout)
     {
     }
 
-    /// <summary>Test seam: lets tests use much shorter timeouts/intervals than production so a
-    /// polling test does not take tens of seconds to run.</summary>
+    /// <summary>Test seam: lets tests use a much shorter CLI timeout than production.</summary>
     public AnyDeskService(
         IComponentService componentService,
         IProcessRunner processRunner,
         IAnyDeskConfigReader configReader,
+        IElevationService elevationService,
         ILogger<AnyDeskService> logger,
-        TimeSpan cliCallTimeout,
-        TimeSpan installIdPollTimeout,
-        TimeSpan installIdPollInterval)
+        TimeSpan cliCallTimeout)
     {
         _componentService = componentService;
         _processRunner = processRunner;
         _configReader = configReader;
+        _elevationService = elevationService;
         _logger = logger;
         _cliCallTimeout = cliCallTimeout;
-        _installIdPollTimeout = installIdPollTimeout;
-        _installIdPollInterval = installIdPollInterval;
     }
 
     public async Task<AnyDeskState> GetStateAsync(CancellationToken cancellationToken)
@@ -61,48 +67,6 @@ public sealed partial class AnyDeskService : IAnyDeskService
         var status = await _componentService.GetStatusAsync(ComponentIds.AnyDesk, cancellationToken)
             .ConfigureAwait(false);
         return await BuildStateAsync(status, cancellationToken).ConfigureAwait(false);
-    }
-
-    public async Task<AnyDeskState> InstallAsync(IProgress<string> log, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(log);
-
-        // No separate progress-bar text for this feature's install (just the plain-language log);
-        // IComponentService.InstallAsync still requires an IProgress<string>, so pass a no-op.
-        var noOpProgress = new Progress<string>();
-        var status = await _componentService
-            .InstallAsync(ComponentIds.AnyDesk, log, noOpProgress, cancellationToken)
-            .ConfigureAwait(false);
-
-        var state = await BuildStateAsync(status, CancellationToken.None).ConfigureAwait(false);
-        if (state.IsError || !state.IsInstalled)
-        {
-            return state;
-        }
-
-        // AnyDesk only generates its ID on first start, so an install that has never run it yet
-        // reports Installed with no ID. Poll for up to InstallIdPollTimeout, starting it once along
-        // the way, so the caller does not have to restart PC Manager to see the address.
-        var deadline = DateTime.UtcNow + _installIdPollTimeout;
-        var hasStarted = state.IsRunning;
-        while (state.Id is null && DateTime.UtcNow < deadline)
-        {
-            if (!hasStarted)
-            {
-                await _componentService.StartAsync(ComponentIds.AnyDesk, CancellationToken.None)
-                    .ConfigureAwait(false);
-                hasStarted = true;
-            }
-
-            await Task.Delay(_installIdPollInterval, CancellationToken.None).ConfigureAwait(false);
-
-            var refreshedStatus = await _componentService
-                .GetStatusAsync(ComponentIds.AnyDesk, CancellationToken.None)
-                .ConfigureAwait(false);
-            state = await BuildStateAsync(refreshedStatus, CancellationToken.None).ConfigureAwait(false);
-        }
-
-        return state;
     }
 
     public async Task<AnyDeskState> LaunchAsync(CancellationToken cancellationToken)
@@ -122,44 +86,83 @@ public sealed partial class AnyDeskService : IAnyDeskService
             return new AnyDeskState(isInstalled, status.Path, status.Version, null, null, isRunning, status);
         }
 
-        var (id, alias) = await ReadIdAndAliasAsync(status.Path, cancellationToken).ConfigureAwait(false);
+        // Never execute a user-writable AnyDesk.exe (an HKCU-registered install, or - not
+        // applicable to this component today, but the same rule OpenRGB's path override needs -
+        // any other non-admin-only-writable location) while PC Manager itself is elevated: a
+        // planted binary there would then run with administrator rights just from opening this
+        // page. IComponentService.StartAsync already enforces this for actually launching AnyDesk;
+        // this covers the separate --get-id/--get-alias reads this service makes directly.
+        var skipCli = _elevationService.IsElevated && !status.PathIsTrusted;
+        if (skipCli)
+        {
+            LogSkippingCliUntrustedElevated(status.Path);
+        }
+
+        var (id, alias) = await ReadIdAndAliasAsync(status.Path, skipCli, cancellationToken).ConfigureAwait(false);
         return new AnyDeskState(true, status.Path, status.Version, id, alias, isRunning, status);
     }
 
-    private async Task<(string? Id, string? Alias)> ReadIdAndAliasAsync(string exePath, CancellationToken cancellationToken)
+    private async Task<(string? Id, string? Alias)> ReadIdAndAliasAsync(
+        string exePath, bool skipCli, CancellationToken cancellationToken)
     {
-        var id = await RunGetAsync(exePath, "--get-id", cancellationToken).ConfigureAwait(false);
-        var alias = await RunGetAsync(exePath, "--get-alias", cancellationToken).ConfigureAwait(false);
+        string? id = null;
+        string? alias = null;
 
-        if (id is null)
+        if (!skipCli)
         {
-            // Try system.conf first; only fall back to service.conf if system.conf itself has no
-            // ID line (rather than just because it is missing/unreadable) - both are checked, since
-            // an ID can be present in either depending on the installed AnyDesk version.
-            var (systemConfId, systemConfAlias) = ParseConfigFile(_configReader.SystemConfPath);
-            if (systemConfId is not null)
+            var (idValue, idTimedOut) = await RunGetAsync(exePath, "--get-id", cancellationToken).ConfigureAwait(false);
+            id = ValidateId(idValue);
+
+            // If reading the ID itself already timed out, skip the alias call too rather than
+            // paying the full timeout twice - the config-file fallback below covers both anyway.
+            if (!idTimedOut)
             {
-                id = systemConfId;
-                alias ??= systemConfAlias;
-            }
-            else
-            {
-                var (serviceConfId, serviceConfAlias) = ParseConfigFile(_configReader.ServiceConfPath);
-                id ??= serviceConfId;
-                alias ??= systemConfAlias ?? serviceConfAlias;
+                var (aliasValue, _) = await RunGetAsync(exePath, "--get-alias", cancellationToken).ConfigureAwait(false);
+                alias = ValidateAlias(aliasValue);
             }
         }
 
-        return (id, alias);
+        if (id is not null)
+        {
+            return (id, alias);
+        }
+
+        // Try system.conf first; only fall back to service.conf if system.conf itself has no ID
+        // line (rather than just because it is missing/unreadable) - both are checked, since an ID
+        // can be present in either depending on the installed AnyDesk version.
+        var (systemConfId, systemConfAlias) = ParseConfigFile(_configReader.SystemConfPath);
+        if (systemConfId is not null)
+        {
+            return (systemConfId, alias ?? systemConfAlias);
+        }
+
+        var (serviceConfId, serviceConfAlias) = ParseConfigFile(_configReader.ServiceConfPath);
+        return (serviceConfId, alias ?? systemConfAlias ?? serviceConfAlias);
     }
 
     private (string? Id, string? Alias) ParseConfigFile(string path)
     {
         var text = _configReader.TryRead(path);
-        return text is null ? (null, null) : AnyDeskConfigParser.Parse(text);
+        if (text is null)
+        {
+            return (null, null);
+        }
+
+        var (id, alias) = AnyDeskConfigParser.Parse(text);
+        return (ValidateId(id), ValidateAlias(alias));
     }
 
-    private async Task<string?> RunGetAsync(string exePath, string argument, CancellationToken cancellationToken)
+    private static string? ValidateId(string? value) =>
+        value is not null && IdPattern().IsMatch(value) ? value : null;
+
+    private static string? ValidateAlias(string? value) =>
+        value is not null && AliasPattern().IsMatch(value) ? value : null;
+
+    /// <returns>The first non-blank output line (sanitized of control/ANSI characters), and whether
+    /// the call was abandoned because it ran past <see cref="_cliCallTimeout"/> (as opposed to
+    /// exiting with a non-zero code or producing no output) - see the alias-skipping logic above.</returns>
+    private async Task<(string? Value, bool TimedOut)> RunGetAsync(
+        string exePath, string argument, CancellationToken cancellationToken)
     {
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(_cliCallTimeout);
@@ -173,24 +176,38 @@ public sealed partial class AnyDeskService : IAnyDeskService
             if (result.ExitCode != 0)
             {
                 LogCliCallFailed(argument, result.ExitCode);
-                return null;
+                return (null, false);
             }
 
-            var value = result.StandardOutputLines.Count > 0 ? result.StandardOutputLines[0].Trim() : null;
-            return string.IsNullOrEmpty(value) ? null : value;
+            var value = FirstNonBlankSanitizedLine(result.StandardOutputLines);
+            return (value, false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             // Our own CliCallTimeout fired, not the caller's token - this is an expected "the CLI
             // call took too long" outcome, not a genuine cancellation; fall back to the config file.
             LogCliCallTimedOut(argument);
-            return null;
+            return (null, true);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             _logger.LogWarning(ex, "Could not run AnyDesk.exe {Argument} at {ExePath}.", argument, exePath);
-            return null;
+            return (null, false);
         }
+    }
+
+    private static string? FirstNonBlankSanitizedLine(IReadOnlyList<string> lines)
+    {
+        foreach (var line in lines)
+        {
+            var sanitized = ControlAndAnsiSequences().Replace(line, string.Empty).Trim();
+            if (sanitized.Length > 0)
+            {
+                return sanitized;
+            }
+        }
+
+        return null;
     }
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "AnyDesk.exe {Argument} exited with code {ExitCode}; falling back to the config file.")]
@@ -198,4 +215,7 @@ public sealed partial class AnyDeskService : IAnyDeskService
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "AnyDesk.exe {Argument} timed out; falling back to the config file.")]
     private partial void LogCliCallTimedOut(string argument);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Skipping AnyDesk CLI reads at {Path}: PC Manager is elevated and this path is not admin-only-writable.")]
+    private partial void LogSkippingCliUntrustedElevated(string path);
 }

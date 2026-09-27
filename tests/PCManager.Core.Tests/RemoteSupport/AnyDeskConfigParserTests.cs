@@ -88,4 +88,14 @@ public sealed class AnyDeskConfigParserTests
 
         Assert.Equal("123456789", id);
     }
+
+    [Fact]
+    public void Parse_DuplicateIdKey_LastOccurrenceWins()
+    {
+        const string text = "ad.anynet.id=111111111\nad.anynet.id=222222222\n";
+
+        var (id, _) = AnyDeskConfigParser.Parse(text);
+
+        Assert.Equal("222222222", id);
+    }
 }

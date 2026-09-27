@@ -11,31 +11,22 @@ namespace PCManager.Core.Tests.RemoteSupport;
 internal sealed class FakeProcessRunner : IProcessRunner
 {
     private readonly Dictionary<string, ProcessRunResult> _results = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Queue<ProcessRunResult>> _resultSequences = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _hangingArguments = new(StringComparer.Ordinal);
 
     public List<string> RunArguments { get; } = [];
 
     public void SetResult(string argument, int exitCode, string? line = null) =>
         _results[argument] = new ProcessRunResult(exitCode, line is null ? [] : [line], []);
 
-    /// <summary>Queues one-shot results for repeated calls to the same <paramref name="argument"/>
-    /// (e.g. <c>--get-id</c> failing on the first poll, then succeeding once AnyDesk has started) -
-    /// each call dequeues the next one; once empty, falls back to <see cref="SetResult"/>.</summary>
-    public void QueueResults(string argument, params (int ExitCode, string? Line)[] results)
-    {
-        if (!_resultSequences.TryGetValue(argument, out var queue))
-        {
-            queue = new Queue<ProcessRunResult>();
-            _resultSequences[argument] = queue;
-        }
+    public void SetLines(string argument, int exitCode, IReadOnlyList<string> lines) =>
+        _results[argument] = new ProcessRunResult(exitCode, lines, []);
 
-        foreach (var (exitCode, line) in results)
-        {
-            queue.Enqueue(new ProcessRunResult(exitCode, line is null ? [] : [line], []));
-        }
-    }
+    /// <summary>Makes <see cref="RunAsync"/> for <paramref name="argument"/> never complete on its
+    /// own, so the caller's own timeout (a linked <see cref="CancellationToken"/>) is what ends it -
+    /// used to test <c>AnyDeskService</c>'s "the CLI call itself timed out" handling.</summary>
+    public void Hang(string argument) => _hangingArguments.Add(argument);
 
-    public Task<ProcessRunResult> RunAsync(
+    public async Task<ProcessRunResult> RunAsync(
         string fileName,
         IReadOnlyList<string> arguments,
         IProgress<string>? onLine,
@@ -45,15 +36,15 @@ internal sealed class FakeProcessRunner : IProcessRunner
         var argument = arguments[0];
         RunArguments.Add(argument);
 
-        if (_resultSequences.TryGetValue(argument, out var queue) && queue.Count > 0)
+        if (_hangingArguments.Contains(argument))
         {
-            return Task.FromResult(queue.Dequeue());
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
         }
 
         var result = _results.TryGetValue(argument, out var configured)
             ? configured
             : new ProcessRunResult(1, [], []);
-        return Task.FromResult(result);
+        return result;
     }
 
     public void StartDetached(string fileName, IReadOnlyList<string> arguments)
