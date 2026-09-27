@@ -55,6 +55,19 @@ public sealed class SetupViewModelTests : IDisposable
     }
 
     [Fact]
+    public void Dispose_CalledTwice_DoesNotThrow()
+    {
+        // SetupWindow's Closed handler disposes the view model, then the DI container disposes it
+        // again on host shutdown.
+        var viewModel = CreateViewModel();
+
+        viewModel.Dispose();
+        var ex = Record.Exception(viewModel.Dispose);
+
+        Assert.Null(ex);
+    }
+
+    [Fact]
     public async Task LoadAsync_InstallerHandledComponent_DefaultsToUnticked()
     {
         _registryReader.InstallerHandledComponentIds = [ComponentIds.AnyDesk];
