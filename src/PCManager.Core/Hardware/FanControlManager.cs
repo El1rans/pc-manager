@@ -16,7 +16,6 @@ public sealed class FanControlManager : IDisposable
     private readonly IHardwareService _hardwareService;
     private readonly ISettingsStore _settingsStore;
     private readonly FanControlEngine _engine;
-    private readonly IClock _clock;
     private readonly ILogger<FanControlManager> _logger;
     private readonly Lock _armLock = new();
     private bool _armed;
@@ -25,13 +24,11 @@ public sealed class FanControlManager : IDisposable
         IHardwareService hardwareService,
         ISettingsStore settingsStore,
         FanControlEngine engine,
-        IClock clock,
         ILogger<FanControlManager> logger)
     {
         _hardwareService = hardwareService;
         _settingsStore = settingsStore;
         _engine = engine;
-        _clock = clock;
         _logger = logger;
         _hardwareService.SnapshotUpdated += OnSnapshot;
     }
@@ -52,6 +49,16 @@ public sealed class FanControlManager : IDisposable
         {
             _armed = true;
         }
+    }
+
+    /// <summary>Clears any rule-4 disabled state and (re-)arms control. Called when the user turns
+    /// the master switch on - whether for the first time this session or after a set failure had
+    /// turned it back off - so a fresh enable never carries over a previous failure's disabled
+    /// state.</summary>
+    public void Rearm()
+    {
+        _engine.Reset();
+        Activate();
     }
 
     /// <summary>Rule 5: restores every known fan to default/BIOS control. Called by the app on

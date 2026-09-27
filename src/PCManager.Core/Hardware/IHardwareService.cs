@@ -31,4 +31,8 @@ public interface IHardwareService
     /// each time the service re-initializes, so callers should re-read this rather than cache it
     /// across a re-initialization.</summary>
     IReadOnlyList<IFanController> Controllers { get; }
+
+    /// <summary>Resets every sensor's observed min/max (the sensors tab's "Reset min/max"
+    /// button). Applied on the next tick, from the dedicated background thread.</summary>
+    void ResetMinMax();
 }

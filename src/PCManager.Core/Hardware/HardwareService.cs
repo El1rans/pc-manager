@@ -25,6 +25,7 @@ public sealed class HardwareService : IHardwareService, IDisposable
     private Thread? _thread;
     private volatile bool _running;
     private volatile bool _reinitRequested;
+    private volatile bool _resetMinMaxRequested;
     private volatile bool _pawnioInstalled;
     private Computer? _computer;
 
@@ -42,6 +43,12 @@ public sealed class HardwareService : IHardwareService, IDisposable
     public HardwareSnapshot Latest { get; private set; }
 
     public IReadOnlyList<IFanController> Controllers { get; private set; } = [];
+
+    public void ResetMinMax()
+    {
+        _resetMinMaxRequested = true;
+        _wake.Set();
+    }
 
     public void Start()
     {
@@ -200,6 +207,12 @@ public sealed class HardwareService : IHardwareService, IDisposable
             return;
         }
 
+        if (_resetMinMaxRequested)
+        {
+            _resetMinMaxRequested = false;
+            ResetMinMax(_computer.Hardware);
+        }
+
         _computer.Accept(_updateVisitor);
 
         var controllers = new List<IFanController>();
@@ -217,6 +230,20 @@ public sealed class HardwareService : IHardwareService, IDisposable
         }
 
         return _pawnioInstalled ? HardwareStatus.Ready : HardwareStatus.DriverMissing;
+    }
+
+    private static void ResetMinMax(IEnumerable<IHardware> hardware)
+    {
+        foreach (var hw in hardware)
+        {
+            foreach (var sensor in hw.Sensors)
+            {
+                sensor.ResetMin();
+                sensor.ResetMax();
+            }
+
+            ResetMinMax(hw.SubHardware);
+        }
     }
 
     private static HardwareNode BuildNode(IHardware hardware, List<IFanController> controllers)

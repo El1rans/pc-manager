@@ -15,6 +15,7 @@ using PCManager.App.Features.Updates;
 using PCManager.App.Shell;
 using PCManager.Core.Components;
 using PCManager.Core.Elevation;
+using PCManager.Core.Hardware;
 using PCManager.Core.Settings;
 using Serilog;
 
@@ -165,7 +166,9 @@ public partial class App : System.Windows.Application
 
         services.AddDashboardFeature();
         services.AddUpdatesFeature();
+        services.AddHardwareCore();
         services.AddHardwareFeature();
+        services.AddHostedService<Features.Hardware.HardwareHostedService>();
         services.AddLightingFeature();
         services.AddHostedService<Features.Lighting.OpenRgbAutoStartHostedService>();
         services.AddRemoteSupportFeature();
@@ -184,6 +187,7 @@ public partial class App : System.Windows.Application
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
+        RestoreFansBestEffort();
         LogUnhandledException(e.Exception, "Unhandled dispatcher exception.");
         ShowUnexpectedErrorDialog();
         e.Handled = true;
@@ -191,9 +195,24 @@ public partial class App : System.Windows.Application
 
     private void OnAppDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
+        RestoreFansBestEffort();
         if (e.ExceptionObject is Exception ex)
         {
             LogUnhandledException(ex, "Unhandled AppDomain exception.");
+        }
+    }
+
+    /// <summary>Fan-control rule 5's crash-handler leg: a crash must never leave a fan under
+    /// software control. Best-effort - the process may be in a bad state, so this must not throw.</summary>
+    private void RestoreFansBestEffort()
+    {
+        try
+        {
+            _host?.Services.GetService<FanControlManager>()?.RestoreAll();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Error(ex, "Could not restore fans to default control while handling a crash.");
         }
     }
 
