@@ -40,13 +40,15 @@ milestone specs.
   (lighting) and the PawnIO driver (hardware sensors/fan control). Already-installed tools are
   detected and skipped. Feature pages that need one of these show a shared status card and can
   install/start it in place, without restarting the app.
+- Dashboard: live CPU, memory, GPU, disk and network usage with 60-second history sparklines,
+  updated once a second (paused while the window is minimized). Drives with a low-space warning,
+  top processes by CPU/memory, a pending-restart badge, and static system info (computer name, OS,
+  manufacturer/model, CPU, GPU, RAM).
 
 ## Planned modules
 
 ### Dashboard
-- Live CPU, RAM, GPU, disk and network usage with small history graphs
 - CPU/GPU temperatures (where the hardware exposes them)
-- Uptime, Windows version, last boot time, pending-restart indicator
 - Battery health (laptops)
 
 ### App updates (winget)
