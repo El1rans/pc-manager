@@ -84,8 +84,27 @@ public sealed class FanControlEngine
             return;
         }
 
+        // S1: a missing/NaN reading is not evidence of cooling. If the sensor that tripped the
+        // failsafe no longer has a reading at all, stay latched on it rather than falling through
+        // to "every other sensor looks fine" - the failsafe must never clear based on the absence
+        // of the very measurement it is watching.
+        if (_overheatSensorId is null ||
+            !input.CpuGpuTemperatures.TryGetValue(_overheatSensorId, out var trippingSample) ||
+            trippingSample.ValueC is not { } trippingValue ||
+            double.IsNaN(trippingValue))
+        {
+            return;
+        }
+
+        if (trippingValue > recoveryThreshold)
+        {
+            return;
+        }
+
+        // The tripping sensor itself has recovered - only fully clear once every other known
+        // CPU/GPU temperature is also below the recovery threshold.
         var stillHot = input.CpuGpuTemperatures
-            .FirstOrDefault(kv => kv.Value.ValueC is { } v && v > recoveryThreshold);
+            .FirstOrDefault(kv => kv.Value.ValueC is { } v && !double.IsNaN(v) && v > recoveryThreshold);
         if (stillHot.Key is null)
         {
             _overheatActive = false;

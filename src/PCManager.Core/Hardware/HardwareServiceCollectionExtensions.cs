@@ -15,6 +15,7 @@ public static class HardwareServiceCollectionExtensions
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IHardwareService, HardwareService>();
         services.AddSingleton(sp => new FanControlEngine(sp.GetRequiredService<IClock>()));
+        services.AddSingleton<IFanControlActivityMarker, FanControlActivityMarker>();
         services.AddSingleton<FanControlManager>();
         return services;
     }

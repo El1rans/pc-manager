@@ -39,6 +39,12 @@ public sealed class FanCurve
         {
             var point = points[i];
 
+            if (!double.IsFinite(point.TemperatureC) || !double.IsFinite(point.Percent))
+            {
+                error = "Curve points must be finite numbers.";
+                return false;
+            }
+
             if (point.Percent < minPercent || point.Percent > 100)
             {
                 error = $"Fan percent must be between {minPercent:0} and 100.";
