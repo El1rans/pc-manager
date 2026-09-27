@@ -3,6 +3,8 @@ bin/
 obj/
 out/
 publish/
+dist/
+*.sha256
 *.user
 *.suo
 *.userprefs

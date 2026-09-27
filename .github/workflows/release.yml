@@ -1,0 +1,129 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  release:
+    runs-on: windows-latest
+    # Least privilege: only this job needs to create a release; every other workflow/job in this
+    # repo keeps the default read-only GITHUB_TOKEN.
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Verify tag matches Directory.Build.props Version
+        id: version
+        shell: pwsh
+        run: |
+          $content = Get-Content Directory.Build.props -Raw
+          if ($content -notmatch '<Version>([^<]+)</Version>') {
+            throw "Could not find <Version> in Directory.Build.props"
+          }
+          $version = $Matches[1]
+
+          $tag = "${{ github.ref_name }}"
+          $tagVersion = $tag.TrimStart("v")
+          if ($tagVersion -ne $version) {
+            throw "Tag '$tag' (version '$tagVersion') does not match Directory.Build.props <Version>$version</Version>."
+          }
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Releasing version $version (tag $tag)."
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      - name: Test
+        run: dotnet test -c Release --no-build
+
+      - name: Publish self-contained single-file win-x64 build
+        run: >
+          dotnet publish src/PCManager.App -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -o publish
+
+      - name: Install Inno Setup
+        run: choco install innosetup --version=6.7.1 -y --no-progress
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            installer\PCManager.iss `
+            "/DMyAppVersion=$version" `
+            "/DPublishDir=$PWD\publish" `
+            "/O$PWD\dist"
+
+      - name: Compute SHA-256 checksum
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $exe = "dist\PCManager-Setup-$version.exe"
+          $hash = (Get-FileHash -Path $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash *PCManager-Setup-$version.exe" | Set-Content -Path "$exe.sha256" -NoNewline
+
+      - name: Extract CHANGELOG section for this version
+        id: notes
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $lines = Get-Content CHANGELOG.md
+          $heading = "## [$version]"
+          $startIndex = -1
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].StartsWith($heading)) {
+              $startIndex = $i + 1
+              break
+            }
+          }
+          if ($startIndex -lt 0) {
+            throw "CHANGELOG.md has no '$heading' section. Add one before tagging - see docs/RELEASING.md."
+          }
+
+          $endIndex = $lines.Count
+          for ($i = $startIndex; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].StartsWith("## [")) {
+              $endIndex = $i
+              break
+            }
+          }
+
+          $notes = ($lines[$startIndex..($endIndex - 1)] -join "`n").Trim()
+          $notesPath = "release-notes.md"
+          Set-Content -Path $notesPath -Value $notes
+          "notesPath=$notesPath" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $exe = "dist\PCManager-Setup-$version.exe"
+          gh release create "${{ github.ref_name }}" `
+            "$exe" "$exe.sha256" `
+            --title "PC Manager $version" `
+            --notes-file "${{ steps.notes.outputs.notesPath }}"

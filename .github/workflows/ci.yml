@@ -11,15 +11,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           global-json-file: global.json
 
       - name: Cache NuGet packages
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
@@ -34,3 +34,72 @@ jobs:
 
       - name: Test
         run: dotnet test -c Release --no-build
+
+  build-installer:
+    needs: build-and-test
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          $content = Get-Content Directory.Build.props -Raw
+          if ($content -notmatch '<Version>([^<]+)</Version>') {
+            throw "Could not find <Version> in Directory.Build.props"
+          }
+          $version = $Matches[1]
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Version: $version"
+
+      - name: Publish self-contained single-file win-x64 build
+        run: >
+          dotnet publish src/PCManager.App -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -o publish
+
+      - name: Install Inno Setup
+        run: choco install innosetup --version=6.7.1 -y --no-progress
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            installer\PCManager.iss `
+            "/DMyAppVersion=$version" `
+            "/DPublishDir=$PWD\publish" `
+            "/O$PWD\dist"
+
+      - name: Compute SHA-256 checksum
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $exe = "dist\PCManager-Setup-$version.exe"
+          $hash = (Get-FileHash -Path $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash *PCManager-Setup-$version.exe" | Set-Content -Path "$exe.sha256" -NoNewline
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: PCManager-Setup-${{ steps.version.outputs.version }}
+          path: |
+            dist/*.exe
+            dist/*.sha256
+          if-no-files-found: error
