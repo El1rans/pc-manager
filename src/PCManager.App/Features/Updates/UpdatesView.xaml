@@ -1,8 +1,178 @@
 <UserControl x:Class="PCManager.App.Features.Updates.UpdatesView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <StackPanel>
-        <TextBlock Text="Updates" Style="{StaticResource PageTitle}"/>
-        <TextBlock Text="Coming soon." Style="{StaticResource Secondary}" Margin="0,8,0,0"/>
-    </StackPanel>
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:updates="clr-namespace:PCManager.App.Features.Updates"
+             d:DataContext="{d:DesignInstance updates:UpdatesViewModel}"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="650">
+    <UserControl.Resources>
+        <Style x:Key="StatusForegroundTriggers" TargetType="TextBlock">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding State}" Value="Updated">
+                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="Failed">
+                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="Updating">
+                    <Setter Property="Foreground" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="Skipped">
+                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="StatusTextStyle" TargetType="TextBlock" BasedOn="{StaticResource StatusForegroundTriggers}">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+        </Style>
+        <Style x:Key="StatusIconStyle" TargetType="TextBlock" BasedOn="{StaticResource StatusForegroundTriggers}">
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+        </Style>
+        <Style x:Key="GridCellText" TargetType="TextBlock">
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Title + summary -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+            <TextBlock Text="Updates" Style="{StaticResource PageTitle}"/>
+            <TextBlock Text="{Binding SummaryText}" Style="{StaticResource Secondary}" Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <!-- Toolbar -->
+        <DockPanel Grid.Row="1" Margin="0,0,0,10" LastChildFill="True">
+            <CheckBox DockPanel.Dock="Right" Content="Show ignored" VerticalAlignment="Center"
+                      Margin="8,0,0,0" IsChecked="{Binding ShowIgnored}"/>
+            <Button DockPanel.Dock="Left" Content="Refresh" Command="{Binding RefreshCommand}" Margin="0,0,8,0"/>
+            <Button DockPanel.Dock="Left" Content="Select all" Command="{Binding SelectAllCommand}" Margin="0,0,8,0"/>
+            <Button DockPanel.Dock="Left" Content="Select none" Command="{Binding SelectNoneCommand}" Margin="0,0,8,0"/>
+            <TextBlock DockPanel.Dock="Left" Text="Filter:" VerticalAlignment="Center" Margin="8,0,6,0"/>
+            <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
+                     MinWidth="80" VerticalContentAlignment="Center" Padding="6,4"/>
+        </DockPanel>
+
+        <!-- Package list -->
+        <DataGrid x:Name="PackagesGrid" Grid.Row="2"
+                  ItemsSource="{Binding PackagesView}"
+                  AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                  SelectionMode="Extended" SelectionUnit="FullRow" RowHeight="32"
+                  MouseDoubleClick="PackagesGrid_MouseDoubleClick">
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsIgnored}" Value="True">
+                            <Setter Property="Opacity" Value="0.5"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.RowStyle>
+            <DataGrid.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="Ignore (never update)" Click="IgnoreMenuItem_Click"/>
+                    <MenuItem Header="Stop ignoring" Click="StopIgnoringMenuItem_Click"/>
+                    <Separator/>
+                    <MenuItem Header="Copy ID" Click="CopyIdMenuItem_Click"/>
+                    <MenuItem Header="Show package info" Click="ShowPackageInfoMenuItem_Click"
+                              IsEnabled="{Binding PlacementTarget.DataContext.IsUpdating,
+                                                   RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                   Converter={StaticResource InverseBool}}"/>
+                </ContextMenu>
+            </DataGrid.ContextMenu>
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Width="40" SortMemberPath="IsSelected">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <CheckBox IsChecked="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}"
+                                      IsEnabled="{Binding IsIgnored, Converter={StaticResource InverseBool}}"
+                                      HorizontalAlignment="Center" Margin="0"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2.2*" IsReadOnly="True"
+                                    ElementStyle="{StaticResource GridCellText}"/>
+                <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="1.8*" IsReadOnly="True"
+                                    ElementStyle="{StaticResource GridCellText}"/>
+                <DataGridTextColumn Header="Installed" Binding="{Binding InstalledVersion}" Width="*" IsReadOnly="True"
+                                    ElementStyle="{StaticResource GridCellText}"/>
+                <DataGridTextColumn Header="Available" Binding="{Binding AvailableVersion}" Width="*" IsReadOnly="True"
+                                    ElementStyle="{StaticResource GridCellText}"/>
+                <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="1.4*" IsReadOnly="True"
+                                    ElementStyle="{StaticResource GridCellText}"/>
+                <DataGridTemplateColumn Header="Status" Width="1.4*" SortMemberPath="State">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding StatusGlyph}" Style="{StaticResource StatusIconStyle}"
+                                           FontSize="13" Margin="0,0,6,0"/>
+                                <TextBlock Text="{Binding StatusText}" Style="{StaticResource StatusTextStyle}"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Actions: checkboxes on their own line, buttons on the next - keeps both readable down
+             to 900px wide instead of competing for the same row. -->
+        <StackPanel Grid.Row="3" Margin="0,12,0,0">
+            <WrapPanel>
+                <CheckBox Content="Silent install (hide installer windows)" IsChecked="{Binding Silent}" Margin="0,0,16,4"/>
+                <CheckBox Content="Include apps with unknown version" IsChecked="{Binding IncludeUnknown}"
+                          IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" Margin="0,0,0,4"/>
+            </WrapPanel>
+            <DockPanel LastChildFill="False" Margin="0,6,0,0">
+                <Button DockPanel.Dock="Right" Content="{Binding UpdateSelectedButtonText}"
+                        Command="{Binding UpdateSelectedCommand}"
+                        Style="{DynamicResource AccentButtonStyle}" MinWidth="170" Padding="14,6"/>
+                <Button DockPanel.Dock="Right" Content="Stop after current" Command="{Binding StopAfterCurrentCommand}"
+                        Margin="0,0,8,0"
+                        Visibility="{Binding IsUpdating, Converter={StaticResource BoolToVis}}"/>
+            </DockPanel>
+        </StackPanel>
+
+        <!-- Progress: current step (queue position / stopping / finished summary) and winget's own
+             latest progress line shown side by side rather than combined into one string. -->
+        <StackPanel Grid.Row="4" Margin="0,10,0,0">
+            <ProgressBar Height="4" IsIndeterminate="True" BorderThickness="0"
+                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
+            <DockPanel Margin="0,4,0,0" LastChildFill="True">
+                <TextBlock DockPanel.Dock="Left" Text="{Binding CurrentStep}" Style="{StaticResource Secondary}"
+                           FontFamily="Consolas" FontSize="12" TextTrimming="CharacterEllipsis"
+                           MaxWidth="360" Margin="0,0,12,0"/>
+                <TextBlock Text="{Binding ProgressLine}" Style="{StaticResource Secondary}"
+                           FontFamily="Consolas" FontSize="12" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
+        </StackPanel>
+
+        <!-- Log -->
+        <Expander Grid.Row="5" Header="Log" Margin="0,8,0,0" IsExpanded="{Binding IsLogExpanded}">
+            <DockPanel Margin="0,6,0,0">
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
+                    <Button Content="Open log folder" Command="{Binding OpenLogFolderCommand}" Margin="0,0,8,0"/>
+                    <Button Content="Clear" Command="{Binding ClearLogCommand}"/>
+                </StackPanel>
+                <TextBox x:Name="LogTextBox" Text="{Binding LogText, Mode=OneWay}"
+                         Height="170" IsReadOnly="True" FontFamily="Consolas" FontSize="12"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                         TextWrapping="NoWrap" TextChanged="LogTextBox_TextChanged"/>
+            </DockPanel>
+        </Expander>
+    </Grid>
 </UserControl>

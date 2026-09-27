@@ -16,6 +16,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   60-second sparklines and min/avg/max tooltips; a drives card with a low-space warning; a top
   processes card; a restart-pending badge; and a system info card (computer name, OS, CPU, GPU,
   RAM). Measured self-CPU stays under 1% of total system CPU on an 8-core/16-thread machine.
+- Updates: `IWingetClient`/`WingetTableParser`/`WingetExitCodes` in `PCManager.Core.Winget`/
+  `PCManager.Core.Processes`, and the Updates page - lists `winget upgrade` results with default
+  selection, filter, ignore list (persisted), Silent/Include-unknown options, one-at-a-time update
+  run with live status/log, "Stop after current", and a nav badge showing the non-ignored update
+  count. Checks automatically at startup and on Refresh.
 
 ### Fixed
 
