@@ -15,6 +15,7 @@ using PCManager.App.Features.Updates;
 using PCManager.App.Shell;
 using PCManager.Core.Components;
 using PCManager.Core.Elevation;
+using PCManager.Core.Hardware;
 using PCManager.Core.Settings;
 using Serilog;
 
@@ -184,6 +185,7 @@ public partial class App : System.Windows.Application
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
+        SuspendFansBestEffort();
         LogUnhandledException(e.Exception, "Unhandled dispatcher exception.");
         ShowUnexpectedErrorDialog();
         e.Handled = true;
@@ -191,9 +193,30 @@ public partial class App : System.Windows.Application
 
     private void OnAppDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
+        SuspendFansBestEffort();
         if (e.ExceptionObject is Exception ex)
         {
             LogUnhandledException(ex, "Unhandled AppDomain exception.");
+        }
+    }
+
+    /// <summary>Fan-control rule 5's crash-handler leg: a crash must never leave a fan under
+    /// software control. Uses <c>Suspend</c> rather than a plain restore (B2) - unlike a system
+    /// suspend, nothing here ever calls <c>ResumeFromSuspend</c>, so control stays paused (the user
+    /// must re-arm from the Hardware page) rather than the very next tick silently re-applying
+    /// whatever was last commanded. Best-effort - the process may be in a bad state, so this must
+    /// not throw.</summary>
+    private void SuspendFansBestEffort()
+    {
+        try
+        {
+            // N5: a crash is not a resumable system suspend - stays paused until the user
+            // explicitly re-arms from the Hardware page.
+            _host?.Services.GetService<FanControlManager>()?.Suspend("unhandled exception", resumableBySystemResume: false);
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Error(ex, "Could not pause/restore fans to default control while handling a crash.");
         }
     }
 
