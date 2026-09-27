@@ -1,6 +1,10 @@
 <Project>
 
   <PropertyGroup>
+    <!-- Single source of the app's version: read by PCManager.App (assembly/file version, shown
+         in the sidebar footer) and by installer/PCManager.iss (via /DMyAppVersion=<Version> from
+         the CI/release workflows). Bump this and CHANGELOG.md together - see docs/RELEASING.md. -->
+    <Version>0.1.0</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>

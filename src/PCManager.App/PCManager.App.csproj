@@ -6,8 +6,8 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>PCManager.App</RootNamespace>
     <AssemblyName>PCManager</AssemblyName>
-    <Version>0.1.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <!-- WPF0001: the Fluent ThemeMode API (Application.ThemeMode) is still marked experimental. -->
     <NoWarn>$(NoWarn);WPF0001</NoWarn>
   </PropertyGroup>
@@ -17,6 +17,10 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Serilog.Extensions.Hosting" />
     <PackageReference Include="Serilog.Sinks.File" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\AppIcon.ico" />
   </ItemGroup>
 
   <ItemGroup>
