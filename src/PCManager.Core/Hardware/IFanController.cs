@@ -15,6 +15,13 @@ public interface IFanController
     /// <summary>Current duty cycle, 0-100, or null if unknown.</summary>
     double? CurrentPercent { get; }
 
+    /// <summary>Whether this control channel currently reports itself as under software control
+    /// (LHM's <c>IControl.ControlMode == ControlMode.Software</c>). Used only to verify that
+    /// <see cref="RestoreDefault"/> actually took effect - some SuperIO backends can accept the call
+    /// without error yet leave the channel in software mode (the same class of quirk
+    /// <see cref="SetPercent"/>'s remarks describe for the opposite direction).</summary>
+    bool IsUnderSoftwareControl { get; }
+
     /// <summary>Whether this fan actually accepts software control (some report RPM only).</summary>
     bool CanControl { get; }
 

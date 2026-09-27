@@ -48,6 +48,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   handling. Talks to OpenRGB through a vendored, patched copy of `OpenRGB.NET` (see
   `THIRD-PARTY-NOTICES.md`) rather than the unpatched NuGet package.
 
+### Changed
+
+- First-run setup: only AnyDesk is pre-ticked by default on the "Choose what to set up" screen
+  (when not already installed/handled by the installer). OpenRGB and the PawnIO fan driver always
+  start unticked - installing a background app and a kernel driver should be an explicit opt-in,
+  not a default.
+
 ### Fixed
 
 - `SettingsStore.Save`/`Update` no longer throw when the settings file is transiently locked by
@@ -56,3 +63,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   persistence is treated as best-effort: a warning is logged, in-memory `Current` stays
   authoritative, and the next save retries. This fixes intermittent `UnauthorizedAccessException`
   crashes on startup (`PC Manager could not start`) caused by the launch-count update.
+- `SetupViewModel.Dispose` is idempotent - the setup window's own Closed handler and the DI
+  container (which also disposes transients it created) could both dispose it, and the second
+  `Cancel()` on an already-disposed `CancellationTokenSource` was logged as an ERR on every app exit
+  after first-run setup had been opened.
+- Fixed a flaky "Get help" test (seen once on CI, passing on rerun): `RemoteSupportViewModel`'s
+  address poll loop and copy-confirmation reset ran off a real `PeriodicTimer`/`Task.Delay` tied to
+  the wall clock, so a real timer tick could occasionally be delayed past the test's own time
+  budget under CI load. A `TimeProvider` is now injected (defaulting to `TimeProvider.System`) and
+  tests drive a `FakeTimeProvider` explicitly instead of depending on real timer scheduling.
+- Hardware/fan control: after `IFanController.RestoreDefault()` hands an owned fan back to BIOS
+  control, `FanControlManager` now verifies on the following ticks that the channel actually left
+  software mode (`IFanController.IsUnderSoftwareControl`, from LHM's `IControl.ControlMode`) -
+  some SuperIO/NVAPI backends can accept the call without error yet leave it in software mode.
+  A fan still stuck after 3 ticks gets up to 3 `RestoreDefault` retries (never `SetPercent`); if it
+  still never clears, a critical banner tells the user to restart their PC to return it to BIOS
+  control. Closes a known gap left open by the hardware/fan-control milestone (PR #11).

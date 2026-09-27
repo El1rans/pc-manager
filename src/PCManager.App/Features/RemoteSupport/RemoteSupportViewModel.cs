@@ -40,6 +40,7 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
     private readonly TimeSpan _waitingForIdPollInterval;
     private readonly TimeSpan _runningStatusPollInterval;
     private readonly TimeSpan _idWaitTimeout;
+    private readonly TimeProvider _timeProvider;
 
     private readonly IAnyDeskService _anyDeskService;
     private readonly IComponentService _componentService;
@@ -113,12 +114,15 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
         : this(
             anyDeskService, componentService, cardFactory, clipboard, urlLauncher, windowsVersionReader,
             settingsStore, logger, DefaultCopyConfirmationDuration, DefaultWaitingForIdPollInterval,
-            DefaultRunningStatusPollInterval, DefaultIdWaitTimeout)
+            DefaultRunningStatusPollInterval, DefaultIdWaitTimeout, TimeProvider.System)
     {
     }
 
     /// <summary>Test seam: lets tests use much shorter durations than production so a polling test
-    /// does not take tens of seconds to run.</summary>
+    /// does not take tens of seconds to run, and a fake <see cref="TimeProvider"/> (e.g.
+    /// <c>Microsoft.Extensions.Time.Testing.FakeTimeProvider</c>) instead of a real clock/timer, so
+    /// the poll loop and copy-confirmation reset never depend on wall-clock timing - see
+    /// docs/specs root cause note on the flaky "Get help" tests.</summary>
     public RemoteSupportViewModel(
         IAnyDeskService anyDeskService,
         IComponentService componentService,
@@ -131,7 +135,8 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
         TimeSpan copyConfirmationDuration,
         TimeSpan waitingForIdPollInterval,
         TimeSpan runningStatusPollInterval,
-        TimeSpan idWaitTimeout)
+        TimeSpan idWaitTimeout,
+        TimeProvider timeProvider)
     {
         _anyDeskService = anyDeskService;
         _componentService = componentService;
@@ -144,6 +149,7 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
         _waitingForIdPollInterval = waitingForIdPollInterval;
         _runningStatusPollInterval = runningStatusPollInterval;
         _idWaitTimeout = idWaitTimeout;
+        _timeProvider = timeProvider;
         // Same reasoning as ComponentCardViewModel: always the one UI dispatcher, but still
         // constructible outside a running WPF Application (e.g. unit tests).
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
@@ -299,7 +305,7 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
         _pollCts?.Dispose();
         _pollCts = CancellationTokenSource.CreateLinkedTokenSource(_visitCts.Token);
 
-        _waitingForIdSince = DateTime.UtcNow;
+        _waitingForIdSince = _timeProvider.GetUtcNow().UtcDateTime;
         _hasAutoStartedForCurrentWait = false;
         IsAddressTimedOut = false;
         HasError = false;
@@ -328,7 +334,7 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
         {
             await RefreshStateAsync(cancellationToken).ConfigureAwait(true);
 
-            using var timer = new PeriodicTimer(_waitingForIdPollInterval);
+            using var timer = new PeriodicTimer(_waitingForIdPollInterval, _timeProvider);
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(true))
             {
                 if (!ShowMainContent)
@@ -338,7 +344,7 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
 
                 if (State?.Id is null)
                 {
-                    if (DateTime.UtcNow - _waitingForIdSince >= _idWaitTimeout)
+                    if (_timeProvider.GetUtcNow().UtcDateTime - _waitingForIdSince >= _idWaitTimeout)
                     {
                         IsAddressTimedOut = true;
                         return;
@@ -431,7 +437,7 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
     {
         try
         {
-            await Task.Delay(_copyConfirmationDuration, cancellationToken).ConfigureAwait(true);
+            await Task.Delay(_copyConfirmationDuration, _timeProvider, cancellationToken).ConfigureAwait(true);
             reset();
         }
         catch (OperationCanceledException)

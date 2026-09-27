@@ -77,7 +77,13 @@ public sealed partial class SetupViewModel : ObservableObject, IDisposable
         {
             item.Status = await _componentService.GetStatusAsync(item.Definition.Id, cancellationToken)
                 .ConfigureAwait(true);
-            item.IsSelected = item.Status.State == ComponentState.NotInstalled &&
+
+            // Only AnyDesk is pre-ticked by default - it is the one component parents need for
+            // remote help to work at all. OpenRGB (cosmetic) and the PawnIO fan driver (installs a
+            // kernel driver) are opt-in, so they always start unticked here regardless of install
+            // state; see docs/specs/01b-components.md.
+            item.IsSelected = item.Definition.Id == ComponentIds.AnyDesk &&
+                item.Status.State == ComponentState.NotInstalled &&
                 !installerHandledIds.Contains(item.Definition.Id);
         }
     }

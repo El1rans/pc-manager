@@ -82,13 +82,45 @@ public sealed class SetupViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task LoadAsync_NotHandledByInstallerAndNotInstalled_DefaultsToTicked()
+    public async Task LoadAsync_NotHandledByInstallerAndNotInstalled_OnlyAnyDeskDefaultsToTicked()
     {
         var viewModel = CreateViewModel();
 
         await viewModel.LoadAsync(TestContext.Current.CancellationToken);
 
-        Assert.All(viewModel.Items, i => Assert.True(i.IsSelected));
+        var anyDeskItem = Assert.Single(viewModel.Items, i => i.Definition.Id == ComponentIds.AnyDesk);
+        var openRgbItem = Assert.Single(viewModel.Items, i => i.Definition.Id == ComponentIds.OpenRgb);
+        var pawnIoItem = Assert.Single(viewModel.Items, i => i.Definition.Id == ComponentIds.PawnIo);
+        Assert.True(anyDeskItem.IsSelected);
+        Assert.False(openRgbItem.IsSelected);
+        Assert.False(pawnIoItem.IsSelected);
+    }
+
+    [Fact]
+    public async Task LoadAsync_AnyDeskInstallerHandled_DefaultsToUnticked()
+    {
+        _registryReader.InstallerHandledComponentIds = [ComponentIds.AnyDesk];
+        var viewModel = CreateViewModel();
+
+        await viewModel.LoadAsync(TestContext.Current.CancellationToken);
+
+        var anyDeskItem = Assert.Single(viewModel.Items, i => i.Definition.Id == ComponentIds.AnyDesk);
+        Assert.False(anyDeskItem.IsSelected);
+    }
+
+    [Fact]
+    public async Task LoadAsync_OpenRgbAndPawnIoNotHandledByInstaller_StillDefaultToUnticked()
+    {
+        // OpenRGB and PawnIO are opt-in regardless of the installer marker - only AnyDesk is
+        // pre-ticked by default (docs/specs/01b-components.md).
+        var viewModel = CreateViewModel();
+
+        await viewModel.LoadAsync(TestContext.Current.CancellationToken);
+
+        var openRgbItem = Assert.Single(viewModel.Items, i => i.Definition.Id == ComponentIds.OpenRgb);
+        var pawnIoItem = Assert.Single(viewModel.Items, i => i.Definition.Id == ComponentIds.PawnIo);
+        Assert.False(openRgbItem.IsSelected);
+        Assert.False(pawnIoItem.IsSelected);
     }
 
     [Fact]

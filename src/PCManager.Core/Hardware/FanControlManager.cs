@@ -41,6 +41,16 @@ public sealed class FanControlManager : IDisposable
 
     private const int ReadBackFailureStreak = 3;
 
+    /// <summary>S3-2/known gap from PR #11: how many snapshot ticks a fan is allowed to keep
+    /// reporting <see cref="IFanController.IsUnderSoftwareControl"/> after a <see cref="IFanController.RestoreDefault"/>
+    /// call before this treats it as stuck and retries. Read-only verification - see
+    /// <see cref="VerifyPendingRestoresAndRetry"/> - this never calls <see cref="IFanController.SetPercent"/>.</summary>
+    private const int RestoreVerificationTickThreshold = 3;
+
+    /// <summary>Total <see cref="IFanController.RestoreDefault"/> calls allowed for one hand-back
+    /// (the original call plus up to 3 retries) before giving up and raising a critical banner.</summary>
+    private const int MaxRestoreAttempts = 4;
+
     /// <summary>Independent watchdog default: if no evaluation has happened while control was
     /// actually active for this long, the hardware thread itself may be stuck or dead. Overridable
     /// by the internal test constructor only.</summary>
@@ -55,6 +65,10 @@ public sealed class FanControlManager : IDisposable
     private readonly ILogger<FanControlManager> _logger;
     private readonly Lock _stateLock = new();
     private readonly Dictionary<string, PendingCheck> _pendingReadBacks = [];
+
+    /// <summary>S3-2: fans currently being verified after a <see cref="IFanController.RestoreDefault"/>
+    /// hand-back - see <see cref="VerifyPendingRestoresAndRetry"/>. Keyed by controller id.</summary>
+    private readonly Dictionary<string, RestorePendingState> _pendingRestoreVerifications = [];
 
     /// <summary>N1b: ids of fans this instance has itself called <see cref="IFanController.SetPercent"/>
     /// on this session. <see cref="IFanController.RestoreDefault"/> is only ever called for an id in
@@ -286,6 +300,11 @@ public sealed class FanControlManager : IDisposable
             return;
         }
 
+        // S3-2: independent of whether control is active right now - a restore issued just before
+        // control went inactive (rule 4, a dropped snapshot, RestoreAll on exit/suspend) still needs
+        // to be verified on the ticks that follow.
+        VerifyPendingRestoresAndRetry(controllers);
+
         var controlActive = IsControlActive();
 
         if (!controlActive)
@@ -434,10 +453,95 @@ public sealed class FanControlManager : IDisposable
         if (target.Kind == FanTargetKind.SetPercent)
         {
             _pendingReadBacks[controller.Id] = new PendingCheck(clampedPercent, 0);
+
+            // S3-2: a fresh SetPercent means this fan is being actively (re-)commanded, not handed
+            // back - cancel any restore verification in flight for it, so a slow read-back retry
+            // from an earlier hand-back can never fight a deliberate, later SetPercent.
+            _pendingRestoreVerifications.Remove(controller.Id);
         }
         else
         {
             _pendingReadBacks.Remove(controller.Id);
+        }
+    }
+
+    /// <summary>S3-2: starts (or keeps, if already in progress) verifying that <paramref name="controllerId"/>
+    /// actually left software control after a <see cref="IFanController.RestoreDefault"/> hand-back -
+    /// see <see cref="VerifyPendingRestoresAndRetry"/>. Only registers on the *first* call for a given
+    /// hand-back; callers that call <see cref="IFanController.RestoreDefault"/> again every tick while
+    /// a profile stays at <see cref="FanMode.Default"/> must not keep resetting the verification
+    /// window each time.</summary>
+    private void RegisterPendingRestoreVerification(string controllerId)
+    {
+        if (!_pendingRestoreVerifications.ContainsKey(controllerId))
+        {
+            _pendingRestoreVerifications[controllerId] = new RestorePendingState(Attempts: 1, TicksSinceLastAttempt: 0);
+        }
+    }
+
+    /// <summary>
+    /// S3-2/known gap from PR #11: after a <see cref="IFanController.RestoreDefault"/> hand-back
+    /// (<see cref="RegisterPendingRestoreVerification"/>), checks on every following tick whether the
+    /// control sensor still reports <see cref="IFanController.IsUnderSoftwareControl"/>. A fan that
+    /// keeps reporting software control for <see cref="RestoreVerificationTickThreshold"/> consecutive
+    /// ticks gets one more <see cref="IFanController.RestoreDefault"/> retry; after
+    /// <see cref="MaxRestoreAttempts"/> total attempts still fail to clear it, this gives up and raises
+    /// a critical banner instead of retrying forever. Never calls <see cref="IFanController.SetPercent"/>.
+    /// </summary>
+    private void VerifyPendingRestoresAndRetry(IReadOnlyList<IFanController> controllers)
+    {
+        if (_pendingRestoreVerifications.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var controllerId in _pendingRestoreVerifications.Keys.ToList())
+        {
+            var controller = controllers.FirstOrDefault(c => c.Id == controllerId);
+            if (controller is null)
+            {
+                // The hardware set changed (re-enumeration) - nothing left to verify.
+                _pendingRestoreVerifications.Remove(controllerId);
+                continue;
+            }
+
+            if (!controller.IsUnderSoftwareControl)
+            {
+                // Confirmed back under BIOS/EC control.
+                _pendingRestoreVerifications.Remove(controllerId);
+                continue;
+            }
+
+            var state = _pendingRestoreVerifications[controllerId];
+            var ticks = state.TicksSinceLastAttempt + 1;
+            if (ticks < RestoreVerificationTickThreshold)
+            {
+                _pendingRestoreVerifications[controllerId] = state with { TicksSinceLastAttempt = ticks };
+                continue;
+            }
+
+            if (state.Attempts >= MaxRestoreAttempts)
+            {
+                _pendingRestoreVerifications.Remove(controllerId);
+                _logger.LogError(
+                    "Fan {FanId} ({FanName}) still reports software control after {Attempts} RestoreDefault attempts.",
+                    controller.Id, controller.Name, state.Attempts);
+                RaiseStatus(FanControlAlertLevel.Critical,
+                    "A fan may still be under software control. Restart your PC to return it to BIOS control.");
+                continue;
+            }
+
+            try
+            {
+                controller.RestoreDefault();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Retry {Attempt} of RestoreDefault failed for fan {FanId} ({FanName}).",
+                    state.Attempts + 1, controller.Id, controller.Name);
+            }
+
+            _pendingRestoreVerifications[controllerId] = new RestorePendingState(state.Attempts + 1, TicksSinceLastAttempt: 0);
         }
     }
 
@@ -481,6 +585,7 @@ public sealed class FanControlManager : IDisposable
                 if (_ownedControllerIds.Contains(controller.Id))
                 {
                     controller.RestoreDefault();
+                    RegisterPendingRestoreVerification(controller.Id);
                 }
 
                 return true;
@@ -554,6 +659,7 @@ public sealed class FanControlManager : IDisposable
             try
             {
                 controller.RestoreDefault();
+                RegisterPendingRestoreVerification(controller.Id);
             }
             catch (Exception ex)
             {
@@ -736,4 +842,9 @@ public sealed class FanControlManager : IDisposable
             HasLiveCpuTemperature(n.Children));
 
     private readonly record struct PendingCheck(double ExpectedPercent, int MismatchStreak);
+
+    /// <summary>S3-2: <paramref name="Attempts"/> counts total <see cref="IFanController.RestoreDefault"/>
+    /// calls made for this hand-back (the original plus retries); <paramref name="TicksSinceLastAttempt"/>
+    /// counts snapshot ticks observed since the most recent one, reset on every retry.</summary>
+    private readonly record struct RestorePendingState(int Attempts, int TicksSinceLastAttempt);
 }

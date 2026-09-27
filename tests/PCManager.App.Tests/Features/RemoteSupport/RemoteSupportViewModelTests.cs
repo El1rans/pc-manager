@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.IO;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using PCManager.App.Controls;
 using PCManager.App.Features.RemoteSupport;
 using PCManager.App.Tests.Features.Setup;
@@ -25,6 +26,13 @@ public sealed class RemoteSupportViewModelTests : IDisposable
     private readonly FakeUrlLauncher _urlLauncher = new();
     private readonly FakeWindowsVersionReader _windowsVersionReader = new();
 
+    /// <summary>Root-cause fix for a test that flaked once on CI: the poll loop and the copy-
+    /// confirmation reset used to run off a real <see cref="PeriodicTimer"/> / <see cref="Task.Delay"/>
+    /// on wall-clock time, so under CI load a real timer tick could be delayed past this test file's
+    /// own real-time safety net. A <see cref="FakeTimeProvider"/> makes every wait in the view model
+    /// deterministic: time only advances when <see cref="WaitUntilAsync"/> below explicitly ticks it.</summary>
+    private readonly FakeTimeProvider _timeProvider = new();
+
     public RemoteSupportViewModelTests()
     {
         _directory = Path.Combine(Path.GetTempPath(), "PCManagerAppTests_" + Guid.NewGuid().ToString("N"));
@@ -47,14 +55,16 @@ public sealed class RemoteSupportViewModelTests : IDisposable
             _anyDeskService, _componentService, cardFactory, _clipboard, _urlLauncher, _windowsVersionReader,
             _settingsStore, NullLogger<RemoteSupportViewModel>.Instance,
             copyConfirmationDuration: TestPollInterval, waitingForIdPollInterval: TestPollInterval,
-            runningStatusPollInterval: TestPollInterval, idWaitTimeout: TestIdWaitTimeout);
+            runningStatusPollInterval: TestPollInterval, idWaitTimeout: TestIdWaitTimeout, _timeProvider);
     }
 
     /// <summary>Awaits until <paramref name="condition"/> holds, driven by
-    /// <paramref name="notifier"/>'s <see cref="INotifyPropertyChanged.PropertyChanged"/> rather
-    /// than a fixed delay, so tests are both fast and not racy against the view model's background
-    /// poll loop.</summary>
-    private static async Task WaitUntilAsync(
+    /// <paramref name="notifier"/>'s <see cref="INotifyPropertyChanged.PropertyChanged"/> and by
+    /// explicitly ticking this test's <see cref="_timeProvider"/> forward - the view model's poll
+    /// loop and copy-confirmation reset never advance on their own (there is no real timer to wait
+    /// on), so nothing here depends on wall-clock scheduling. The <see cref="WaitTimeout"/> deadline
+    /// is only a safety net against a genuinely stuck condition, not a budget the test relies on.</summary>
+    private async Task WaitUntilAsync(
         INotifyPropertyChanged notifier, Func<bool> condition, CancellationToken cancellationToken)
     {
         if (condition())
@@ -80,6 +90,19 @@ public sealed class RemoteSupportViewModelTests : IDisposable
             if (condition())
             {
                 return;
+            }
+
+            // Tick the fake clock forward until the condition is met (or the real-time safety net
+            // above cancels tcs.Task). Each iteration advances by one poll interval and then yields
+            // just long enough for the view model's async continuations to run and re-check state.
+            while (!tcs.Task.IsCompleted)
+            {
+                _timeProvider.Advance(TestPollInterval);
+                var completed = await Task.WhenAny(tcs.Task, Task.Delay(5, cancellationToken)).ConfigureAwait(true);
+                if (completed == tcs.Task)
+                {
+                    break;
+                }
             }
 
             await tcs.Task.ConfigureAwait(true);
@@ -352,7 +375,7 @@ public sealed class RemoteSupportViewModelTests : IDisposable
             throwingAnyDeskService, _componentService, cardFactory, _clipboard, _urlLauncher, _windowsVersionReader,
             _settingsStore, NullLogger<RemoteSupportViewModel>.Instance,
             copyConfirmationDuration: TestPollInterval, waitingForIdPollInterval: TestPollInterval,
-            runningStatusPollInterval: TestPollInterval, idWaitTimeout: TestIdWaitTimeout);
+            runningStatusPollInterval: TestPollInterval, idWaitTimeout: TestIdWaitTimeout, _timeProvider);
 
         await viewModel.OnNavigatedToAsync(TestContext.Current.CancellationToken);
 

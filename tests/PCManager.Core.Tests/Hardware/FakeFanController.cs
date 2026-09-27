@@ -16,6 +16,14 @@ public sealed class FakeFanController : IFanController
 
     public double? CurrentPercent { get; set; }
 
+    public bool IsUnderSoftwareControl { get; private set; }
+
+    /// <summary>When false, <see cref="RestoreDefault"/> succeeds (no throw, <see cref="RestoreDefaultCallCount"/>
+    /// still increments) but does not clear <see cref="IsUnderSoftwareControl"/> - simulates the known
+    /// SuperIO/NVAPI read-back gap where a restore call is accepted without actually leaving software
+    /// mode.</summary>
+    public bool RestoreDefaultTakesEffect { get; set; } = true;
+
     public bool CanControl => true;
 
     public string? RpmSensorId { get; set; }
@@ -41,6 +49,7 @@ public sealed class FakeFanController : IFanController
         }
 
         CurrentPercent = percent;
+        IsUnderSoftwareControl = true;
     }
 
     public void RestoreDefault()
@@ -52,5 +61,9 @@ public sealed class FakeFanController : IFanController
         }
 
         CurrentPercent = null;
+        if (RestoreDefaultTakesEffect)
+        {
+            IsUnderSoftwareControl = false;
+        }
     }
 }

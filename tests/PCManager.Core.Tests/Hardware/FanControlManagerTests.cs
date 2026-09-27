@@ -488,4 +488,176 @@ public sealed class FanControlManagerTests : IDisposable
         Assert.True(manager.StaleActivityMarkerDetected);
         Assert.False(_marker.MarkerExists);
     }
+
+    // ---------------------------------------------------------------- S3-2: restore read-back verification
+
+    [Fact]
+    public void RestoreDefault_TakesEffectImmediately_NoRetryNoAlert()
+    {
+        // Normal case (the fake's default): RestoreDefault clears IsUnderSoftwareControl straight
+        // away, so a handful of further ticks must not retry or alert at all.
+        EnableFixedFan(40);
+        using var manager = CreateManager();
+        manager.Activate();
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+        Assert.Equal(40, _fan.CurrentPercent);
+
+        FanControlAlert? alert = null;
+        manager.StatusChanged += (_, e) => alert = e;
+
+        manager.RestoreAll();
+        // Disabled so later ticks do not simply re-command the still-Fixed profile right back into
+        // software mode - this test is about the restore itself never needing a retry, not about
+        // whether a still-enabled profile gets re-applied (which is expected, separate behaviour).
+        _settingsStore.Update(s => s.Hardware.FanControlEnabled = false);
+        var restoreCallsAfterRestore = _fan.RestoreDefaultCallCount;
+
+        for (var i = 0; i < 5; i++)
+        {
+            _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+        }
+
+        Assert.Equal(restoreCallsAfterRestore, _fan.RestoreDefaultCallCount);
+        Assert.Null(alert);
+        Assert.False(_fan.IsUnderSoftwareControl);
+    }
+
+    [Fact]
+    public void RestoreDefault_StaysUnderSoftwareControl_RetriesAfterThreeTicksWithoutSetPercent()
+    {
+        // Known gap from PR #11: RestoreDefault() can return without throwing yet leave the channel
+        // reporting software control. After enough ticks to be sure it is stuck, this must retry
+        // RestoreDefault - and only RestoreDefault, never SetPercent. Control is disabled after the
+        // restore so later ticks exercise *only* the verification path (VerifyPendingRestoresAndRetry
+        // runs regardless of active state, before anything else) rather than the normal apply/R3-1
+        // paths, which would also call RestoreDefault on their own and confuse the count.
+        _fan.RestoreDefaultTakesEffect = false;
+        EnableFixedFan(40);
+        using var manager = CreateManager();
+        manager.Activate();
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+
+        var setPercentCallsBeforeRestore = _fan.SetPercentCallCount;
+        manager.RestoreAll();
+        _settingsStore.Update(s => s.Hardware.FanControlEnabled = false);
+        var restoreCallsAfterRestore = _fan.RestoreDefaultCallCount;
+        Assert.True(_fan.IsUnderSoftwareControl); // the fake simulates the stuck read-back
+
+        FanControlAlert? alert = null;
+        manager.StatusChanged += (_, e) => alert = e;
+
+        // Ticks 1 and 2: still within the verification window - no retry yet.
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+        Assert.Equal(restoreCallsAfterRestore, _fan.RestoreDefaultCallCount);
+
+        // Tick 3: window elapsed while still under software control - first retry.
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+
+        Assert.Equal(restoreCallsAfterRestore + 1, _fan.RestoreDefaultCallCount);
+        Assert.Equal(setPercentCallsBeforeRestore, _fan.SetPercentCallCount); // never SetPercent
+        Assert.Null(alert); // not given up yet
+    }
+
+    [Fact]
+    public void RestoreDefault_NeverRecoversAfterMaxRetries_RaisesCriticalBannerAndStopsRetrying()
+    {
+        _fan.RestoreDefaultTakesEffect = false;
+        EnableFixedFan(40);
+        using var manager = CreateManager();
+        manager.Activate();
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+        var setPercentCallsBeforeRestore = _fan.SetPercentCallCount;
+        manager.RestoreAll();
+        _settingsStore.Update(s => s.Hardware.FanControlEnabled = false);
+
+        FanControlAlert? alert = null;
+        manager.StatusChanged += (_, e) => alert = e;
+
+        // 3 verification windows of 3 ticks each cover the original call plus 3 retries (4 attempts
+        // total) - enough ticks to exhaust every retry and reach the give-up banner.
+        for (var i = 0; i < 12; i++)
+        {
+            _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+        }
+
+        Assert.NotNull(alert);
+        Assert.Equal(FanControlAlertLevel.Critical, alert!.Level);
+        Assert.Contains("Restart your PC", alert.Message);
+        Assert.Equal(setPercentCallsBeforeRestore, _fan.SetPercentCallCount); // never SetPercent
+
+        var restoreCallsAfterBanner = _fan.RestoreDefaultCallCount;
+        alert = null;
+
+        // Having given up, it must not keep retrying forever on further ticks.
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+
+        Assert.Equal(restoreCallsAfterBanner, _fan.RestoreDefaultCallCount);
+        Assert.Null(alert);
+    }
+
+    [Fact]
+    public void RestoreDefault_RecoversPartwayThroughRetries_StopsVerifying()
+    {
+        _fan.RestoreDefaultTakesEffect = false;
+        EnableFixedFan(40);
+        using var manager = CreateManager();
+        manager.Activate();
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+        manager.RestoreAll();
+        _settingsStore.Update(s => s.Hardware.FanControlEnabled = false);
+
+        FanControlAlert? alert = null;
+        manager.StatusChanged += (_, e) => alert = e;
+
+        // Reach the first retry (tick 3), then let the retry actually take effect this time.
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+        _fan.RestoreDefaultTakesEffect = true;
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50)); // the retry itself
+        Assert.False(_fan.IsUnderSoftwareControl);
+        var restoreCallsAfterRecovery = _fan.RestoreDefaultCallCount;
+
+        for (var i = 0; i < 5; i++)
+        {
+            _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+        }
+
+        Assert.Equal(restoreCallsAfterRecovery, _fan.RestoreDefaultCallCount);
+        Assert.Null(alert);
+    }
+
+    [Fact]
+    public void FreshSetPercentAfterRestore_CancelsInFlightVerification_NeverRetriesOverIt()
+    {
+        // If the user switches the fan back to a Fixed/Curve profile while an earlier hand-back is
+        // still being verified, the verification retry must never fight that fresh SetPercent.
+        _fan.RestoreDefaultTakesEffect = false;
+        EnableFixedFan(40);
+        using var manager = CreateManager();
+        manager.Activate();
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+        manager.RestoreAll(); // starts a verification that will never clear on its own
+
+        // Re-enable control with a fresh fixed target before the verification window elapses.
+        _settingsStore.Update(s => s.Hardware.FanProfiles[FanId] = new FanProfileSettings { Mode = FanMode.Fixed, FixedPercent = 55 });
+        _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+        Assert.Equal(55, _fan.CurrentPercent);
+        var restoreCallsAfterRetake = _fan.RestoreDefaultCallCount;
+
+        FanControlAlert? alert = null;
+        manager.StatusChanged += (_, e) => alert = e;
+
+        // The engine re-commands the fixed target every tick (that is normal/expected), but the
+        // cancelled restore verification must never call RestoreDefault again over it.
+        for (var i = 0; i < 6; i++)
+        {
+            _hardwareService.RaiseSnapshot(HealthySnapshotWithCpuTemp(50));
+        }
+
+        Assert.Equal(restoreCallsAfterRetake, _fan.RestoreDefaultCallCount);
+        Assert.Equal(55, _fan.CurrentPercent);
+        Assert.Null(alert);
+    }
 }
