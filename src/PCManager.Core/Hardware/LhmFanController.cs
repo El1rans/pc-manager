@@ -42,6 +42,8 @@ public sealed class LhmFanController : IFanController
 
     public double? CurrentPercent => _controlSensor.Value;
 
+    public bool IsUnderSoftwareControl => _control.ControlMode == ControlMode.Software;
+
     public bool CanControl => true;
 
     public string? RpmSensorId => _rpmSensor?.Identifier.ToString();
