@@ -25,6 +25,9 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
     private const string NotConnectedMessage =
         "Not connected. In OpenRGB, open SDK Server and click Start Server, then Retry.";
 
+    private const string ActionNotConnectedMessage =
+        "Not connected to OpenRGB. Start OpenRGB, then click Retry.";
+
     /// <summary>Preset swatches shown in the "All devices" card's grid, alongside the hex box.</summary>
     public static readonly IReadOnlyList<string> PresetSwatches =
     [
@@ -259,6 +262,11 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
 
     private static string? DescribeFailure(LightingApplyResult result, string verb)
     {
+        if (result == LightingApplyResult.NotConnected)
+        {
+            return ActionNotConnectedMessage;
+        }
+
         if (result.FailedCount == 0)
         {
             return null;

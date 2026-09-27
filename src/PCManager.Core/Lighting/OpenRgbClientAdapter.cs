@@ -11,7 +11,23 @@ public sealed class OpenRgbClientAdapter : IOpenRgbClient
     private readonly string _host;
     private readonly int _port;
     private readonly int _timeoutMs;
+    private readonly Lock _lock = new();
     private OpenRGB.NET.OpenRgbClient? _client;
+
+    /// <summary>The client a <see cref="Connect"/> call currently in flight has constructed, if
+    /// any - stored here (before the potentially slow/blocking handshake in
+    /// <c>OpenRGB.NET.OpenRgbClient.Connect</c> even starts) purely so a concurrent
+    /// <see cref="Dispose"/> (e.g. <c>LightingService</c> recovering from a timeout on another
+    /// thread) has something to dispose. Disposing it there is what actually unblocks that
+    /// in-flight handshake, instead of leaking its socket and leaving that thread stuck forever.
+    /// </summary>
+    private OpenRGB.NET.OpenRgbClient? _pendingClient;
+
+    /// <summary>Incremented on every <see cref="Connect"/> call and every <see cref="Dispose"/>;
+    /// lets a <see cref="Connect"/> that was superseded while it was still connecting (by a
+    /// Dispose()+reconnect that ran on another thread) recognize that and discard its own,
+    /// now-stale result instead of overwriting a newer <see cref="_client"/>.</summary>
+    private long _generation;
 
     public OpenRgbClientAdapter(string host, int port, int timeoutMs)
     {
@@ -35,25 +51,69 @@ public sealed class OpenRgbClientAdapter : IOpenRgbClient
             return;
         }
 
-        DisposeClient();
+        long generation;
+        lock (_lock)
+        {
+            DisposeClientLocked();
+            generation = ++_generation;
+        }
 
         // autoConnect: false so a failed Connect() below leaves us able to dispose the half-built
         // client instead of leaking its socket (the constructor's own auto-connect gives no chance
         // to clean up before the exception reaches the caller).
         var client = new OpenRGB.NET.OpenRgbClient(
             ip: _host, port: _port, name: "PC Manager", autoConnect: false, timeoutMs: _timeoutMs);
+
+        lock (_lock)
+        {
+            if (generation != _generation)
+            {
+                // Superseded (another Connect()/Dispose() already ran) before the handshake even
+                // started - discard immediately.
+                client.Dispose();
+                return;
+            }
+
+            _pendingClient = client;
+        }
+
         try
         {
             client.Connect();
         }
         catch
         {
-            client.Dispose();
+            lock (_lock)
+            {
+                if (generation == _generation)
+                {
+                    // Still the current attempt - nobody superseded it, so it wasn't already
+                    // disposed by a concurrent Connect()/Dispose()'s own DisposeClientLocked();
+                    // clean it up ourselves. (If generation changed, that call already disposed
+                    // this exact client - disposing it again here would throw.)
+                    _pendingClient = null;
+                    client.Dispose();
+                }
+            }
+
             throw;
         }
 
-        client.DeviceListUpdated += OnNativeDeviceListUpdated;
-        _client = client;
+        lock (_lock)
+        {
+            if (generation != _generation)
+            {
+                // Superseded while the handshake was in flight (a concurrent Dispose(), or a whole
+                // new Connect()) - already disposed by that call's own DisposeClientLocked(), so
+                // there is nothing left to clean up; just don't let this stale success overwrite a
+                // newer _client.
+                return;
+            }
+
+            client.DeviceListUpdated += OnNativeDeviceListUpdated;
+            _pendingClient = null;
+            _client = client;
+        }
     }
 
     public int GetControllerCount() => RequireClient().GetControllerCount();
@@ -73,15 +133,35 @@ public sealed class OpenRgbClientAdapter : IOpenRgbClient
     public void UpdateLeds(int deviceIndex, IReadOnlyList<RgbColor> colors) =>
         RequireClient().UpdateLeds(deviceIndex, ToNativeColors(colors));
 
-    public void Dispose() => DisposeClient();
+    public void Dispose()
+    {
+        lock (_lock)
+        {
+            // Bump the generation first so an in-flight Connect() (see above) recognizes, once its
+            // handshake returns (or throws), that it has been superseded and must not resurrect
+            // _client or double-dispose whatever DisposeClientLocked() below is about to clean up.
+            _generation++;
+            DisposeClientLocked();
+        }
+    }
 
-    private void DisposeClient()
+    /// <summary>Disposes both <see cref="_client"/> (the last established connection) and
+    /// <see cref="_pendingClient"/> (an in-flight <see cref="Connect"/> call's not-yet-established
+    /// one, if any - disposing it is what unblocks that call's blocking handshake). Callers hold
+    /// <see cref="_lock"/>.</summary>
+    private void DisposeClientLocked()
     {
         if (_client is not null)
         {
             _client.DeviceListUpdated -= OnNativeDeviceListUpdated;
             _client.Dispose();
             _client = null;
+        }
+
+        if (_pendingClient is not null)
+        {
+            _pendingClient.Dispose();
+            _pendingClient = null;
         }
     }
 

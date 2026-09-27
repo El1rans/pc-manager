@@ -1,7 +1,6 @@
 using System.IO;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
-using PCManager.Core.Components;
 
 namespace PCManager.Core.Lighting;
 
@@ -30,7 +29,6 @@ public sealed class LightingService : ILightingService, IDisposable
     private static readonly IReadOnlyList<string> NoProfiles = [];
 
     private readonly IOpenRgbClient _client;
-    private readonly IComponentService _componentService;
     private readonly ILogger<LightingService> _logger;
     private readonly TimeSpan _callTimeout;
     private readonly TimeSpan _heartbeatInterval;
@@ -46,21 +44,26 @@ public sealed class LightingService : ILightingService, IDisposable
     /// </param>
     /// <param name="heartbeatInterval">Overrides <see cref="DefaultHeartbeatInterval"/>; test seam
     /// only, same reasoning as <paramref name="callTimeout"/>.</param>
+    /// <remarks>
+    /// An earlier version of this class also disconnected in reaction to
+    /// <c>IComponentService.StatusChanged</c> leaving <c>Running</c> for the openrgb component.
+    /// That was removed: <c>ComponentService</c> only re-detects a component's status when asked
+    /// (e.g. a page navigation, or an install/start action) - it does not itself notice OpenRGB's
+    /// process exiting - so that reaction never actually fired for the "user closed OpenRGB" case
+    /// it was meant to catch. The heartbeat below is the real detection path.
+    /// </remarks>
     public LightingService(
         IOpenRgbClient client,
-        IComponentService componentService,
         ILogger<LightingService> logger,
         TimeSpan? callTimeout = null,
         TimeSpan? heartbeatInterval = null)
     {
         _client = client;
-        _componentService = componentService;
         _logger = logger;
         _callTimeout = callTimeout ?? DefaultCallTimeout;
         _heartbeatInterval = heartbeatInterval ?? DefaultHeartbeatInterval;
 
         _client.DeviceListUpdated += OnClientDeviceListUpdated;
-        _componentService.StatusChanged += OnComponentStatusChanged;
     }
 
     public bool IsConnected => _isConnected;
@@ -217,9 +220,11 @@ public sealed class LightingService : ILightingService, IDisposable
         _disposed = true;
         StopHeartbeat();
         _client.DeviceListUpdated -= OnClientDeviceListUpdated;
-        _componentService.StatusChanged -= OnComponentStatusChanged;
         _client.Dispose();
-        _gate.Dispose();
+        // The semaphore is intentionally not disposed: a call already past the WaitAsync() above
+        // could still be mid-flight (e.g. its own finally about to run Release()) when Dispose()
+        // runs on another thread; disposing it here would turn that Release() into an
+        // ObjectDisposedException instead of a harmless no-op.
     }
 
     private RgbDevice FindDevice(int deviceIndex)
@@ -376,8 +381,22 @@ public sealed class LightingService : ILightingService, IDisposable
             await delayCts.CancelAsync().ConfigureAwait(false);
 
             var result = await work.ConfigureAwait(false);
-            _isConnected = _client.Connected;
-            return result;
+
+            if (TryCheckClientConnected())
+            {
+                _isConnected = true;
+                return result;
+            }
+
+            // The action itself did not throw, but the client no longer considers itself
+            // connected - e.g. a phantom reply from a since-fixed vendored bug, or simply
+            // Connect() itself returning false. Never assign IsConnected directly: always go
+            // through the same dispose-and-announce path as every other kind of disconnect, so a
+            // real disconnect is never silently swallowed with no event, no log, and no cleanup
+            // (see docs/upstream/openrgb-net.md for the bug that originally masked this).
+            DisposeClientSafely();
+            HandleDisconnect();
+            return defaultValue;
         }
         catch (OperationCanceledException)
         {
@@ -443,38 +462,4 @@ public sealed class LightingService : ILightingService, IDisposable
     }
 
     private void OnClientDeviceListUpdated(object? sender, EventArgs e) => DevicesChanged?.Invoke(this, EventArgs.Empty);
-
-    /// <summary>Reacts to the shared component service reporting that OpenRGB itself is no longer
-    /// running (closed, uninstalled, ...): disconnects immediately instead of waiting for the next
-    /// heartbeat or user-triggered call.</summary>
-    private void OnComponentStatusChanged(object? sender, ComponentStatusChangeEventInfo e)
-    {
-        if (e.ComponentId != ComponentIds.OpenRgb || e.Status.State == ComponentState.Running || !_isConnected)
-        {
-            return;
-        }
-
-        _ = DisconnectDueToComponentStoppedAsync();
-    }
-
-    private async Task DisconnectDueToComponentStoppedAsync()
-    {
-        try
-        {
-            await _gate.WaitAsync().ConfigureAwait(false);
-            try
-            {
-                DisposeClientSafely();
-                HandleDisconnect();
-            }
-            finally
-            {
-                _gate.Release();
-            }
-        }
-        catch (ObjectDisposedException)
-        {
-            // The service itself was disposed (e.g. app shutdown) while this was in flight.
-        }
-    }
 }
