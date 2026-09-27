@@ -15,6 +15,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `docs/screenshots/` that showed real machine-identifying data with a redacted version, cropped
   `first-run.png` down to just the app window (it previously captured the whole desktop), and
   removed two obsolete/unused screenshots (`after-skip.png`, `foundation.png`).
+- Code signing: applied for free code signing through the SignPath Foundation program for open
+  source projects. `docs/CODE_SIGNING_POLICY.md` documents the required policy (team roles,
+  privacy statement); `docs/signing/` holds the SignPath artifact configurations (each requiring a
+  `version` metadata parameter/product-version restriction) and a draft application.
+  `.github/workflows/release.yml` now builds and signs in one job (`build-sign`, read-only
+  permissions) and publishes the GitHub Release in a separate job (`publish`, the only one with
+  `contents: write`) that only downloads what `build-sign` produced; it submits the published
+  `PCManager.exe` and the compiled installer to SignPath for signing on every tagged release,
+  verifying the resulting Authenticode signature (including its timestamp), and falls back to
+  publishing an unsigned release with a visible warning both in the workflow log and in the release
+  notes themselves until the SignPath project is approved and configured (see `docs/RELEASING.md`;
+  an optional `SIGNPATH_REQUIRED` repository variable instead fails the release outright when
+  signing isn't configured). Added `SECURITY.md` describing how to report vulnerabilities privately
+  via GitHub.
+- Updates: a "Check for updates when PC Manager starts" toggle on the Updates page (on by default,
+  matching prior behaviour) that controls whether `UpdatesAutoCheckHostedService` runs a `winget
+  upgrade` listing in the background on every app start - see `docs/CODE_SIGNING_POLICY.md`'s
+  privacy statement, which now discloses this background `winget` call and links Microsoft's,
+  AnyDesk's and OpenRGB's own privacy documentation for the network activity each is responsible
+  for.
 - Installer and releases: a self-contained, single-file win-x64 publish profile; an Inno Setup 6
   script (`installer/PCManager.iss`) that installs PC Manager per-machine to
   `Program Files\PC Manager` with Start menu/desktop/startup shortcuts, an optional Components

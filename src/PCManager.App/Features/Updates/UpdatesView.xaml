@@ -135,7 +135,9 @@
             <WrapPanel>
                 <CheckBox Content="Silent install (hide installer windows)" IsChecked="{Binding Silent}" Margin="0,0,16,4"/>
                 <CheckBox Content="Include apps with unknown version" IsChecked="{Binding IncludeUnknown}"
-                          IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" Margin="0,0,0,4"/>
+                          IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" Margin="0,0,16,4"/>
+                <CheckBox Content="Check for updates when PC Manager starts" IsChecked="{Binding CheckOnStartup}"
+                          Margin="0,0,0,4"/>
             </WrapPanel>
             <DockPanel LastChildFill="False" Margin="0,6,0,0">
                 <Button DockPanel.Dock="Right" Content="{Binding UpdateSelectedButtonText}"

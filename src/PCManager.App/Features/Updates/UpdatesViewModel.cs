@@ -87,6 +87,9 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     private bool _includeUnknown;
 
     [ObservableProperty]
+    private bool _checkOnStartup;
+
+    [ObservableProperty]
     private string _logText = string.Empty;
 
     [ObservableProperty]
@@ -122,6 +125,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         var updates = _settingsStore.Current.Updates;
         _silent = updates.Silent;
         _includeUnknown = updates.IncludeUnknown;
+        _checkOnStartup = updates.CheckOnStartup;
 
         Packages = [];
         Packages.CollectionChanged += OnPackagesCollectionChanged;
@@ -327,6 +331,8 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
 
         _ = RefreshAsync(quiet: false);
     }
+
+    partial void OnCheckOnStartupChanged(bool value) => _settingsStore.Update(s => s.Updates.CheckOnStartup = value);
 
     [RelayCommand(CanExecute = nameof(CanRefresh))]
     private Task Refresh() => RefreshAsync(quiet: false);

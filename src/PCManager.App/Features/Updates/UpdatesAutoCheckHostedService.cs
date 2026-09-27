@@ -3,6 +3,7 @@ using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using PCManager.Core.Settings;
 
 namespace PCManager.App.Features.Updates;
 
@@ -12,20 +13,34 @@ namespace PCManager.App.Features.Updates;
 /// <c>docs/specs/02-updates.md</c>: "Check runs automatically when the app starts... Nav badge
 /// shows the count of non-ignored updates." <see cref="UpdatesViewModel.EnsureInitialCheckStartedAsync"/>
 /// guards against also running this if the user opens the Updates page before this service does.
+/// Only runs when <see cref="UpdatesSettings.CheckOnStartup"/> is enabled (the default) - see the
+/// "Check for updates when PC Manager starts" toggle on the Updates page and
+/// <c>docs/CODE_SIGNING_POLICY.md</c>'s privacy statement, which this toggle's existence keeps
+/// accurate.
 /// </summary>
 public sealed class UpdatesAutoCheckHostedService : IHostedService
 {
     private readonly IServiceProvider _serviceProvider;
+    private readonly ISettingsStore _settingsStore;
     private readonly ILogger<UpdatesAutoCheckHostedService> _logger;
 
-    public UpdatesAutoCheckHostedService(IServiceProvider serviceProvider, ILogger<UpdatesAutoCheckHostedService> logger)
+    public UpdatesAutoCheckHostedService(
+        IServiceProvider serviceProvider, ISettingsStore settingsStore, ILogger<UpdatesAutoCheckHostedService> logger)
     {
         _serviceProvider = serviceProvider;
+        _settingsStore = settingsStore;
         _logger = logger;
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        if (!_settingsStore.Current.Updates.CheckOnStartup)
+        {
+            _logger.LogInformation(
+                "Skipping the startup update check - 'Check for updates when PC Manager starts' is turned off.");
+            return Task.CompletedTask;
+        }
+
         // Deliberately not awaited: a winget listing can take a few seconds, and every
         // IHostedService.StartAsync is awaited before the main window is shown (see App.OnStartup)
         // - this check must not delay that.

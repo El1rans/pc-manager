@@ -23,10 +23,10 @@ Page layout (top to bottom): title + summary line ("10 updates available (1 igno
 DataGrid columns: checkbox, Name, ID, Installed, Available, Notes ("Ignored" / "Pinned / explicit only" / "Current version unknown"), Status (colored by state + text: Queued, Updating..., Updated, Failed, Skipped). Sortable. Double-click toggles the checkbox. Right-click menu on selected rows: Ignore, Stop ignoring, Copy ID, Show package info (runs `ShowAsync` into the log).
 
 Behaviour:
-- Check runs automatically when the app starts (in the background) and on Refresh. Nav badge shows the count of non-ignored updates (hidden when 0).
+- Check runs automatically when the app starts (in the background, unless "Check for updates when PC Manager starts" is turned off) and on Refresh. Nav badge shows the count of non-ignored updates (hidden when 0).
 - Default selection: all non-ignored, non-explicit packages are ticked.
 - Update runs selected packages one by one, updates each row's status live, then re-checks quietly; rows that still exist keep their last status, successfully updated rows disappear. A final summary line: "Finished: 5 updated, 1 failed, 0 skipped". Play `SystemSounds.Asterisk`.
-- Ignore list, Silent, Include-unknown persist in the `Updates` settings section.
+- Ignore list, Silent, Include-unknown, Check-on-startup persist in the `Updates` settings section.
 - Everything written to the Log panel also goes to the app log.
 
 ## Tests

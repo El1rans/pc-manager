@@ -33,6 +33,10 @@ AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 ; Sets the compiled Setup.exe's own FileVersion/ProductVersion resource, which is otherwise blank.
 VersionInfoVersion={#MyAppVersion}
+; Explicit (Inno defaults this to AppName already) so it's obvious this must keep matching
+; Directory.Build.props's <Product> and docs/signing/*.xml's product-name="PC Manager" metadata
+; restriction - SignPath Foundation requires artifact metadata restrictions.
+VersionInfoProductName={#MyAppName}
 DefaultDirName={autopf}\PC Manager
 DefaultGroupName=PC Manager
 DisableProgramGroupPage=yes
