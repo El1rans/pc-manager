@@ -97,3 +97,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   A fan still stuck after 3 ticks gets up to 3 `RestoreDefault` retries (never `SetPercent`); if it
   still never clears, a critical banner tells the user to restart their PC to return it to BIOS
   control. Closes a known gap left open by the hardware/fan-control milestone (PR #11).
+- Fixed two more intermittent CI test failures on `windows-latest`, both tied to real wall-clock
+  timing rather than the safety logic itself:
+  - `FanControlManager`'s watchdog (armed/owning-but-stalled detection) now reads "now" from an
+    injected `TimeProvider` (defaulting to `TimeProvider.System`) and creates its polling timer via
+    `TimeProvider.CreateTimer` instead of a raw `System.Threading.Timer`. Tests drive a
+    `FakeTimeProvider` and advance it explicitly, so `Watchdog_ActiveAndOwningButNoSnapshotForTooLong_PausesAndRestoresOwnedFans`
+    and `ResumeFromSuspend_AfterLongPause_DoesNotImmediatelyTripWatchdog` no longer depend on a real
+    `Thread.Sleep` racing a real timer thread. No change to watchdog thresholds or gating.
+  - `SettingsStore`'s bounded retry backoff (10/25/50/100/200 ms) around the settings-file move is
+    now driven through an injectable sleeper (production still uses `Thread.Sleep`). The
+    transient-lock test now uses a fake sleeper that releases the lock deterministically on the
+    first retry instead of racing a real 50 ms `Timer` against the retry budget, which could
+    occasionally fire late under CI load and exhaust the retries before the lock was released.

@@ -1,4 +1,3 @@
-using System.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using PCManager.Core.Settings;
 using Xunit;
@@ -124,20 +123,23 @@ public sealed class SettingsStoreTests : IDisposable
     [Fact]
     public void Update_WhenTargetFileTransientlyLocked_RetriesAndPersists()
     {
-        var store = CreateStore();
+        // Deterministic root-cause fix: rather than racing a real 50ms Timer against the retry
+        // backoff (10/25/50/100/200ms), the fake sleeper itself releases the lock on the very first
+        // retry, right before the second attempt - no wall-clock timer involved, so this can never
+        // fire late under CI load and exhaust the retry budget.
+        FileStream? lockingStream = null;
+        var store = new SettingsStore(NullLogger<SettingsStore>.Instance, _settingsPath, sleeper: _ =>
+        {
+            lockingStream?.Dispose();
+            lockingStream = null;
+        });
         store.Save();
 
-        using var lockingStream = new FileStream(
+        lockingStream = new FileStream(
             _settingsPath,
             FileMode.Open,
             FileAccess.Read,
             FileShare.Read);
-
-        using var releaseTimer = new Timer(
-            _ => lockingStream.Dispose(),
-            state: null,
-            dueTime: TimeSpan.FromMilliseconds(50),
-            period: Timeout.InfiniteTimeSpan);
 
         store.Update(s => s.Setup.LaunchCount++);
 
@@ -145,6 +147,8 @@ public sealed class SettingsStoreTests : IDisposable
 
         var reloaded = CreateStore();
         Assert.Equal(1, reloaded.Current.Setup.LaunchCount);
+
+        lockingStream?.Dispose();
     }
 
     [Fact]
