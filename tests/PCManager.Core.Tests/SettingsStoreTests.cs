@@ -1,3 +1,4 @@
+using System.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using PCManager.Core.Settings;
 using Xunit;
@@ -118,6 +119,50 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.True(File.Exists(_settingsPath));
         var reloaded = CreateStore();
         Assert.True(reloaded.Current.Setup.FirstRunCompleted);
+    }
+
+    [Fact]
+    public void Update_WhenTargetFileTransientlyLocked_RetriesAndPersists()
+    {
+        var store = CreateStore();
+        store.Save();
+
+        using var lockingStream = new FileStream(
+            _settingsPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read);
+
+        using var releaseTimer = new Timer(
+            _ => lockingStream.Dispose(),
+            state: null,
+            dueTime: TimeSpan.FromMilliseconds(50),
+            period: Timeout.InfiniteTimeSpan);
+
+        store.Update(s => s.Setup.LaunchCount++);
+
+        Assert.Equal(1, store.Current.Setup.LaunchCount);
+
+        var reloaded = CreateStore();
+        Assert.Equal(1, reloaded.Current.Setup.LaunchCount);
+    }
+
+    [Fact]
+    public void Update_WhenTargetFilePermanentlyLocked_DoesNotThrow_AndCurrentReflectsChange()
+    {
+        var store = CreateStore();
+        store.Save();
+
+        using var lockingStream = new FileStream(
+            _settingsPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read);
+
+        var exception = Record.Exception(() => store.Update(s => s.Setup.LaunchCount++));
+
+        Assert.Null(exception);
+        Assert.Equal(1, store.Current.Setup.LaunchCount);
     }
 
     [Fact]

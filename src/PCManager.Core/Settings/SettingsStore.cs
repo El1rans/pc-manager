@@ -14,6 +14,14 @@ public sealed class SettingsStore : ISettingsStore
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
+    /// <summary>
+    /// Bounded backoff (milliseconds) between retries of the final <see cref="File.Move"/> in
+    /// <see cref="SaveToDisk"/>. Defender, the Search indexer, or OneDrive/AV filter drivers can
+    /// briefly hold the just-written target file, which surfaces as a transient
+    /// <see cref="IOException"/> or <see cref="UnauthorizedAccessException"/>.
+    /// </summary>
+    private static readonly int[] MoveRetryDelaysMs = [10, 25, 50, 100, 200];
+
     private readonly Lock _lock = new();
     private readonly ILogger<SettingsStore> _logger;
     private readonly string _settingsPath;
@@ -105,6 +113,14 @@ public sealed class SettingsStore : ISettingsStore
         settings.Setup ??= new SetupSettings();
     }
 
+    /// <summary>
+    /// Writes <paramref name="settings"/> to a temp file, then atomically moves it onto
+    /// <see cref="_settingsPath"/>. Persistence is best-effort: if the final move keeps failing
+    /// because some other process (Defender, the Search indexer, OneDrive) is transiently holding
+    /// the target, this logs a warning and returns instead of throwing, so a lock held by another
+    /// process never crashes the caller. <see cref="Current"/> stays authoritative in memory and
+    /// the next successful save will persist it.
+    /// </summary>
     private void SaveToDisk(AppSettings settings)
     {
         var directory = Path.GetDirectoryName(_settingsPath);
@@ -118,13 +134,57 @@ public sealed class SettingsStore : ISettingsStore
         {
             var json = JsonSerializer.Serialize(settings, JsonOptions);
             File.WriteAllText(tempPath, json);
-            File.Move(tempPath, _settingsPath, overwrite: true);
+            MoveWithRetry(tempPath, _settingsPath);
         }
         finally
         {
-            if (File.Exists(tempPath))
+            try
             {
-                File.Delete(tempPath);
+                if (File.Exists(tempPath))
+                {
+                    File.Delete(tempPath);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Best-effort cleanup; a leftover temp file does not affect correctness and must
+                // never mask the original save outcome.
+                if (_logger.IsEnabled(LogLevel.Debug))
+                {
+                    _logger.LogDebug(ex, "Could not delete temp settings file at {Path}.", tempPath);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Moves <paramref name="tempPath"/> onto <paramref name="targetPath"/>, retrying with bounded
+    /// backoff (<see cref="MoveRetryDelaysMs"/>) on transient <see cref="IOException"/> or
+    /// <see cref="UnauthorizedAccessException"/> failures. If every attempt fails, logs a warning
+    /// and returns without throwing; the save is best-effort and the next call retries.
+    /// </summary>
+    private void MoveWithRetry(string tempPath, string targetPath)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                File.Move(tempPath, targetPath, overwrite: true);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                if (attempt >= MoveRetryDelaysMs.Length)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Could not save settings to {Path} after {Attempts} attempts; keeping in-memory settings and retrying on the next save.",
+                        targetPath,
+                        attempt + 1);
+                    return;
+                }
+
+                Thread.Sleep(MoveRetryDelaysMs[attempt]);
             }
         }
     }
