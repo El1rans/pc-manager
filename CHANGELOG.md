@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Installer and releases: a self-contained, single-file win-x64 publish profile; an Inno Setup 6
+  script (`installer/PCManager.iss`) that installs PC Manager per-machine to
+  `Program Files\PC Manager` with Start menu/desktop/startup shortcuts, an optional Components
+  page (AnyDesk ticked by default; OpenRGB and the PawnIO driver unticked) that installs each
+  choice via `winget` and writes the `HKLM\Software\PC Manager\Installer\Components` marker
+  first-run setup reads; and an uninstaller that leaves AnyDesk/OpenRGB/PawnIO in place and asks
+  before deleting the current user's `%APPDATA%\PCManager` data. A generated app icon. A single
+  `Version` in `Directory.Build.props`, shown in the sidebar footer. CI now compiles the installer
+  and uploads it (with a SHA-256 checksum) as a build artifact on every PR/push to `main`; a new
+  `v*.*.*` tag builds, tests, compiles the installer and publishes a GitHub Release with the setup
+  exe, its checksum, and the matching CHANGELOG section as release notes.
 - Foundation: solution layout, host + DI, Serilog file logging, JSON settings store with atomic
   writes and corrupt-file recovery, WPF shell with navigation rail (Dashboard, Updates, Hardware,
   Lighting placeholders), admin elevation support, CI workflow and repo hygiene files.
