@@ -7,12 +7,20 @@ namespace PCManager.App.Features.Hardware;
 
 /// <summary>
 /// Starts/stops <see cref="IHardwareService"/> with the app's lifetime, and covers spec 04's rule
-/// 5 ("restore on exit, crash handler, system suspend, and session end"): app exit and crash both
-/// go through <see cref="StopAsync"/> (the host's normal shutdown path, and
-/// <c>App.OnDispatcherUnhandledException</c>'s best-effort call - see <c>App.xaml.cs</c>), while
-/// suspend and session-end are handled here directly via <see cref="SystemEvents"/>, since neither
-/// stops the host.
+/// 5 ("restore on exit, crash handler, system suspend, and session end"): app exit goes through
+/// <see cref="StopAsync"/> (the host's normal shutdown path); crash goes through
+/// <c>App</c>'s unhandled-exception handlers (see <c>App.xaml.cs</c>); suspend and session-end are
+/// handled here directly via <see cref="SystemEvents"/>, since neither stops the host.
 /// </summary>
+/// <remarks>
+/// B2: every one of these calls <see cref="FanControlManager.Suspend"/>, not
+/// <see cref="FanControlManager.RestoreAll"/> directly - a plain restore is undone by the very next
+/// hardware-thread tick (worst case well under a second on Modern Standby, since the machine can
+/// resume almost immediately), because nothing tells the engine to stop re-applying its last
+/// target. <c>Suspend</c> pauses evaluation *and* restores, and only <see cref="OnPowerModeChanged"/>
+/// resuming clears that pause - exit and session-end intentionally leave it paused, since the app
+/// is going away anyway (or the user must explicitly re-arm from the page next launch).
+/// </remarks>
 public sealed class HardwareHostedService : IHostedService
 {
     private readonly IHardwareService _hardwareService;
@@ -39,32 +47,45 @@ public sealed class HardwareHostedService : IHostedService
     {
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         SystemEvents.SessionEnding -= OnSessionEnding;
-        RestoreAllBestEffort("app shutdown");
+        SuspendBestEffort("app shutdown");
         _hardwareService.Stop();
         return Task.CompletedTask;
     }
 
     private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
     {
-        if (e.Mode == PowerModes.Suspend)
+        switch (e.Mode)
         {
-            RestoreAllBestEffort("system suspend");
+            case PowerModes.Suspend:
+                SuspendBestEffort("system suspend");
+                break;
+            case PowerModes.Resume:
+                try
+                {
+                    _fanControlManager.ResumeFromSuspend();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error resuming fan control after system resume.");
+                }
+
+                break;
         }
     }
 
-    private void OnSessionEnding(object sender, SessionEndingEventArgs e) => RestoreAllBestEffort("session ending");
+    private void OnSessionEnding(object sender, SessionEndingEventArgs e) => SuspendBestEffort("session ending");
 
-    private void RestoreAllBestEffort(string reason)
+    private void SuspendBestEffort(string reason)
     {
         try
         {
-            _fanControlManager.RestoreAll();
+            _fanControlManager.Suspend(reason);
         }
         catch (Exception ex)
         {
             // Best-effort safety net: the process may already be tearing down (suspend/session-end
             // handlers run with little time), so log and move on rather than throw from here.
-            _logger.LogError(ex, "Could not restore fans to default control on {Reason}.", reason);
+            _logger.LogError(ex, "Could not pause/restore fans to default control on {Reason}.", reason);
         }
     }
 }

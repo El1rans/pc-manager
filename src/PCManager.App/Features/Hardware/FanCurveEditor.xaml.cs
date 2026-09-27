@@ -30,11 +30,21 @@ public partial class FanCurveEditor : UserControl
     public static readonly DependencyProperty CommitCommandProperty = DependencyProperty.Register(
         nameof(CommitCommand), typeof(ICommand), typeof(FanCurveEditor));
 
+    private readonly Dictionary<EditableCurvePoint, Ellipse> _pointElements = [];
+    private Polyline? _polyline;
     private EditableCurvePoint? _dragging;
 
     public FanCurveEditor()
     {
         InitializeComponent();
+
+        // S9: capture on the canvas itself, not the individual point being dragged. A capture held
+        // by a child element (the ellipse) is lost the instant that element is removed from the
+        // visual tree - which a naive "clear and rebuild everything" Redraw() does on every mouse
+        // move. Capturing on the canvas (which is never rebuilt) survives that, and dragging is
+        // handled here by repositioning only the dragged point instead of a full Redraw().
+        PART_Canvas.MouseMove += OnCanvasMouseMove;
+        PART_Canvas.MouseLeftButtonUp += OnCanvasMouseUp;
     }
 
     public System.Collections.ObjectModel.ObservableCollection<EditableCurvePoint>? Points
@@ -75,9 +85,13 @@ public partial class FanCurveEditor : UserControl
 
     private void OnCanvasSizeChanged(object sender, SizeChangedEventArgs e) => Redraw();
 
+    /// <summary>Full rebuild - only for structural changes (points added/removed, resize, initial
+    /// bind). Never called while a drag is in progress; see <see cref="OnCanvasMouseMove"/>.</summary>
     private void Redraw()
     {
         PART_Canvas.Children.Clear();
+        _pointElements.Clear();
+        _polyline = null;
 
         var points = Points;
         var width = PART_Canvas.ActualWidth;
@@ -100,6 +114,7 @@ public partial class FanCurveEditor : UserControl
         }
 
         PART_Canvas.Children.Add(polyline);
+        _polyline = polyline;
 
         foreach (var point in ordered)
         {
@@ -115,9 +130,8 @@ public partial class FanCurveEditor : UserControl
             Canvas.SetLeft(ellipse, canvasPoint.X - PointRadius);
             Canvas.SetTop(ellipse, canvasPoint.Y - PointRadius);
             ellipse.MouseLeftButtonDown += OnPointMouseDown;
-            ellipse.MouseMove += OnPointMouseMove;
-            ellipse.MouseLeftButtonUp += OnPointMouseUp;
             PART_Canvas.Children.Add(ellipse);
+            _pointElements[point] = ellipse;
         }
     }
 
@@ -132,11 +146,11 @@ public partial class FanCurveEditor : UserControl
     {
         var ellipse = (Ellipse)sender;
         _dragging = (EditableCurvePoint)ellipse.Tag;
-        ellipse.CaptureMouse();
+        PART_Canvas.CaptureMouse();
         e.Handled = true;
     }
 
-    private void OnPointMouseMove(object sender, MouseEventArgs e)
+    private void OnCanvasMouseMove(object sender, MouseEventArgs e)
     {
         if (_dragging is null || e.LeftButton != MouseButtonState.Pressed || Points is null)
         {
@@ -169,17 +183,41 @@ public partial class FanCurveEditor : UserControl
         _dragging.TemperatureC = Math.Clamp(temperature, minTemp, Math.Max(minTemp, maxTemp));
         _dragging.Percent = Math.Clamp(percent, minPct, Math.Max(minPct, maxPct));
 
-        Redraw();
+        RepositionDraggedPoint(width, height);
     }
 
-    private void OnPointMouseUp(object sender, MouseButtonEventArgs e)
+    /// <summary>Moves only the dragged point's ellipse and refreshes the polyline - unlike
+    /// <see cref="Redraw"/>, this never touches the visual tree's element identity, so the mouse
+    /// capture taken in <see cref="OnPointMouseDown"/> (on the canvas) is never disturbed.</summary>
+    private void RepositionDraggedPoint(double width, double height)
+    {
+        if (_dragging is null || Points is null)
+        {
+            return;
+        }
+
+        if (_pointElements.TryGetValue(_dragging, out var ellipse))
+        {
+            var canvasPoint = ToCanvas(_dragging, width, height);
+            Canvas.SetLeft(ellipse, canvasPoint.X - PointRadius);
+            Canvas.SetTop(ellipse, canvasPoint.Y - PointRadius);
+        }
+
+        if (_polyline is not null)
+        {
+            var ordered = Points.OrderBy(p => p.TemperatureC).ToList();
+            _polyline.Points = new PointCollection(ordered.Select(p => ToCanvas(p, width, height)));
+        }
+    }
+
+    private void OnCanvasMouseUp(object sender, MouseButtonEventArgs e)
     {
         if (_dragging is null)
         {
             return;
         }
 
-        ((Ellipse)sender).ReleaseMouseCapture();
+        PART_Canvas.ReleaseMouseCapture();
         _dragging = null;
         e.Handled = true;
 

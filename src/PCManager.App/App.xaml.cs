@@ -166,9 +166,7 @@ public partial class App : System.Windows.Application
 
         services.AddDashboardFeature();
         services.AddUpdatesFeature();
-        services.AddHardwareCore();
         services.AddHardwareFeature();
-        services.AddHostedService<Features.Hardware.HardwareHostedService>();
         services.AddLightingFeature();
         services.AddHostedService<Features.Lighting.OpenRgbAutoStartHostedService>();
         services.AddRemoteSupportFeature();
@@ -187,7 +185,7 @@ public partial class App : System.Windows.Application
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        RestoreFansBestEffort();
+        SuspendFansBestEffort();
         LogUnhandledException(e.Exception, "Unhandled dispatcher exception.");
         ShowUnexpectedErrorDialog();
         e.Handled = true;
@@ -195,7 +193,7 @@ public partial class App : System.Windows.Application
 
     private void OnAppDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
-        RestoreFansBestEffort();
+        SuspendFansBestEffort();
         if (e.ExceptionObject is Exception ex)
         {
             LogUnhandledException(ex, "Unhandled AppDomain exception.");
@@ -203,16 +201,20 @@ public partial class App : System.Windows.Application
     }
 
     /// <summary>Fan-control rule 5's crash-handler leg: a crash must never leave a fan under
-    /// software control. Best-effort - the process may be in a bad state, so this must not throw.</summary>
-    private void RestoreFansBestEffort()
+    /// software control. Uses <c>Suspend</c> rather than a plain restore (B2) - unlike a system
+    /// suspend, nothing here ever calls <c>ResumeFromSuspend</c>, so control stays paused (the user
+    /// must re-arm from the Hardware page) rather than the very next tick silently re-applying
+    /// whatever was last commanded. Best-effort - the process may be in a bad state, so this must
+    /// not throw.</summary>
+    private void SuspendFansBestEffort()
     {
         try
         {
-            _host?.Services.GetService<FanControlManager>()?.RestoreAll();
+            _host?.Services.GetService<FanControlManager>()?.Suspend("unhandled exception");
         }
         catch (Exception ex)
         {
-            Serilog.Log.Error(ex, "Could not restore fans to default control while handling a crash.");
+            Serilog.Log.Error(ex, "Could not pause/restore fans to default control while handling a crash.");
         }
     }
 

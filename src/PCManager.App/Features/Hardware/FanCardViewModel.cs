@@ -43,7 +43,12 @@ public sealed partial class FanCardViewModel : ObservableObject
         Name = name;
         _settingsStore = settingsStore;
 
-        CurvePoints.CollectionChanged += (_, _) => SaveProfile();
+        CurvePoints.CollectionChanged += (_, _) =>
+        {
+            SaveProfile();
+            OnPropertyChanged(nameof(CanAddCurvePoint));
+            AddCurvePointCommand.NotifyCanExecuteChanged();
+        };
         LoadFromSettings();
     }
 
@@ -74,22 +79,30 @@ public sealed partial class FanCardViewModel : ObservableObject
         {
             FixedPercent = minFanPercent;
         }
+
+        // The floor moving can turn a previously-valid curve invalid (a point now below the new
+        // minimum) or vice versa - re-check without touching the points or re-persisting them.
+        CurveError = Mode == FanMode.Curve && !TryValidateCurve(out var error) ? error : null;
     }
+
+    public bool CanAddCurvePoint =>
+        CurvePoints.Count < FanControlOptions.MaxCurvePoints &&
+        (CurvePoints.Count == 0 || CurvePoints.Max(p => p.TemperatureC) < 99);
 
     /// <summary>Bound to the curve editor's drag-completed callback, so a point drag is persisted
     /// once the user releases it rather than on every intermediate mouse-move.</summary>
     [RelayCommand]
     private void CommitCurve() => SaveProfile();
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanAddCurvePoint))]
     private void AddCurvePoint()
     {
-        if (CurvePoints.Count >= FanControlOptions.MaxCurvePoints)
+        if (!CanAddCurvePoint)
         {
             return;
         }
 
-        var last = CurvePoints.Count > 0 ? CurvePoints[^1] : null;
+        var last = CurvePoints.OrderBy(p => p.TemperatureC).LastOrDefault();
         var temp = last is null ? 40 : Math.Min(last.TemperatureC + 10, 99);
         var percent = last is null ? MinFanPercent : Math.Min(last.Percent + 10, 100);
         CurvePoints.Add(new EditableCurvePoint(temp, percent));

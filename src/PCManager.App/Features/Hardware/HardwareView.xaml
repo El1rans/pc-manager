@@ -10,12 +10,23 @@
         <local:FanModeVisibilityConverter x:Key="FanModeToVisibility"/>
 
         <HierarchicalDataTemplate DataType="{x:Type local:SensorTreeNodeViewModel}" ItemsSource="{Binding Children}">
-            <StackPanel Margin="0,4,0,4">
+            <StackPanel Margin="0,4,0,4" Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                <Grid Margin="16,4,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="90"/>
+                        <ColumnDefinition Width="90"/>
+                        <ColumnDefinition Width="90"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="1" Text="Current" Style="{StaticResource Secondary}" FontSize="11"/>
+                    <TextBlock Grid.Column="2" Text="Min" Style="{StaticResource Secondary}" FontSize="11"/>
+                    <TextBlock Grid.Column="3" Text="Max" Style="{StaticResource Secondary}" FontSize="11"/>
+                </Grid>
                 <ItemsControl ItemsSource="{Binding Sensors}" Margin="16,2,0,0">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type local:SensorRowViewModel}">
-                            <Grid Margin="0,1">
+                            <Grid Margin="0,1" Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="220"/>
                                     <ColumnDefinition Width="90"/>
@@ -74,9 +85,16 @@
                         <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="Filter by hardware or sensor name"/>
                     </DockPanel>
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <TreeView ItemsSource="{Binding SensorNodes}" BorderThickness="0" Background="Transparent"/>
-                    </ScrollViewer>
+                    <!-- S10: no outer ScrollViewer - TreeView already scrolls itself, and nesting one
+                         around it fought the tree for mouse-wheel input and expand/collapse clicks. -->
+                    <TreeView ItemsSource="{Binding SensorNodes}" BorderThickness="0" Background="Transparent">
+                        <TreeView.ItemContainerStyle>
+                            <Style TargetType="TreeViewItem">
+                                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                <Setter Property="Visibility" Value="{Binding IsVisible, Converter={StaticResource BoolToVis}}"/>
+                            </Style>
+                        </TreeView.ItemContainerStyle>
+                    </TreeView>
                 </DockPanel>
             </TabItem>
 
@@ -85,7 +103,11 @@
                     <Border DockPanel.Dock="Top" Style="{StaticResource Card}" Margin="0,0,0,12">
                         <StackPanel>
                             <TextBlock Text="Global fan control" Style="{StaticResource CardTitle}"/>
-                            <CheckBox Content="Software fan control" IsChecked="{Binding SoftwareFanControlEnabled}"/>
+                            <CheckBox Content="Software fan control" IsChecked="{Binding SoftwareFanControlEnabled}"
+                                      IsEnabled="{Binding CanToggleSoftwareFanControl}"/>
+                            <TextBlock Text="{Binding SoftwareFanControlDisabledReason}" Style="{StaticResource Secondary}"
+                                       Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Visibility="{Binding CanToggleSoftwareFanControl, Converter={StaticResource InverseBoolToVis}}"/>
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -108,6 +130,10 @@
                                     Margin="0,12,0,0" HorizontalAlignment="Left"/>
                         </StackPanel>
                     </Border>
+
+                    <TextBlock DockPanel.Dock="Top" Text="This PC doesn't expose fan controls to Windows."
+                               Style="{StaticResource Secondary}" Margin="0,0,0,12"
+                               Visibility="{Binding ShowNoControllableFansMessage, Converter={StaticResource BoolToVis}}"/>
 
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding Fans}">
