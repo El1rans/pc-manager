@@ -101,4 +101,29 @@ public sealed class WingetTableParserTests
         Assert.Empty(packages);
     }
 
+    [Fact]
+    public void Parse_NameWithWideCjkCharacters_ColumnsStayAligned()
+    {
+        // winget pads columns to a fixed DISPLAY-CELL width, not a fixed character count: each of
+        // these 4 CJK characters is 1 string character but occupies 2 display cells, so this row's
+        // raw string is shorter than the header despite lining up in the same columns. Column
+        // widths chosen generously (20/10/10/10) so this stays readable; built with PadRight
+        // (ASCII, so 1 cell per char) rather than hand-counted spaces.
+        var header = "Name".PadRight(20) + "Id".PadRight(10) + "Version".PadRight(10) + "Available".PadRight(10) + "Source";
+        var separator = new string('-', header.Length);
+        // "微软商店" = 4 wide characters = 8 display cells, then 12 half-width spaces to fill the
+        // rest of the 20-cell Name column (8 + 12 = 20) - 16 string characters total, not 20.
+        var nameField = "微软商店" + new string(' ', 12);
+        var row = nameField + "Ms.Store".PadRight(10) + "1.0".PadRight(10) + "2.0".PadRight(10) + "winget";
+        string[] lines = [header, separator, row];
+
+        var packages = WingetTableParser.Parse(lines);
+
+        var package = Assert.Single(packages);
+        Assert.Equal("微软商店", package.Name);
+        Assert.Equal("Ms.Store", package.Id);
+        Assert.Equal("1.0", package.InstalledVersion);
+        Assert.Equal("2.0", package.AvailableVersion);
+        Assert.Equal("winget", package.Source);
+    }
 }

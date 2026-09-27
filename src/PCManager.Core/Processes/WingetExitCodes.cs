@@ -1,10 +1,25 @@
 namespace PCManager.Core.Processes;
 
+/// <summary>How a single package's <c>winget upgrade</c> attempt turned out; drives the Updates
+/// page's Status column and its "Finished: N updated, N failed, N skipped" summary. See
+/// <see cref="WingetExitCodes.Describe"/>.</summary>
+public enum PackageOutcome
+{
+    Success,
+    Skipped,
+    Failed,
+}
+
 /// <summary>
 /// The subset of winget's HRESULT exit codes (see
 /// https://github.com/microsoft/winget-cli/blob/master/doc/windows/package-manager/winget/returnCodes.md)
-/// that <c>IComponentService</c> needs to give a specific, readable outcome for instead of a
-/// generic "installation failed" message.
+/// that <c>IComponentService</c> (installing a component) and the Updates page (upgrading a
+/// package) each need a specific, readable outcome for instead of a generic "failed" message.
+/// Both readings of the same family of codes live on this one type rather than two - an
+/// "already installed"/"no applicable update" code counts as success for
+/// <c>IComponentService.InstallAsync</c> (<see cref="IsAlreadyInstalled"/>) but as
+/// <see cref="PackageOutcome.Skipped"/> for an upgrade (<see cref="Describe"/>), which is exactly
+/// why they are exposed as two different members instead of one shared "is this ok" bool.
 /// </summary>
 public static class WingetExitCodes
 {
@@ -13,7 +28,10 @@ public static class WingetExitCodes
     public const int PackageAlreadyInstalled = unchecked((int)0x8A150061);
 
     /// <summary>APPINSTALLER_CLI_ERROR_UPDATE_NOT_APPLICABLE - "No applicable update found", the
-    /// upgrade-context equivalent of <see cref="PackageAlreadyInstalled"/>. Treated as success.</summary>
+    /// upgrade-context equivalent of <see cref="PackageAlreadyInstalled"/>. Treated as success by
+    /// <see cref="IsAlreadyInstalled"/>, but as <see cref="PackageOutcome.Skipped"/> by
+    /// <see cref="Describe"/> - an upgrade that found nothing to do is not the same as an install
+    /// that found the package already there.</summary>
     public const int UpdateNotApplicable = unchecked((int)0x8A15002B);
 
     /// <summary>APPINSTALLER_CLI_ERROR_INSTALL_ALREADY_INSTALLED - "Another version of this
@@ -43,6 +61,13 @@ public static class WingetExitCodes
     /// succeeded, but a restart is needed before it takes effect.</summary>
     public const int InstallRebootRequiredToFinish = unchecked((int)0x8A150109);
 
+    /// <summary>The install itself succeeded, but the target application was running and needed to
+    /// be closed first, so winget's install step could not complete. Upgrade-only; not part of
+    /// <see cref="IsAlreadyInstalled"/>/<see cref="IsCancelledByUser"/> since
+    /// <c>IComponentService</c> has no equivalent case (its components are not expected to already
+    /// be running while being installed).</summary>
+    public const int AppInUse = unchecked((int)0x8A150101);
+
     /// <summary>True if <paramref name="exitCode"/> means the component ended up installed even
     /// though winget did not "install" anything new this run.</summary>
     public static bool IsAlreadyInstalled(int exitCode) =>
@@ -58,4 +83,58 @@ public static class WingetExitCodes
     /// <summary>True if <paramref name="exitCode"/> means the install succeeded but needs a
     /// restart to finish.</summary>
     public static bool IsRebootRequiredToFinish(int exitCode) => exitCode == InstallRebootRequiredToFinish;
+
+    /// <summary>
+    /// Maps a <c>winget upgrade --id ...</c> exit code to how that package's row should be
+    /// reported on the Updates page. Does not look at the command's output - see
+    /// <see cref="MentionsRestart"/> for the separate "Updated - restart needed" refinement applied
+    /// to a plain <see cref="PackageOutcome.Success"/> (exit code 0) result whose output mentions a
+    /// restart despite winget not returning <see cref="InstallRebootRequiredToFinish"/>.
+    /// </summary>
+    public static (PackageOutcome Outcome, string Message) Describe(int exitCode)
+    {
+        if (exitCode == 0)
+        {
+            return (PackageOutcome.Success, "Updated");
+        }
+
+        if (exitCode == UpdateNotApplicable)
+        {
+            return (PackageOutcome.Skipped, "No applicable update");
+        }
+
+        if (IsRebootRequiredToFinish(exitCode))
+        {
+            return (PackageOutcome.Success, "Updated - restart needed");
+        }
+
+        if (IsCancelledByUser(exitCode))
+        {
+            return (PackageOutcome.Failed, "Cancelled - administrator approval was declined");
+        }
+
+        if (exitCode == AppInUse)
+        {
+            return (PackageOutcome.Failed, "App is running - close it");
+        }
+
+        return (PackageOutcome.Failed, $"Failed (0x{unchecked((uint)exitCode):X8})");
+    }
+
+    /// <summary>True if any line of a successful upgrade's output mentions that a restart is
+    /// needed to finish (winget itself does not always return <see cref="InstallRebootRequiredToFinish"/>
+    /// for this - some installers only say so in their own output text).</summary>
+    public static bool MentionsRestart(IReadOnlyList<string> outputLines)
+    {
+        ArgumentNullException.ThrowIfNull(outputLines);
+        foreach (var line in outputLines)
+        {
+            if (line.Contains("restart", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

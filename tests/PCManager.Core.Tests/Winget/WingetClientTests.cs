@@ -85,10 +85,21 @@ public sealed class WingetClientTests
     [Fact]
     public async Task GetUpgradesAsync_WingetMissing_ThrowsWingetNotFoundException()
     {
-        var runner = new ThrowingProcessRunner();
+        var runner = new ThrowingProcessRunner(nativeErrorCode: 2); // ERROR_FILE_NOT_FOUND
         var client = new WingetClient(runner, NullLogger<WingetClient>.Instance);
 
         await Assert.ThrowsAsync<WingetNotFoundException>(
+            () => client.GetUpgradesAsync(includeUnknown: false, progress: null, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetUpgradesAsync_OtherWin32Error_PropagatesUnchanged()
+    {
+        // Not "file not found" - e.g. access denied - must not be misreported as "winget missing".
+        var runner = new ThrowingProcessRunner(nativeErrorCode: 5); // ERROR_ACCESS_DENIED
+        var client = new WingetClient(runner, NullLogger<WingetClient>.Instance);
+
+        await Assert.ThrowsAsync<Win32Exception>(
             () => client.GetUpgradesAsync(includeUnknown: false, progress: null, CancellationToken.None));
     }
 
@@ -118,7 +129,7 @@ public sealed class WingetClientTests
             throw new NotSupportedException();
     }
 
-    private sealed class ThrowingProcessRunner : IProcessRunner
+    private sealed class ThrowingProcessRunner(int nativeErrorCode) : IProcessRunner
     {
         public Task<ProcessRunResult> RunAsync(
             string fileName,
@@ -126,7 +137,7 @@ public sealed class WingetClientTests
             IProgress<string>? onLine,
             IProgress<string>? onProgress,
             CancellationToken cancellationToken) =>
-            throw new Win32Exception("The system cannot find the file specified.");
+            throw new Win32Exception(nativeErrorCode, "Simulated Win32 failure.");
 
         public void StartDetached(string fileName, IReadOnlyList<string> arguments) =>
             throw new NotSupportedException();

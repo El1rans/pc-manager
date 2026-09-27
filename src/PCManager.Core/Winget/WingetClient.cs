@@ -28,7 +28,7 @@ public sealed partial class WingetClient : IWingetClient
         }
 
         var result = await RunAsync(arguments, onLine: null, progress, cancellationToken).ConfigureAwait(false);
-        return WingetTableParser.Parse(result.StandardOutputLines);
+        return WingetTableParser.Parse(result.StandardOutputLines, _logger);
     }
 
     public async Task<WingetResult> UpgradeAsync(
@@ -75,7 +75,10 @@ public sealed partial class WingetClient : IWingetClient
             return await _processRunner.RunAsync(Executable, arguments, onLine, onProgress, cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (Win32Exception ex)
+        // NativeErrorCode 2 is ERROR_FILE_NOT_FOUND - winget.exe is not on PATH. Any other Win32
+        // error (e.g. access denied) is a different, unexpected problem and must not be
+        // misreported as "winget is not installed".
+        catch (Win32Exception ex) when (ex.NativeErrorCode == 2)
         {
             LogWingetNotFound(ex);
             throw new WingetNotFoundException(
