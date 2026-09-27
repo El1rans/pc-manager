@@ -17,9 +17,10 @@ To run the prototype standalone, double-click `prototype/Winget Updater.bat`.
 
 Download `PCManager-Setup-<version>.exe` from the [Releases](../../releases) page and run it.
 
-- The installer is unsigned (see "Code signing" below), so Windows SmartScreen will warn that it
-  "prevented an unrecognized app from starting". Click **More info**, then **Run anyway** to
-  continue - this is expected for every release until the installer is code-signed.
+- The installer is currently unsigned (see "Code signing" below), so Windows SmartScreen will warn
+  that it "prevented an unrecognized app from starting". Click **More info**, then **Run anyway**
+  to continue - this is expected for every release until SignPath approves code signing for this
+  project.
 - Setup asks for administrator rights (needed for a per-machine install and, if you choose the
   PawnIO driver below, its kernel driver), then lets you pick which optional components to set
   up. Each is installed with `winget`, so it needs an internet connection the first time:
@@ -44,6 +45,18 @@ Download `PCManager-Setup-<version>.exe` from the [Releases](../../releases) pag
 
 See `docs/RELEASING.md` for how a new release is cut, and `docs/specs/07-installer.md` for the
 installer's full design.
+
+### Code signing
+
+PC Manager has applied for free code signing through the
+[SignPath Foundation](https://signpath.org/) program for open source projects. Signing is being
+set up: `.github/workflows/release.yml` is wired to submit each tagged release for signing, but
+releases are signed only once SignPath approves the application and the maintainer finishes the
+one-time project setup - see `docs/CODE_SIGNING_POLICY.md` for the full policy (team roles,
+privacy statement, what PC Manager contacts over the network) and `docs/RELEASING.md` for the
+setup steps. Until then, every release stays unsigned and SmartScreen will warn as described above.
+
+Free code signing provided by SignPath.io, certificate by SignPath Foundation.
 
 ## Building, running, and testing
 

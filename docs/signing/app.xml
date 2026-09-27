@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration for the "app" artifact: a zip file containing the published,
+  self-contained single-file PCManager.exe. Paste this into SignPath's project as the artifact
+  configuration for the "app" artifact configuration slug - see docs/RELEASING.md for the one-time
+  SignPath project setup and .github/workflows/release.yml for how the workflow zips PCManager.exe
+  before submitting it for signing under this configuration.
+
+  Schema reference: https://docs.signpath.io/artifact-configuration/reference
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <artifacts>
+      <pe-file path="PCManager.exe">
+        <authenticode-sign />
+      </pe-file>
+    </artifacts>
+  </zip-file>
+</artifact-configuration>

@@ -15,6 +15,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `docs/screenshots/` that showed real machine-identifying data with a redacted version, cropped
   `first-run.png` down to just the app window (it previously captured the whole desktop), and
   removed two obsolete/unused screenshots (`after-skip.png`, `foundation.png`).
+- Code signing: applied for free code signing through the SignPath Foundation program for open
+  source projects. `docs/CODE_SIGNING_POLICY.md` documents the required policy (team roles,
+  privacy statement); `docs/signing/` holds the SignPath artifact configurations and a draft
+  application. `.github/workflows/release.yml` now submits the published `PCManager.exe` and the
+  compiled installer to SignPath for signing on every tagged release, verifying the resulting
+  Authenticode signature, and falls back to publishing an unsigned release with a visible warning
+  until the SignPath project is approved and configured (see `docs/RELEASING.md`). Added
+  `SECURITY.md` describing how to report vulnerabilities privately via GitHub.
 - Installer and releases: a self-contained, single-file win-x64 publish profile; an Inno Setup 6
   script (`installer/PCManager.iss`) that installs PC Manager per-machine to
   `Program Files\PC Manager` with Start menu/desktop/startup shortcuts, an optional Components

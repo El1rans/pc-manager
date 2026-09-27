@@ -59,11 +59,62 @@ sanity-check the installer before ever cutting a release. A real release is only
    published `.sha256` file, and (ideally, on a real or virtual Windows PC - never the machine
    used to develop PC Manager) run it through a fresh install and uninstall.
 
+## Code signing (SignPath)
+
+PC Manager signs releases through the [SignPath Foundation](https://signpath.org/) program for
+open source projects, once the application below is approved. Until then, `release.yml` publishes
+unsigned installers automatically (see "Notes" below) - nothing here blocks a release.
+
+### One-time setup (maintainer)
+
+1. Apply at <https://signpath.org/apply> with this repository's URL. A draft of the application
+   answers is at `docs/signing/APPLICATION.md` - review and adjust before submitting.
+2. Enable multi-factor authentication on both the GitHub account used for this repository and the
+   SignPath account - SignPath requires MFA before it will trust a GitHub Actions build.
+3. Once SignPath approves the application:
+   - Create a SignPath project named `pc-manager` (or set the `SIGNPATH_PROJECT_SLUG` repository
+     variable to whatever slug is chosen).
+   - Link the GitHub repository as this project's trusted build system (GitHub Actions), scoped to
+     `.github/workflows/release.yml` so only tag-triggered release runs can submit signing
+     requests, never a pull request build.
+   - Add two artifact configurations, pasting the XML from this repo:
+     - `app`, using `docs/signing/app.xml` (signs `PCManager.exe` inside the zip the workflow
+       uploads).
+     - `installer`, using `docs/signing/installer.xml` (signs the compiled
+       `PCManager-Setup-<version>.exe`).
+   - Create a signing policy named `release-signing` (or set `SIGNPATH_SIGNING_POLICY_SLUG`) with
+     **approval required** - every signing request needs a manual click in SignPath before it is
+     signed, even though the workflow submits it automatically.
+   - Create an API token with the **Submitter** role (not Approver - approval is a separate manual
+     step done in the SignPath UI by a human, deliberately not automatable from CI).
+4. In this GitHub repository's settings, add:
+   - Repository **variable** `SIGNPATH_ORGANIZATION_ID` - the organization id SignPath shows in
+     its project settings.
+   - Repository **secret** `SIGNPATH_API_TOKEN` - the submitter API token from the previous step.
+   - Optionally, variables `SIGNPATH_PROJECT_SLUG` (defaults to `pc-manager` if unset) and
+     `SIGNPATH_SIGNING_POLICY_SLUG` (defaults to `release-signing` if unset).
+
+### Per release
+
+Signing adds one manual step to the process in "Steps" above: after pushing the tag, `release.yml`
+submits both the published `PCManager.exe` and the compiled installer to SignPath and waits for
+them to be signed. **Someone with Approver access must open SignPath and approve each signing
+request** (there are two per release: `app`, then `installer`) or the workflow will eventually time
+out waiting. Once approved, the workflow downloads the signed files, verifies the installer's
+Authenticode signature itself, computes the SHA-256 checksum from the *signed* installer, and
+publishes the release as before.
+
+### Uninstaller signing limitation
+
+The installer's embedded uninstaller (`unins000.exe`) cannot be signed through this flow - see
+"Uninstaller signing limitation" in `docs/CODE_SIGNING_POLICY.md` for why. It stays unsigned even
+after `PCManager.exe` and the installer itself are signed.
+
 ## Notes
 
-- Code signing is out of scope for now - every installer will trigger a Windows SmartScreen
-  warning ("Windows protected your PC" > **More info** > **Run anyway**). This is documented in
-  the README's "Install" section for end users.
+- Until the SignPath application above is approved and configured, every installer stays unsigned
+  and will trigger a Windows SmartScreen warning ("Windows protected your PC" > **More info** >
+  **Run anyway**). This is documented in the README's "Install" section for end users.
 - If a release build or the installer compile fails, nothing is published - fix the issue, delete
   the bad tag both locally and on the remote (`git tag -d vX.Y.Z` and
   `git push --delete origin vX.Y.Z`) so a re-push of the same tag name triggers the workflow again,

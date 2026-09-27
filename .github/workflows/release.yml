@@ -8,10 +8,16 @@ on:
 jobs:
   release:
     runs-on: windows-latest
-    # Least privilege: only this job needs to create a release; every other workflow/job in this
-    # repo keeps the default read-only GITHUB_TOKEN.
+    # Least privilege: `contents: write` is needed only because this job creates the GitHub
+    # Release at the end; `actions: read` is needed only for the SignPath action's default
+    # github-token to read this run's own uploaded artifacts back (upload-artifact/download of an
+    # artifact from the *same* run needs actions:read even though it never touches another repo or
+    # workflow). Every other workflow/job in this repo keeps the default read-only GITHUB_TOKEN.
+    # Signing never runs on pull requests: this whole workflow only triggers on a `v*.*.*` tag
+    # push, and tags can only be pushed by someone with write access to this repository.
     permissions:
       contents: write
+      actions: read
     env:
       # Read once here rather than inlined as ${{ github.ref_name }} in each step's script body -
       # keeps every step's PowerShell working with a plain environment variable instead of
@@ -67,6 +73,26 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           Write-Host "Releasing version $version (tag $env:TAG)."
 
+      - name: Determine whether SignPath signing is configured
+        # Lets every release build succeed (unsigned) before the SignPath application in
+        # docs/signing/APPLICATION.md is approved and the one-time setup in docs/RELEASING.md's
+        # "Code signing (SignPath)" section is done - see docs/CODE_SIGNING_POLICY.md. Checked via
+        # a script step (not a job/step `if:` expression) so a missing secret/variable can also
+        # print a clearly visible `::warning::` in the run's summary.
+        id: signing
+        shell: pwsh
+        env:
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_ORGANIZATION_ID) -or [string]::IsNullOrWhiteSpace($env:SIGNPATH_API_TOKEN)) {
+            Write-Host "::warning::SignPath code signing is not configured yet (repo variable SIGNPATH_ORGANIZATION_ID and/or repo secret SIGNPATH_API_TOKEN is missing) - publishing this release UNSIGNED. See docs/RELEASING.md's 'Code signing (SignPath)' section to set it up."
+            "enabled=false" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "SignPath signing is configured - this release will be signed."
+            "enabled=true" >> $env:GITHUB_OUTPUT
+          }
+
       - name: Restore
         run: dotnet restore
 
@@ -82,10 +108,68 @@ jobs:
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
           -o publish
 
+      # --- Stage 1: sign PCManager.exe before it goes into the installer -----------------------
+
+      - name: Zip PCManager.exe for signing
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: Compress-Archive -Path publish\PCManager.exe -DestinationPath app-to-sign.zip
+        # docs/signing/app.xml's artifact configuration expects a zip-file containing
+        # PCManager.exe (rather than the bare exe) - this is what lets SignPath return a signed
+        # zip that github-action-submit-signing-request can decompress back into a signed
+        # PCManager.exe, matching a plain <pe-file> configuration's single-file semantics.
+
+      - name: Upload app artifact for signing
+        if: steps.signing.outputs.enabled == 'true'
+        id: upload-app
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: app-to-sign
+          path: app-to-sign.zip
+          retention-days: 1
+
+      - name: Submit PCManager.exe for signing
+        if: steps.signing.outputs.enabled == 'true'
+        id: sign-app
+        # v3.0, pinned to its full commit SHA (see docs/RELEASING.md's "Code signing (SignPath)"
+        # section for how this was resolved:
+        # `gh api repos/signpath/github-action-submit-signing-request/git/ref/tags/v3.0`).
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'pc-manager' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: app
+          github-artifact-id: ${{ steps.upload-app.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: "1800" # 30 minutes - covers a manual SignPath approval click.
+          output-artifact-directory: signed-app
+
+      - name: Verify PCManager.exe's signature
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature -FilePath "signed-app\PCManager.exe"
+          Write-Host "PCManager.exe signature status: $($sig.Status); signer: $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne 'Valid') {
+            throw "PCManager.exe's Authenticode signature is not valid (status: $($sig.Status)) after a SignPath signing request was configured and completed."
+          }
+          if ($sig.SignerCertificate.Subject -notmatch 'SignPath Foundation') {
+            throw "PCManager.exe was signed, but not by SignPath Foundation (signer subject: $($sig.SignerCertificate.Subject))."
+          }
+
+      - name: Use the signed PCManager.exe for the installer
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: Copy-Item -Path signed-app\PCManager.exe -Destination publish\PCManager.exe -Force
+
       - name: Install Inno Setup
         run: choco install innosetup --version=6.7.1 -y --no-progress
 
       - name: Compile installer
+        # Compiles from whatever is now in publish\PCManager.exe - the signed one when signing is
+        # configured (copied over just above), the plain unsigned publish output otherwise.
         shell: pwsh
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -96,7 +180,59 @@ jobs:
             "/DPublishDir=$PWD\publish" `
             "/O$PWD\dist"
 
+      # --- Stage 2: sign the compiled installer -------------------------------------------------
+
+      - name: Upload installer artifact for signing
+        if: steps.signing.outputs.enabled == 'true'
+        id: upload-installer
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: installer-to-sign
+          path: dist/PCManager-Setup-${{ steps.version.outputs.version }}.exe
+          retention-days: 1
+
+      - name: Submit installer for signing
+        if: steps.signing.outputs.enabled == 'true'
+        id: sign-installer
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'pc-manager' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.upload-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: "1800" # 30 minutes - covers a manual SignPath approval click.
+          output-artifact-directory: signed-installer
+
+      - name: Verify the installer's signature
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $signedExe = "signed-installer\PCManager-Setup-$env:VERSION.exe"
+          $sig = Get-AuthenticodeSignature -FilePath $signedExe
+          Write-Host "Installer signature status: $($sig.Status); signer: $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne 'Valid') {
+            throw "The installer's Authenticode signature is not valid (status: $($sig.Status)) after a SignPath signing request was configured and completed."
+          }
+          if ($sig.SignerCertificate.Subject -notmatch 'SignPath Foundation') {
+            throw "The installer was signed, but not by SignPath Foundation (signer subject: $($sig.SignerCertificate.Subject))."
+          }
+
+      - name: Use the signed installer for the release
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: Copy-Item -Path "signed-installer\PCManager-Setup-$env:VERSION.exe" -Destination "dist\PCManager-Setup-$env:VERSION.exe" -Force
+
       - name: Compute SHA-256 checksum
+        # Always runs last, after the signed installer (if any) has replaced the unsigned one
+        # above - the published checksum must match whatever file is actually attached to the
+        # release, signed or not.
         shell: pwsh
         env:
           VERSION: ${{ steps.version.outputs.version }}

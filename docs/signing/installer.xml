@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration for the "installer" artifact: the compiled Inno Setup
+  PCManager-Setup-<version>.exe submitted directly (not zipped) for signing. Paste this into
+  SignPath's project as the artifact configuration for the "installer" artifact configuration
+  slug - see docs/RELEASING.md for the one-time SignPath project setup and
+  .github/workflows/release.yml for how the workflow submits the compiled installer for signing
+  under this configuration.
+
+  Note: this configuration cannot cover the installer's embedded uninstaller (unins000.exe) -
+  see "Uninstaller signing limitation" in docs/CODE_SIGNING_POLICY.md.
+
+  Schema reference: https://docs.signpath.io/artifact-configuration/reference
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <pe-file>
+    <authenticode-sign />
+  </pe-file>
+</artifact-configuration>
