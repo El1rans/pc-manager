@@ -21,6 +21,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   selection, filter, ignore list (persisted), Silent/Include-unknown options, one-at-a-time update
   run with live status/log, "Stop after current", and a nav badge showing the non-ignored update
   count. Checks automatically at startup and on Refresh.
+- Remote support: a "Get help" page, pinned in its own group at the bottom of the nav rail, that
+  installs and starts AnyDesk through the shared component service, reads its ID/alias
+  (`AnyDesk.exe --get-id`/`--get-alias`, falling back to `system.conf`/`service.conf` if that
+  fails), and shows it large and grouped in threes with a digits-only "Copy address" button, a
+  start/status control, plain instructions, a scam-safety note, and a "Copy support info" share
+  action. An optional helper name (edited through a small confirm dialog) is remembered in
+  settings and shown read-only on the page.
 
 ### Fixed
 

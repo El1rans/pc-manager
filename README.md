@@ -28,8 +28,8 @@ milestone specs.
 
 ## Features
 
-- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting), following Windows
-  light/dark theme.
+- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Get help), following
+  Windows light/dark theme.
 - Settings persisted as JSON under `%APPDATA%\PCManager\settings.json`, atomic writes, corrupt-file
   recovery.
 - Logs written to `%APPDATA%\PCManager\logs`.
@@ -49,6 +49,12 @@ milestone specs.
   "Include apps with unknown version" options, and "Stop after current" to cancel the rest of a
   run. The nav badge shows how many updates are available; a check runs automatically at startup
   and on Refresh.
+- Get help: a plain-language remote-support page for a non-technical user, pinned in its own group
+  at the bottom of the nav rail. Installs AnyDesk, shows its address in large, selectable,
+  grouped-digit text with a one-click "Copy address" (put the bare digits on the clipboard), a
+  running/not-running status with a "Start AnyDesk" button, step-by-step instructions, a
+  scam-safety warning, and "Copy support info" for sharing computer name/Windows version/address by
+  message. PC Manager never changes any AnyDesk security setting.
 
 ## Planned modules
 
