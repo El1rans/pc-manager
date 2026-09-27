@@ -1,8 +1,8 @@
 # OpenRGB.NET issues found while building milestone 05 (Lighting)
 
 Two bugs found in [OpenRGB.NET](https://github.com/diogotr7/OpenRGB.NET) 3.1.1 (latest at time of
-writing) while implementing PC Manager's Lighting page. Both are patched in PC Manager's vendored
-copy (`src/ThirdParty/OpenRGB.NET/`, see `// PC Manager patch:` comments) rather than waiting on
+writing) while implementing Porchlight's Lighting page. Both are patched in Porchlight's vendored
+copy (`src/ThirdParty/OpenRGB.NET/`, see `// Porchlight patch:` comments) rather than waiting on
 upstream, but should still be reported so other users of the library benefit. The text below is
 drafted so it can be filed as two upstream GitHub issues - **not yet posted**.
 

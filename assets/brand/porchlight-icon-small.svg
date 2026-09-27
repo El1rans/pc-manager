@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" role="img" aria-label="Porchlight">
+  <rect width="16" height="16" rx="3.5" fill="#1E2A44"/>
+  <path d="M5.2 3.5h5.6l1.3 2.2H3.9z" fill="#F5B942"/>
+  <rect x="4" y="5.7" width="8" height="7.3" rx="1.6" fill="#F5B942"/>
+  <rect x="5.1" y="6.8" width="5.8" height="5.2" rx=".9" fill="#FFF6DE"/>
+  <path d="M8 7.6c.9 1.1 1.35 1.9 1.35 2.7a1.35 1.35 0 0 1-2.7 0c0-.8.45-1.6 1.35-2.7z" fill="#E86A17"/>
+  <rect x="5.8" y="13.4" width="4.4" height="1.3" rx=".65" fill="#F5B942"/>
+</svg>

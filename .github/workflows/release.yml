@@ -14,7 +14,7 @@ env:
 jobs:
   # ---------------------------------------------------------------------------------------------
   # build-sign: builds, tests, publishes, compiles the installer, and (if configured) submits both
-  # PCManager.exe and the compiled installer to SignPath for signing. Needs `contents: write`
+  # Porchlight.exe and the compiled installer to SignPath for signing. Needs `contents: write`
   # nowhere - it never touches the GitHub Release - so it only gets `contents: read` (to check out
   # the repo) and `actions: read` (required by the SignPath action to read this same run's own
   # uploaded artifacts back; see github-action-submit-signing-request's docs - this never grants
@@ -119,17 +119,17 @@ jobs:
 
       - name: Publish self-contained single-file win-x64 build
         run: >
-          dotnet publish src/PCManager.App -c Release -r win-x64 --self-contained true
+          dotnet publish src/Porchlight.App -c Release -r win-x64 --self-contained true
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
           -o publish
 
-      # --- Stage 1: sign PCManager.exe before it goes into the installer -----------------------
+      # --- Stage 1: sign Porchlight.exe before it goes into the installer -----------------------
       #
       # actions/upload-artifact always zips whatever `path` it is given before storing it, so
-      # uploading `publish/PCManager.exe` directly (no local Compress-Archive step) already
-      # produces exactly the zip-containing-PCManager.exe that docs/signing/app.xml's
-      # <zip-file><pe-file path="PCManager.exe"> configuration expects - matching what
-      # github-action-submit-signing-request hands back too (a decompressed PCManager.exe).
+      # uploading `publish/Porchlight.exe` directly (no local Compress-Archive step) already
+      # produces exactly the zip-containing-Porchlight.exe that docs/signing/app.xml's
+      # <zip-file><pe-file path="Porchlight.exe"> configuration expects - matching what
+      # github-action-submit-signing-request hands back too (a decompressed Porchlight.exe).
 
       - name: Upload app artifact for signing
         if: steps.signing.outputs.enabled == 'true'
@@ -137,10 +137,10 @@ jobs:
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: app-to-sign
-          path: publish/PCManager.exe
+          path: publish/Porchlight.exe
           retention-days: 1
 
-      - name: Submit PCManager.exe for signing
+      - name: Submit Porchlight.exe for signing
         if: steps.signing.outputs.enabled == 'true'
         id: sign-app
         # v3.0, pinned to its full commit SHA (see docs/RELEASING.md's "Code signing (SignPath)"
@@ -150,7 +150,7 @@ jobs:
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'pc-manager' }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'porchlight' }}
           signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
           artifact-configuration-slug: app
           github-artifact-id: ${{ steps.upload-app.outputs.artifact-id }}
@@ -164,47 +164,47 @@ jobs:
           wait-for-completion-timeout-in-seconds: "1800" # 30 minutes - covers a manual SignPath approval click.
           output-artifact-directory: signed-app
 
-      - name: Verify PCManager.exe's signature
+      - name: Verify Porchlight.exe's signature
         if: steps.signing.outputs.enabled == 'true'
         shell: pwsh
         run: |
-          $sig = Get-AuthenticodeSignature -FilePath "signed-app\PCManager.exe"
-          Write-Host "PCManager.exe signature status: $($sig.Status); signer: $($sig.SignerCertificate.Subject)"
+          $sig = Get-AuthenticodeSignature -FilePath "signed-app\Porchlight.exe"
+          Write-Host "Porchlight.exe signature status: $($sig.Status); signer: $($sig.SignerCertificate.Subject)"
           if ($sig.Status -ne 'Valid') {
-            throw "PCManager.exe's Authenticode signature is not valid (status: $($sig.Status)) after a SignPath signing request was configured and completed."
+            throw "Porchlight.exe's Authenticode signature is not valid (status: $($sig.Status)) after a SignPath signing request was configured and completed."
           }
           if ($sig.SignerCertificate.Subject -notmatch 'SignPath Foundation') {
-            throw "PCManager.exe was signed, but not by SignPath Foundation (signer subject: $($sig.SignerCertificate.Subject))."
+            throw "Porchlight.exe was signed, but not by SignPath Foundation (signer subject: $($sig.SignerCertificate.Subject))."
           }
           if ($null -eq $sig.TimeStamperCertificate) {
-            throw "PCManager.exe's signature has no timestamp - it would stop validating once the signing certificate expires."
+            throw "Porchlight.exe's signature has no timestamp - it would stop validating once the signing certificate expires."
           }
 
-      - name: Use the signed PCManager.exe for the installer
+      - name: Use the signed Porchlight.exe for the installer
         if: steps.signing.outputs.enabled == 'true'
         shell: pwsh
-        run: Copy-Item -Path signed-app\PCManager.exe -Destination publish\PCManager.exe -Force
+        run: Copy-Item -Path signed-app\Porchlight.exe -Destination publish\Porchlight.exe -Force
 
       - name: Install Inno Setup
         run: choco install innosetup --version=6.7.1 -y --no-progress
 
       - name: Compile installer
-        # Compiles from whatever is now in publish\PCManager.exe - the signed one when signing is
+        # Compiles from whatever is now in publish\Porchlight.exe - the signed one when signing is
         # configured (copied over just above), the plain unsigned publish output otherwise.
         shell: pwsh
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
-            installer\PCManager.iss `
+            installer\Porchlight.iss `
             "/DMyAppVersion=$env:VERSION" `
             "/DPublishDir=$PWD\publish" `
             "/O$PWD\dist"
 
       # --- Stage 2: sign the compiled installer -------------------------------------------------
       #
-      # Same reasoning as Stage 1: upload-artifact zips dist/PCManager-Setup-<version>.exe as-is, so
-      # docs/signing/installer.xml is a <zip-file><pe-file path="PCManager-Setup-${version}.exe">
+      # Same reasoning as Stage 1: upload-artifact zips dist/Porchlight-Setup-<version>.exe as-is, so
+      # docs/signing/installer.xml is a <zip-file><pe-file path="Porchlight-Setup-${version}.exe">
       # configuration (the exact versioned filename, via the same `version` parameter, rather than
       # a wildcard) matching that zip's contents.
 
@@ -214,7 +214,7 @@ jobs:
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: installer-to-sign
-          path: dist/PCManager-Setup-${{ steps.version.outputs.version }}.exe
+          path: dist/Porchlight-Setup-${{ steps.version.outputs.version }}.exe
           retention-days: 1
 
       - name: Submit installer for signing
@@ -224,13 +224,13 @@ jobs:
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'pc-manager' }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'porchlight' }}
           signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
           artifact-configuration-slug: installer
           github-artifact-id: ${{ steps.upload-installer.outputs.artifact-id }}
           # Maps to docs/signing/installer.xml's <parameters><parameter name="version"> - used both
           # for the required product-version metadata restriction and to build the exact
-          # `PCManager-Setup-${version}.exe` path inside the uploaded zip.
+          # `Porchlight-Setup-${version}.exe` path inside the uploaded zip.
           parameters: |
             version: "${{ steps.version.outputs.version }}"
           wait-for-completion: true
@@ -243,7 +243,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          $signedExe = "signed-installer\PCManager-Setup-$env:VERSION.exe"
+          $signedExe = "signed-installer\Porchlight-Setup-$env:VERSION.exe"
           $sig = Get-AuthenticodeSignature -FilePath $signedExe
           Write-Host "Installer signature status: $($sig.Status); signer: $($sig.SignerCertificate.Subject)"
           if ($sig.Status -ne 'Valid') {
@@ -261,7 +261,7 @@ jobs:
         shell: pwsh
         env:
           VERSION: ${{ steps.version.outputs.version }}
-        run: Copy-Item -Path "signed-installer\PCManager-Setup-$env:VERSION.exe" -Destination "dist\PCManager-Setup-$env:VERSION.exe" -Force
+        run: Copy-Item -Path "signed-installer\Porchlight-Setup-$env:VERSION.exe" -Destination "dist\Porchlight-Setup-$env:VERSION.exe" -Force
 
       - name: Compute SHA-256 checksum
         # Always runs last, after the signed installer (if any) has replaced the unsigned one
@@ -271,9 +271,9 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          $exe = "dist\PCManager-Setup-$env:VERSION.exe"
+          $exe = "dist\Porchlight-Setup-$env:VERSION.exe"
           $hash = (Get-FileHash -Path $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash *PCManager-Setup-$env:VERSION.exe" | Set-Content -Path "$exe.sha256" -NoNewline
+          "$hash *Porchlight-Setup-$env:VERSION.exe" | Set-Content -Path "$exe.sha256" -NoNewline
 
       - name: Extract CHANGELOG section for this version
         id: notes
@@ -310,9 +310,9 @@ jobs:
           # S4: make an unsigned release visibly unsigned in the notes themselves, not just in the
           # SmartScreen warning a user hits later. S3: always link the code signing policy.
           if ('${{ steps.signing.outputs.enabled }}' -ne 'true') {
-            $notes = "**This release is unsigned.** See [Code signing policy](https://github.com/El1rans/pc-manager/blob/main/docs/CODE_SIGNING_POLICY.md) for why and how that changes.`n`n$notes"
+            $notes = "**This release is unsigned.** See [Code signing policy](https://github.com/El1rans/porchlight/blob/main/docs/CODE_SIGNING_POLICY.md) for why and how that changes.`n`n$notes"
           } else {
-            $notes = "$notes`n`n---`n[Code signing policy](https://github.com/El1rans/pc-manager/blob/main/docs/CODE_SIGNING_POLICY.md)"
+            $notes = "$notes`n`n---`n[Code signing policy](https://github.com/El1rans/porchlight/blob/main/docs/CODE_SIGNING_POLICY.md)"
           }
 
           $notesPath = "release-notes.md"
@@ -326,8 +326,8 @@ jobs:
         with:
           name: release-assets
           path: |
-            dist/PCManager-Setup-${{ steps.version.outputs.version }}.exe
-            dist/PCManager-Setup-${{ steps.version.outputs.version }}.exe.sha256
+            dist/Porchlight-Setup-${{ steps.version.outputs.version }}.exe
+            dist/Porchlight-Setup-${{ steps.version.outputs.version }}.exe.sha256
             release-notes.md
           retention-days: 1
 
@@ -352,9 +352,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.build-sign.outputs.version }}
         run: |
-          exe="release-assets/dist/PCManager-Setup-${VERSION}.exe"
+          exe="release-assets/dist/Porchlight-Setup-${VERSION}.exe"
           gh release create "$TAG" \
             "$exe" "$exe.sha256" \
-            --title "PC Manager $VERSION" \
+            --title "Porchlight $VERSION" \
             --notes-file "release-assets/release-notes.md" \
             --verify-tag

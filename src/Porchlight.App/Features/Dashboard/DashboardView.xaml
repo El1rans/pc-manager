@@ -1,0 +1,148 @@
+<UserControl x:Class="Porchlight.App.Features.Dashboard.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="clr-namespace:Porchlight.App.Controls"
+             xmlns:automation="clr-namespace:System.Windows.Automation;assembly=PresentationCore"
+             xmlns:dashboard="clr-namespace:Porchlight.App.Features.Dashboard"
+             d:DataContext="{d:DesignInstance dashboard:DashboardViewModel}"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700">
+
+    <UserControl.Resources>
+
+        <DataTemplate DataType="{x:Type dashboard:MetricTileViewModel}">
+            <Border Style="{StaticResource Card}" Margin="0,0,12,12"
+                    ToolTip="{Binding TooltipText}"
+                    automation:AutomationProperties.HelpText="{Binding TooltipText}">
+                <StackPanel>
+                    <TextBlock Text="{Binding Title}" Style="{StaticResource CardTitle}" Margin="0,0,0,4"/>
+                    <TextBlock Text="{Binding ValueText}" FontSize="26" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding DetailText}" Style="{StaticResource Secondary}"
+                               FontSize="12" Height="16" TextTrimming="CharacterEllipsis"/>
+                    <controls:Sparkline Values="{Binding Values}" Maximum="{Binding Maximum}"
+                                         Height="40" Margin="0,10,0,0"
+                                         Stroke="{DynamicResource AccentFillColorDefaultBrush}"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type dashboard:DriveRowViewModel}">
+            <Grid Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold"/>
+                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal"
+                            Visibility="{Binding IsLow, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="&#xE7BA;" Style="{StaticResource Icon}" FontSize="13"
+                               Foreground="{DynamicResource SystemFillColorCautionBrush}" Margin="0,0,4,0"/>
+                    <TextBlock Text="Low space" FontSize="12"
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                </StackPanel>
+
+                <ProgressBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Height="6" Margin="0,4,0,4"
+                             Minimum="0" Maximum="100" Value="{Binding UsedPercent, Mode=OneWay}"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Text="{Binding DetailText}"
+                           Style="{StaticResource Secondary}" FontSize="12" Margin="0,6,0,0"/>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type dashboard:ProcessRowViewModel}">
+            <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="70"/>
+                    <ColumnDefinition Width="90"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding NameText}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Column="1" Text="{Binding CpuText}" HorizontalAlignment="Right"/>
+                <TextBlock Grid.Column="2" Text="{Binding MemoryText}" HorizontalAlignment="Right"/>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type dashboard:SystemInfoRowViewModel}">
+            <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="170"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding Label}" Style="{StaticResource Secondary}"/>
+                <TextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap"/>
+            </Grid>
+        </DataTemplate>
+
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="0,0,4,24">
+
+            <!-- Header -->
+            <DockPanel Margin="0,0,0,20">
+                <StackPanel DockPanel.Dock="Left">
+                    <TextBlock Text="Dashboard" Style="{StaticResource PageTitle}"/>
+                    <TextBlock Text="{Binding SubtitleText}" Style="{StaticResource Secondary}" Margin="0,4,0,0"/>
+                </StackPanel>
+                <Border DockPanel.Dock="Right" HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
+                        BorderBrush="{DynamicResource SystemFillColorCautionBrush}" BorderThickness="1"
+                        CornerRadius="6" Padding="10,6"
+                        Visibility="{Binding IsRestartPending, Converter={StaticResource BoolToVis}}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE7BA;" Style="{StaticResource Icon}" FontSize="14"
+                                   Foreground="{DynamicResource SystemFillColorCautionBrush}" Margin="0,0,6,0"/>
+                        <TextBlock Text="Restart pending" Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                    </StackPanel>
+                </Border>
+            </DockPanel>
+
+            <!-- Metric tiles -->
+            <ItemsControl ItemsSource="{Binding MetricTiles}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="3"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+
+            <!-- Drives / Top processes -->
+            <Grid Margin="0,0,0,20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="Drives" Style="{StaticResource CardTitle}"/>
+                        <ItemsControl ItemsSource="{Binding Drives}"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="2" Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="Top processes" Style="{StaticResource CardTitle}"/>
+                        <ItemsControl ItemsSource="{Binding TopProcesses}"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- System -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="System" Style="{StaticResource CardTitle}"/>
+                    <ItemsControl ItemsSource="{Binding SystemInfoRows}"/>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

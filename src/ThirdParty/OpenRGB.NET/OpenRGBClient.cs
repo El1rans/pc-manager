@@ -48,7 +48,7 @@ public sealed class OpenRgbClient : IDisposable, IOpenRgbClient
         _timeoutMs = timeoutMs;
         _protocolVersionNumber = protocolVersionNumber;
         _connection = new OpenRgbConnection();
-        // PC Manager patch: subscribe with a lambda that reads DeviceListUpdated at invoke time,
+        // Porchlight patch: subscribe with a lambda that reads DeviceListUpdated at invoke time,
         // instead of passing the (currently-null, since nobody has subscribed yet) event field
         // itself to the connection's constructor - see OpenRgbConnection.cs's own ctor comment and
         // docs/upstream/openrgb-net.md.

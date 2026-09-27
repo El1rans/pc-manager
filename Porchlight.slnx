@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Porchlight.Core/Porchlight.Core.csproj" />
+    <Project Path="src/Porchlight.App/Porchlight.App.csproj" />
+  </Folder>
+  <Folder Name="/src/ThirdParty/">
+    <Project Path="src/ThirdParty/OpenRGB.NET/OpenRGB.NET.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Porchlight.Core.Tests/Porchlight.Core.Tests.csproj" />
+    <Project Path="tests/Porchlight.App.Tests/Porchlight.App.Tests.csproj" />
+  </Folder>
+</Solution>

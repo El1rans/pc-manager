@@ -2,7 +2,7 @@
 
 Goal: a live overview of the PC that is cheap to run (target: under 2% CPU on a typical 8-core machine while the dashboard is visible).
 
-## Core (`PCManager.Core/Monitoring`)
+## Core (`Porchlight.Core/Monitoring`)
 
 - `ISystemInfoProvider.GetAsync(ct)` -> `SystemInfo` (computer name, OS caption + build, device manufacturer/model, CPU name, physical cores, logical processors, GPU names, total RAM, last boot time). Uses WMI (`System.Management`): `Win32_OperatingSystem`, `Win32_ComputerSystem`, `Win32_Processor`, `Win32_VideoController`. Runs off the UI thread; any single query failing leaves that field "Unknown".
 - `IPerformanceSampler.Sample()` -> `PerformanceSnapshot` with nullable values where a source is unavailable:
@@ -18,7 +18,7 @@ Goal: a live overview of the PC that is cheap to run (target: under 2% CPU on a 
 - `RollingSeries` (fixed capacity 60): push, snapshot as `double[]`, min/avg/max. Unit tested.
 - `ByteFormatter`: bytes (`1.2 GB`), byte rates (`1.2 MB/s`), bit rates for network (`12.3 Mbps`), durations (`3d 4h 12m`). Unit tested, invariant of current culture where it matters.
 
-## App (`PCManager.App/Features/Dashboard`)
+## App (`Porchlight.App/Features/Dashboard`)
 
 - A sampling loop (`PeriodicTimer`, 1s) runs on a background task and publishes results to the UI thread. It starts when the app starts (history is kept while on other pages) and pauses while the window is minimized.
   - Every tick: performance snapshot. Every 2 ticks: top processes. Every 15 ticks: drives. Every 60 ticks: restart check.
@@ -35,7 +35,7 @@ Goal: a live overview of the PC that is cheap to run (target: under 2% CPU on a 
 
 ## Acceptance criteria
 
-- [ ] All values update every second without UI stutter; CPU usage of PC Manager itself stays low.
+- [ ] All values update every second without UI stutter; CPU usage of Porchlight itself stays low.
 - [ ] Numbers roughly match Task Manager (CPU, memory, disk, network within reasonable tolerance).
 - [ ] Works on a PC without a GPU counter category (GPU tile shows n/a).
 - [ ] Minimizing pauses sampling; restoring resumes.

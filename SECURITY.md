@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-PC Manager is a single-user desktop app with one active line of development. Only the
+Porchlight is a single-user desktop app with one active line of development. Only the
 [latest released version](../../releases) is supported with security fixes; there are no
 long-term-support branches. Please update to the latest release before reporting an issue to
 confirm it is still reproducible.
@@ -32,7 +32,7 @@ You can expect an initial response within a few days. There is no bug bounty pro
 
 ## Scope
 
-PC Manager runs entirely on the user's own PC. Relevant reports include (but are not limited to):
+Porchlight runs entirely on the user's own PC. Relevant reports include (but are not limited to):
 
 - Ways the app could be tricked into running unintended code or commands (including via winget,
   AnyDesk, OpenRGB, or PawnIO integration).

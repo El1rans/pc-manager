@@ -70,7 +70,7 @@ jobs:
 
       - name: Publish self-contained single-file win-x64 build
         run: >
-          dotnet publish src/PCManager.App -c Release -r win-x64 --self-contained true
+          dotnet publish src/Porchlight.App -c Release -r win-x64 --self-contained true
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
           -o publish
 
@@ -82,7 +82,7 @@ jobs:
         run: |
           $version = "${{ steps.version.outputs.version }}"
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
-            installer\PCManager.iss `
+            installer\Porchlight.iss `
             "/DMyAppVersion=$version" `
             "/DPublishDir=$PWD\publish" `
             "/O$PWD\dist"
@@ -91,14 +91,14 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ steps.version.outputs.version }}"
-          $exe = "dist\PCManager-Setup-$version.exe"
+          $exe = "dist\Porchlight-Setup-$version.exe"
           $hash = (Get-FileHash -Path $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash *PCManager-Setup-$version.exe" | Set-Content -Path "$exe.sha256" -NoNewline
+          "$hash *Porchlight-Setup-$version.exe" | Set-Content -Path "$exe.sha256" -NoNewline
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
-          name: PCManager-Setup-${{ steps.version.outputs.version }}
+          name: Porchlight-Setup-${{ steps.version.outputs.version }}
           path: |
             dist/*.exe
             dist/*.sha256

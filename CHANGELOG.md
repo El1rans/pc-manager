@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Renamed to Porchlight (from "PC Manager"), with a new brand kit (icon, logo, installer wizard
+  images - see `assets/brand/`). Code, projects, assemblies, the solution file, the installer
+  script and CI/release paths all renamed from `PCManager.*`/`PCManager-Setup-*` to
+  `Porchlight.*`/`Porchlight-Setup-*`. An existing install upgrades in place (same installer
+  `AppId`) to `Program Files\Porchlight`; settings and the fan-control activity marker are
+  migrated automatically on first run from `%APPDATA%\PCManager` to `%APPDATA%\Porchlight` (the
+  old folder is left untouched - see `AppDataMigrator`). The installer's `AppMutex` and the
+  first-run setup's installer-handled-components registry read both still recognize the
+  pre-rebrand names/keys so an in-place upgrade behaves correctly. See
+  `docs/specs/08-rebrand-porchlight.md`.
+
 ### Added
 
 - Screenshots: a DEBUG-only "demo data" mode (`PCMANAGER_DEMO_DATA=1`, see CONTRIBUTING.md) that

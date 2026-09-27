@@ -19,7 +19,7 @@ Prerequisites: .NET SDK matching `global.json` (Windows, since the app uses WPF)
 ```powershell
 dotnet build -c Release
 dotnet test -c Release
-dotnet run -c Release --project src/PCManager.App
+dotnet run -c Release --project src/Porchlight.App
 ```
 
 Before opening or updating a pull request:
@@ -47,17 +47,32 @@ against your real PC** - it will show your real computer name, drive labels, ins
 hardware. Instead, capture screenshots using the DEBUG-only demo data mode:
 
 ```powershell
-$env:PCMANAGER_DEMO_DATA = "1"
-dotnet run -c Debug --project src/PCManager.App
+$env:PORCHLIGHT_DEMO_DATA = "1"
+dotnet run -c Debug --project src/Porchlight.App
 ```
 
-This swaps the Dashboard's system-info, drive and process-list services for fake ones reporting
-made-up data (see `src/PCManager.Core/Monitoring/Demo/` and
-`MonitoringServiceCollectionExtensions.AddMonitoring`) - everything else in the app runs normally.
-The check and the fake data only exist in a DEBUG build (`#if DEBUG`); a Release build - what CI
+This swaps out every service that would otherwise show real machine data for a fake one reporting
+made-up data - everything else in the app runs normally:
+
+- Dashboard: system-info, drive and process-list services (`src/Porchlight.Core/Monitoring/Demo/`,
+  `MonitoringServiceCollectionExtensions.AddMonitoring`).
+- Get help: `IAnyDeskService`, reporting a fixed, obviously-not-real address
+  (`src/Porchlight.Core/RemoteSupport/Demo/DemoAnyDeskService.cs`,
+  `RemoteSupportServiceCollectionExtensions.AddRemoteSupportCore`).
+- Updates: `IWingetClient`, reporting a fixed, made-up list of "available upgrades" instead of your
+  real installed apps (`src/Porchlight.Core/Winget/Demo/DemoWingetClient.cs`,
+  `WingetServiceCollectionExtensions.AddWingetClient`).
+- Hardware: `IHardwareService`, reporting a fixed, made-up sensor tree and fake fans that don't
+  control anything real (`src/Porchlight.Core/Hardware/Demo/DemoHardwareService.cs`,
+  `HardwareServiceCollectionExtensions.AddHardwareCore`).
+- Lighting: `ILightingService`, reporting a fixed, made-up device list instead of connecting to a
+  real OpenRGB SDK server (`src/Porchlight.Core/Lighting/Demo/DemoLightingService.cs`,
+  `LightingServiceCollectionExtensions.AddLightingCore`).
+
+The check and every fake above only exist in a DEBUG build (`#if DEBUG`); a Release build - what CI
 compiles and what a release ships - is unaffected and does not contain this code at all. Unset the
 environment variable (or just close the terminal) to go back to showing your real data next time
-you run PC Manager for actual use.
+you run Porchlight for actual use.
 
 If a page you're screenshotting shows something demo data doesn't cover yet (e.g. a new feature's
 own machine-identifying data), extend `AddMonitoring`'s demo branch and the relevant `Demo.*`
@@ -66,6 +81,6 @@ fake, rather than redacting a real screenshot after the fact.
 ## Code organization
 
 See `docs/specs/00-engineering-standards.md` for the full solution layout and code quality gates.
-In short: testable logic lives in `PCManager.Core` behind an interface; `PCManager.App` holds
+In short: testable logic lives in `Porchlight.Core` behind an interface; `Porchlight.App` holds
 views, view models, and DI wiring. A feature adds itself via its own folders, one DI registration
 extension method, and one navigation entry, without touching other features' files.
