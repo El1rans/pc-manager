@@ -55,6 +55,20 @@ milestone specs.
   running/not-running status with a "Start AnyDesk" button, step-by-step instructions, a
   scam-safety warning, and "Copy support info" for sharing computer name/Windows version/address by
   message. PC Manager never changes any AnyDesk security setting.
+- Hardware: a sensors tab (temperatures, fan speeds, load, clocks, voltages and power for CPU, GPU,
+  motherboard, memory, storage and network, filterable, with min/max reset) and a fans tab (Default/
+  Fixed/Curve control per fan, with a draggable-point curve editor). Software fan control is off by
+  default, requires a one-time risk confirmation, and is only ever active while the page itself
+  reports `Ready` (elevated, driver installed, hardware read healthy) - a fan profile enabled during
+  an earlier elevated session never drives a fan on a later non-elevated launch. A safety engine
+  enforces a minimum speed floor, an overheat failsafe, a lost/stale-sensor failsafe, a
+  no-CPU-temperature failsafe, and restores every fan to BIOS control on a set failure, on exit, on
+  system suspend, on session end, and on a crash. Needs administrator rights and the PawnIO driver
+  (installed in place from the page) for full sensor access and fan control.
+  **Important:** if PC Manager is forced to close, crashes, or the PC loses power while a fan is
+  under software control, that fan stays at its last commanded speed - only restarting the PC (not
+  relaunching PC Manager) hands it back to BIOS control. PC Manager warns about this before you turn
+  software fan control on, and shows a banner at the next launch if it detects this happened.
 
 ## Planned modules
 

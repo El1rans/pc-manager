@@ -28,6 +28,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   start/status control, plain instructions, a scam-safety note, and a "Copy support info" share
   action. An optional helper name (edited through a small confirm dialog) is remembered in
   settings and shown read-only on the page.
+- Hardware: sensors tab (filterable tree grouped by hardware, current/min/max, reset min/max) and
+  fans tab (per-fan mode - Default/Fixed/Curve - with a draggable-point curve editor), backed by
+  LibreHardwareMonitorLib 0.9.6 on a dedicated background thread. Software fan control is off by
+  default, requires a one-time risk confirmation, is only ever active while the page reports the
+  driver/elevation are actually `Ready`, and is enforced by a fully unit-tested safety engine: a
+  minimum speed floor, an overheat failsafe (100% until 10 C below the threshold), a lost/stale
+  sensor failsafe, a no-CPU-temperature failsafe, and a set-failure failsafe that restores every fan
+  to BIOS control and disables software control. Every fan is restored to BIOS control on exit,
+  system suspend, session end, and an unhandled exception - except after a forced kill, crash, BSOD
+  or power loss, which only a PC restart (not relaunching PC Manager) can recover from; a banner
+  warns if that was left behind by the previous session.
 
 ### Fixed
 
