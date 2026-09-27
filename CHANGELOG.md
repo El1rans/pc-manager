@@ -39,6 +39,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   system suspend, session end, and an unhandled exception - except after a forced kill, crash, BSOD
   or power loss, which only a PC restart (not relaunching PC Manager) can recover from; a banner
   warns if that was left behind by the previous session.
+- Lighting: RGB control via OpenRGB - device list with per-device color and mode, "all devices"
+  color/brightness card with up to 8 saved favorite colors, OpenRGB profile loading, and the "Start
+  OpenRGB with PC Manager" toggle. `ILightingService` times out and reconnects cleanly if OpenRGB is
+  closed or unreachable, including a silent remote close (detected via a 5 second heartbeat, since
+  the underlying socket never surfaces one as an error - see `docs/upstream/openrgb-net.md`), with
+  unit and real-loopback-socket tests covering `RgbColor`, mode selection, and disconnect/timeout
+  handling. Talks to OpenRGB through a vendored, patched copy of `OpenRGB.NET` (see
+  `THIRD-PARTY-NOTICES.md`) rather than the unpatched NuGet package.
 
 ### Fixed
 
