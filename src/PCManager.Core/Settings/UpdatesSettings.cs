@@ -11,4 +11,13 @@ public sealed class UpdatesSettings
 
     /// <summary>"Include apps with unknown version" toggle.</summary>
     public bool IncludeUnknown { get; set; } = true;
+
+    /// <summary>
+    /// "Check for updates when PC Manager starts" toggle. When true (the default),
+    /// <c>UpdatesAutoCheckHostedService</c> runs a <c>winget upgrade</c> listing in the background
+    /// on every app start, which contacts the winget package sources - see
+    /// <c>docs/CODE_SIGNING_POLICY.md</c>'s privacy statement. When false, the first check only
+    /// happens if/when the user opens the Updates page or clicks Refresh.
+    /// </summary>
+    public bool CheckOnStartup { get; set; } = true;
 }

@@ -219,6 +219,17 @@ public sealed class UpdatesViewModelTests : IDisposable
     }
 
     [Fact]
+    public void CheckOnStartup_Toggled_PersistsToSettings()
+    {
+        var viewModel = CreateViewModel();
+        Assert.True(viewModel.CheckOnStartup);
+
+        viewModel.CheckOnStartup = false;
+
+        Assert.False(_settingsStore.Current.Updates.CheckOnStartup);
+    }
+
+    [Fact]
     public async Task IncludeUnknown_Toggled_PersistsAndTriggersRefresh()
     {
         _wingetClient.UpgradeListResults.Enqueue([]);
