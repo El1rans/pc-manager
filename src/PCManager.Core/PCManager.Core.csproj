@@ -14,7 +14,12 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="System.Management" />
     <PackageReference Include="System.Diagnostics.PerformanceCounter" />
-    <PackageReference Include="OpenRGB.NET" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Vendored, not a NuGet package - see src/ThirdParty/OpenRGB.NET/OpenRGB.NET.csproj and
+         THIRD-PARTY-NOTICES.md for why. -->
+    <ProjectReference Include="..\ThirdParty\OpenRGB.NET\OpenRGB.NET.csproj" />
   </ItemGroup>
 
 </Project>
