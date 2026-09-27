@@ -33,6 +33,7 @@
         </Style>
         <Style x:Key="GridCellText" TargetType="TextBlock">
             <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}"/>
         </Style>
     </UserControl.Resources>
@@ -87,7 +88,10 @@
                     <MenuItem Header="Stop ignoring" Click="StopIgnoringMenuItem_Click"/>
                     <Separator/>
                     <MenuItem Header="Copy ID" Click="CopyIdMenuItem_Click"/>
-                    <MenuItem Header="Show package info" Click="ShowPackageInfoMenuItem_Click"/>
+                    <MenuItem Header="Show package info" Click="ShowPackageInfoMenuItem_Click"
+                              IsEnabled="{Binding PlacementTarget.DataContext.IsUpdating,
+                                                   RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                   Converter={StaticResource InverseBool}}"/>
                 </ContextMenu>
             </DataGrid.ContextMenu>
             <DataGrid.Columns>
@@ -130,25 +134,31 @@
         <StackPanel Grid.Row="3" Margin="0,12,0,0">
             <WrapPanel>
                 <CheckBox Content="Silent install (hide installer windows)" IsChecked="{Binding Silent}" Margin="0,0,16,4"/>
-                <CheckBox Content="Include apps with unknown version" IsChecked="{Binding IncludeUnknown}" Margin="0,0,0,4"/>
+                <CheckBox Content="Include apps with unknown version" IsChecked="{Binding IncludeUnknown}"
+                          IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" Margin="0,0,0,4"/>
             </WrapPanel>
             <DockPanel LastChildFill="False" Margin="0,6,0,0">
                 <Button DockPanel.Dock="Right" Content="{Binding UpdateSelectedButtonText}"
                         Command="{Binding UpdateSelectedCommand}"
-                        Background="{DynamicResource AccentFillColorDefaultBrush}"
-                        Foreground="White" FontWeight="SemiBold" MinWidth="170" Padding="14,6"/>
+                        Style="{DynamicResource AccentButtonStyle}" MinWidth="170" Padding="14,6"/>
                 <Button DockPanel.Dock="Right" Content="Stop after current" Command="{Binding StopAfterCurrentCommand}"
                         Margin="0,0,8,0"
                         Visibility="{Binding IsUpdating, Converter={StaticResource BoolToVis}}"/>
             </DockPanel>
         </StackPanel>
 
-        <!-- Progress -->
+        <!-- Progress: current step (queue position / stopping / finished summary) and winget's own
+             latest progress line shown side by side rather than combined into one string. -->
         <StackPanel Grid.Row="4" Margin="0,10,0,0">
             <ProgressBar Height="4" IsIndeterminate="True" BorderThickness="0"
                          Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
-            <TextBlock Text="{Binding ProgressText}" Style="{StaticResource Secondary}"
-                       FontFamily="Consolas" FontSize="12" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+            <DockPanel Margin="0,4,0,0" LastChildFill="True">
+                <TextBlock DockPanel.Dock="Left" Text="{Binding CurrentStep}" Style="{StaticResource Secondary}"
+                           FontFamily="Consolas" FontSize="12" TextTrimming="CharacterEllipsis"
+                           MaxWidth="360" Margin="0,0,12,0"/>
+                <TextBlock Text="{Binding ProgressLine}" Style="{StaticResource Secondary}"
+                           FontFamily="Consolas" FontSize="12" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
         </StackPanel>
 
         <!-- Log -->

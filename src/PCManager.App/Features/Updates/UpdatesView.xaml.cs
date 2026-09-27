@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace PCManager.App.Features.Updates;
 
@@ -14,13 +16,33 @@ public partial class UpdatesView : UserControl
     private UpdatesViewModel? ViewModel => DataContext as UpdatesViewModel;
 
     /// <summary>Double-click toggles the checkbox for the row under the cursor - see
-    /// <c>docs/specs/02-updates.md</c>.</summary>
+    /// <c>docs/specs/02-updates.md</c>. Only a double-click that actually lands on a data row
+    /// counts: one on the column header, a scrollbar, or the row's own checkbox (which already
+    /// toggles itself on a single click) must not also flip the selection a second time.</summary>
     private void PackagesGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (PackagesGrid.SelectedItem is UpdatePackageViewModel row && !row.IsIgnored)
+        if (e.OriginalSource is not DependencyObject source)
         {
-            row.IsSelected = !row.IsSelected;
+            return;
         }
+
+        var element = source;
+        while (element is not null and not DataGridRow)
+        {
+            if (element is CheckBox or DataGridColumnHeader or ScrollBar)
+            {
+                return;
+            }
+
+            element = VisualTreeHelper.GetParent(element);
+        }
+
+        if (element is not DataGridRow || PackagesGrid.SelectedItem is not UpdatePackageViewModel row || row.IsIgnored)
+        {
+            return;
+        }
+
+        row.IsSelected = !row.IsSelected;
     }
 
     private IEnumerable<UpdatePackageViewModel> SelectedRows() =>
