@@ -35,6 +35,35 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Pinned pages (e.g. "Get help"): their own group at the very bottom of the rail,
+                     above the admin block, separated and styled distinctly - see
+                     IPage.IsPinnedToBottom. Docked before the fill ListBox below so it stacks just
+                     above the (already Bottom-docked) admin block. -->
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,4,0,0">
+                    <Border BorderThickness="0,1,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                            Margin="12,4,12,4"/>
+                    <ListBox ItemsSource="{Binding PinnedPages}" SelectedItem="{Binding SelectedPage}"
+                             BorderThickness="0" Background="Transparent"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="4,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Glyph}" Style="{StaticResource Icon}"
+                                               FontSize="16" Margin="4,0,12,0"
+                                               Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </StackPanel>
+
                 <ListBox ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage}"
                           BorderThickness="0" Background="Transparent"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled">

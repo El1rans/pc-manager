@@ -14,5 +14,7 @@ public abstract partial class PageViewModelBase : ObservableObject, IPage
 
     public abstract int Order { get; }
 
+    public virtual bool IsPinnedToBottom => false;
+
     public virtual Task OnNavigatedToAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }
