@@ -31,6 +31,8 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
+; Sets the compiled Setup.exe's own FileVersion/ProductVersion resource, which is otherwise blank.
+VersionInfoVersion={#MyAppVersion}
 DefaultDirName={autopf}\PC Manager
 DefaultGroupName=PC Manager
 DisableProgramGroupPage=yes
@@ -45,15 +47,26 @@ PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 SetupIconFile=..\src\PCManager.App\Assets\AppIcon.ico
-; Matches App.AppMutexName (src/PCManager.App/App.xaml.cs) - lets Setup detect a running PC
-; Manager and ask the user to close it before install OR uninstall proceeds, without needing the
-; heavier Restart Manager-based CloseApplications feature.
-AppMutex={#MyAppMutex}
+; Matches App.AppMutexName/App.GlobalAppMutexName (src/PCManager.App/App.xaml.cs). Two names
+; because PC Manager can autostart in ANY signed-in user's session via {commonstartup}: a plain
+; (implicitly "Local\") named mutex is only visible within its own session, so a "Global\" one is
+; also needed for Setup - running in whichever session launched it, possibly a different one - to
+; detect an instance running in another user's session. This is independent of CloseApplications
+; below (Restart Manager-based file-lock detection, which Inno enables by default regardless of
+; AppMutex) - set explicitly here so both mechanisms are clearly intentional, not one instead of
+; the other.
+AppMutex={#MyAppMutex},Global\{#MyAppMutex}
+CloseApplications=yes
 WizardStyle=modern
 MinVersion=10.0
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Types]
+; The only type; "iscustom" hides the Setup-type combo box entirely, leaving just the plain
+; [Components] checkbox list below - see the [Components] comment for why this section exists.
+Name: "custom"; Description: "Custom"; Flags: iscustom
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
@@ -63,13 +76,19 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 ; tab (unlike an HKLM Run key, which is invisible there and harder for a family member to
 ; discover/disable), and is removed automatically by the uninstaller like any other shortcut -
 ; no extra [Code] needed to clean up an HKLM Run value on uninstall.
-Name: "startupicon"; Description: "Start PC Manager when I sign in"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
+Name: "startupicon"; Description: "Start PC Manager when anyone signs in to this PC"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
 ; One checkbox per optional third-party component (installed via winget in the [Code] section
-; below, not as installer-bundled files). Default checked/unchecked state is set in code
-; (InitializeWizard) since [Components] itself has no per-item "unchecked" flag.
+; below, not as installer-bundled files). Without a [Types] section, Inno implicitly adds
+; "Full/Compact/Custom installation" types and - since no component would belong to any of them -
+; a fresh install's default type ("Full") would have every component unticked, and a silent
+; install with no /COMPONENTS= override would install none of them. The single "custom" type
+; above avoids that: "anydesk" belongs to it (so it is ticked by default); "openrgb"/"pawnio"
+; belong to no type, so they default to unticked but remain independently toggleable, matching
+; docs/specs/07-installer.md. An unattended install can override the selection with
+; /COMPONENTS="anydesk,openrgb,pawnio" (see README.md's "Install" section).
 [Components]
-Name: "anydesk"; Description: "Remote help from family (AnyDesk)"
+Name: "anydesk"; Description: "Remote help from family (AnyDesk)"; Types: custom
 Name: "openrgb"; Description: "RGB lighting control (OpenRGB)"
 Name: "pawnio"; Description: "Fan control and temperature sensors (PawnIO driver) - installs a signed hardware driver"
 
@@ -94,7 +113,13 @@ const
   WINGET_UPDATE_NOT_APPLICABLE     = -1978335189; { 0x8A15002B }
   WINGET_INSTALL_ALREADY_INSTALLED = -1978334963; { 0x8A15010D }
 
+  { ERROR_TIMEOUT (Win32), returned by RunWingetInstall itself (not by winget) when the process
+    does not exit within WINGET_INSTALL_TIMEOUT_MS - see RunWingetInstall. }
+  ERROR_TIMEOUT_EXIT_CODE = 1460;
+  WINGET_INSTALL_TIMEOUT_MS = 600000; { 10 minutes. }
+
   InstallerRegistryKey = 'Software\PC Manager\Installer';
+  InstallerParentRegistryKey = 'Software\PC Manager';
   InstallerRegistryValue = 'Components';
 
 var
@@ -105,12 +130,6 @@ begin
   ComponentProgressPage := CreateOutputProgressPage(
     'Setting up optional components',
     'Please wait while Setup installs the components you selected via winget.');
-
-  { [Components] has no per-item default-unchecked flag, so the desired defaults - AnyDesk on,
-    OpenRGB and PawnIO off - are applied here once, right after the wizard form is built. Index
-    order matches the [Components] section above (0 = anydesk, 1 = openrgb, 2 = pawnio). }
-  WizardForm.ComponentsList.Checked[1] := False;
-  WizardForm.ComponentsList.Checked[2] := False;
 end;
 
 { True if winget.exe can be located at all (via cmd.exe /C "where", so it also picks up the
@@ -133,21 +152,73 @@ begin
     (ExitCode = WINGET_INSTALL_ALREADY_INSTALLED);
 end;
 
+{ Wraps a string in single quotes for use as a PowerShell string literal, doubling any embedded
+  single quote (PowerShell's own escaping rule) - defense in depth, since every caller here only
+  ever passes a plain winget package id with no quotes or spaces of its own. Built via Chr(39)
+  rather than Pascal's doubled-quote literal syntax to keep the quote-counting unambiguous. }
+function PsQuote(const S: string): string;
+var
+  QuoteChar: string;
+  Doubled: string;
+  Ch: string;
+  I: Integer;
+begin
+  { Everything kept as "string" (via Copy, rather than indexing S[I] as a Char) so every
+    comparison and concatenation below is string-to-string - unambiguous regardless of how
+    strictly this Pascal Script implementation distinguishes Char from a 1-character string. }
+  QuoteChar := Chr(39);
+  Doubled := '';
+  for I := 1 to Length(S) do
+  begin
+    Ch := Copy(S, I, 1);
+    if Ch = QuoteChar then
+      Doubled := Doubled + QuoteChar + QuoteChar
+    else
+      Doubled := Doubled + Ch;
+  end;
+  Result := QuoteChar + Doubled + QuoteChar;
+end;
+
+{ Runs "winget install --id <WingetId> ..." through PowerShell's Start-Process -PassThru so the
+  wait can be bounded: a hung winget (or a hung child installer, e.g. a driver with a stuck UI
+  prompt) must not hang the rest of Setup forever. On timeout the process is killed and ExitCode
+  is set to ERROR_TIMEOUT_EXIT_CODE, which IsAlreadyInstalledOrSuccess correctly treats as neither
+  success nor "cancelled by user", so it falls through to the same "failed, first-run setup can
+  retry later" handling as any other non-zero winget exit code. }
 function RunWingetInstall(const WingetId: string; var ExitCode: Integer): Boolean;
 var
+  ArgumentList: string;
+  PsCommand: string;
   Params: string;
 begin
-  Params := '/C winget.exe install --id ' + WingetId +
-    ' --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity';
-  Result := Exec('cmd.exe', Params, '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
+  ArgumentList :=
+    PsQuote('install') + ',' + PsQuote('--id') + ',' + PsQuote(WingetId) + ',' +
+    PsQuote('--exact') + ',' + PsQuote('--source') + ',' + PsQuote('winget') + ',' +
+    PsQuote('--silent') + ',' + PsQuote('--accept-package-agreements') + ',' +
+    PsQuote('--accept-source-agreements') + ',' + PsQuote('--disable-interactivity');
+
+  PsCommand :=
+    '$p = Start-Process -FilePath winget.exe -ArgumentList ' + ArgumentList +
+    ' -PassThru -WindowStyle Hidden; ' +
+    'if (-not $p.WaitForExit(' + IntToStr(WINGET_INSTALL_TIMEOUT_MS) + ')) { ' +
+    'try { $p.Kill() } catch {}; exit ' + IntToStr(ERROR_TIMEOUT_EXIT_CODE) + ' } ' +
+    'else { exit $p.ExitCode }';
+
+  Params := '-NoProfile -ExecutionPolicy Bypass -Command "' + PsCommand + '"';
+
+  Result := Exec('powershell.exe', Params, '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
   if not Result then
     ExitCode := -1;
 end;
 
-{ Runs winget for one ticked component and records its id as "attempted" regardless of outcome -
-  per docs/specs/07-installer.md's "Contract with first-run setup", the registry marker lists
-  every component the installer ran winget for, not only the ones that succeeded. First-run setup
-  always re-detects the real state itself; the marker only steers its default checkbox state. }
+{ Runs winget for one ticked component. Per docs/specs/07-installer.md's "Contract with first-run
+  setup", the registry marker lists every component the installer actually ran winget for -
+  regardless of whether that winget call went on to succeed - so the id is added whenever the
+  process itself started, even if winget's own exit code was a failure. It is deliberately NOT
+  added when RunWingetInstall could not even start the process (e.g. PowerShell itself missing or
+  blocked by policy), since in that case Setup never attempted anything for this component and
+  first-run setup should still default it to ticked. First-run setup always re-detects the real
+  state itself either way; the marker only steers its default checkbox state. }
 procedure TryInstallComponent(const DisplayName, WingetId, ComponentId: string;
   AttemptedIds: TStringList);
 var
@@ -158,15 +229,18 @@ begin
   ComponentProgressPage.Show;
   try
     Started := RunWingetInstall(WingetId, ExitCode);
-    AttemptedIds.Add(ComponentId);
 
     if not Started then
       Log('PCManager.iss: could not start winget for ' + WingetId + '.')
-    else if IsAlreadyInstalledOrSuccess(ExitCode) then
-      Log('PCManager.iss: ' + DisplayName + ' installed (or already installed); winget exit code ' + IntToStr(ExitCode) + '.')
     else
-      Log('PCManager.iss: winget install for ' + WingetId + ' returned exit code ' + IntToStr(ExitCode) +
-        '; PC Manager''s first-run setup can retry this later.');
+    begin
+      AttemptedIds.Add(ComponentId);
+      if IsAlreadyInstalledOrSuccess(ExitCode) then
+        Log('PCManager.iss: ' + DisplayName + ' installed (or already installed); winget exit code ' + IntToStr(ExitCode) + '.')
+      else
+        Log('PCManager.iss: winget install for ' + WingetId + ' returned exit code ' + IntToStr(ExitCode) +
+          '; PC Manager''s first-run setup can retry this later.');
+    end;
   finally
     ComponentProgressPage.Hide;
   end;
@@ -254,7 +328,7 @@ begin
 
   if not IsWingetAvailable() then
   begin
-    if IsComponentSelected('anydesk') or IsComponentSelected('openrgb') or IsComponentSelected('pawnio') then
+    if WizardIsComponentSelected('anydesk') or WizardIsComponentSelected('openrgb') or WizardIsComponentSelected('pawnio') then
       SuppressibleMsgBox(
         'Winget was not found on this PC, so the optional components you selected were not ' +
         'installed. You can install them later from PC Manager''s "Set up optional features".',
@@ -264,11 +338,11 @@ begin
 
   AttemptedIds := TStringList.Create;
   try
-    if IsComponentSelected('anydesk') then
+    if WizardIsComponentSelected('anydesk') then
       TryInstallComponent('AnyDesk (remote help)', 'AnyDesk.AnyDesk', 'anydesk', AttemptedIds);
-    if IsComponentSelected('openrgb') then
+    if WizardIsComponentSelected('openrgb') then
       TryInstallComponent('OpenRGB (RGB lighting)', 'OpenRGB.OpenRGB', 'openrgb', AttemptedIds);
-    if IsComponentSelected('pawnio') then
+    if WizardIsComponentSelected('pawnio') then
       TryInstallComponent('PawnIO driver (fan control)', 'namazso.PawnIO', 'pawnio', AttemptedIds);
 
     MergeInstallerHandledComponents(AttemptedIds);
@@ -286,8 +360,12 @@ begin
 
   { Not required by the installer contract (a stale marker is harmless - see
     docs/specs/07-installer.md), but nothing reads it after uninstall either, so remove it to
-    leave the registry clean for a future reinstall. }
+    leave the registry clean for a future reinstall. Also removes the two key levels PC Manager's
+    installer owns if they end up empty (RegDeleteKeyIfEmpty is a no-op if anything else is still
+    under them). }
   RegDeleteValue(HKLM, InstallerRegistryKey, InstallerRegistryValue);
+  RegDeleteKeyIfEmpty(HKLM, InstallerRegistryKey);
+  RegDeleteKeyIfEmpty(HKLM, InstallerParentRegistryKey);
 
   { Per-machine uninstall runs elevated as whichever account launched it - normally the same
     signed-in user (UAC keeps the same user token), but it does not have to be, e.g. a different

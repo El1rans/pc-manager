@@ -15,7 +15,12 @@ Goal: a single `PCManager-Setup-<version>.exe` a family member can download and 
     - "Fan control and temperature sensors (PawnIO driver)" - with a short note that it installs a signed hardware driver.
   - For each ticked component, `[Run]` executes `winget install --id <id> --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity` with a status message. If winget is missing, skip with a message; PC Manager's first-run setup can install them later.
   - Writes a marker so PC Manager's first-run setup pre-checks what the installer already handled (it re-detects anyway) - see "Contract with first-run setup" below.
-  - Optional "Start PC Manager when Windows starts" task (current user Run key).
+  - Optional "Start PC Manager when anyone signs in to this PC" task. Implemented as a
+    `{commonstartup}` (Common Startup folder) shortcut, not a current-user HKCU Run key: this is a
+    per-machine install, so a per-user Run key or Startup-folder entry for just the installing
+    user would be wrong on a shared family PC. A Common Startup shortcut starts PC Manager for
+    every account that signs in, still shows up in Task Manager's Startup tab (an HKLM Run key
+    would not), and is removed automatically by the uninstaller like any other shortcut.
   - Uninstall does NOT remove AnyDesk/OpenRGB/PawnIO (they are separate apps; say so on the finish page) and deletes `%APPDATA%\PCManager` only if the user agrees.
 - Versioning: `Version` in `Directory.Build.props`; tag `vX.Y.Z` triggers `.github/workflows/release.yml`: build, test, publish, compile installer, create a GitHub Release with the setup exe and SHA-256 checksum. CHANGELOG section becomes the release notes.
 - Code signing is out of scope for now (document that SmartScreen will warn for unsigned installers).

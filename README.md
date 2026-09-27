@@ -32,10 +32,15 @@ Download `PCManager-Setup-<version>.exe` from the [Releases](../../releases) pag
     control.
   - If `winget` is not available on your PC, Setup skips these and tells you so - PC Manager's own
     "Set up optional features" (in the sidebar) can install them later.
-  - You can also choose to create a desktop shortcut and/or start PC Manager when you sign in.
+  - You can also choose to create a desktop shortcut and/or start PC Manager when anyone signs in
+    to this PC.
 - Uninstalling PC Manager (Windows Settings > Apps) does **not** remove AnyDesk, OpenRGB or the
   PawnIO driver - they are separate applications; uninstall them individually if you no longer
   need them. You will be asked whether to also delete PC Manager's settings and logs.
+- For an unattended install, run the setup exe with `/VERYSILENT` and, to control which optional
+  components are installed, `/COMPONENTS="anydesk,openrgb,pawnio"` (comma-separated ids from
+  `installer/PCManager.iss`'s `[Components]` section; omit ids you don't want installed, or pass
+  `/COMPONENTS=""` to install none of them).
 
 See `docs/RELEASING.md` for how a new release is cut, and `docs/specs/07-installer.md` for the
 installer's full design.
