@@ -5,6 +5,12 @@
          in the sidebar footer) and by installer/PCManager.iss (via /DMyAppVersion=<Version> from
          the CI/release workflows). Bump this and CHANGELOG.md together - see docs/RELEASING.md. -->
     <Version>0.1.0</Version>
+    <!-- Embedded in every assembly's PE version resource (ProductName/CompanyName) - must match
+         docs/signing/app.xml's and docs/signing/installer.xml's product-name="PC Manager"
+         metadata restriction (SignPath Foundation requires artifact metadata restrictions), and
+         installer/PCManager.iss's VersionInfoProductName. -->
+    <Product>PC Manager</Product>
+    <Company>El1rans</Company>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>

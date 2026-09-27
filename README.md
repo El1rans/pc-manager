@@ -46,17 +46,19 @@ Download `PCManager-Setup-<version>.exe` from the [Releases](../../releases) pag
 See `docs/RELEASING.md` for how a new release is cut, and `docs/specs/07-installer.md` for the
 installer's full design.
 
-### Code signing
+### Code signing policy
 
 PC Manager has applied for free code signing through the
 [SignPath Foundation](https://signpath.org/) program for open source projects. Signing is being
 set up: `.github/workflows/release.yml` is wired to submit each tagged release for signing, but
 releases are signed only once SignPath approves the application and the maintainer finishes the
-one-time project setup - see `docs/CODE_SIGNING_POLICY.md` for the full policy (team roles,
-privacy statement, what PC Manager contacts over the network) and `docs/RELEASING.md` for the
-setup steps. Until then, every release stays unsigned and SmartScreen will warn as described above.
+one-time project setup - see [`docs/CODE_SIGNING_POLICY.md`](docs/CODE_SIGNING_POLICY.md) for the
+full policy (team roles, privacy statement, what PC Manager contacts over the network) and
+`docs/RELEASING.md` for the setup steps. Until then, every release stays unsigned and SmartScreen
+will warn as described above.
 
-Free code signing provided by SignPath.io, certificate by SignPath Foundation.
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by
+[SignPath Foundation](https://signpath.org).
 
 ## Building, running, and testing
 
@@ -90,10 +92,10 @@ milestone specs.
   top processes by CPU/memory, a pending-restart badge, and static system info (computer name, OS,
   manufacturer/model, CPU, GPU, RAM).
 - Updates page: lists `winget upgrade` results with selection, filtering and an ignore list;
-  installs the selected apps one at a time with a live log and progress, "Silent install" and
-  "Include apps with unknown version" options, and "Stop after current" to cancel the rest of a
-  run. The nav badge shows how many updates are available; a check runs automatically at startup
-  and on Refresh.
+  installs the selected apps one at a time with a live log and progress, "Silent install",
+  "Include apps with unknown version" and "Check for updates when PC Manager starts" options, and
+  "Stop after current" to cancel the rest of a run. The nav badge shows how many updates are
+  available; a check runs automatically at startup (unless turned off) and on Refresh.
 - Get help: a plain-language remote-support page for a non-technical user, pinned in its own group
   at the bottom of the nav rail. Installs AnyDesk, shows its address in large, selectable,
   grouped-digit text with a one-click "Copy address" (put the bare digits on the clipboard), a

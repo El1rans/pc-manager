@@ -43,16 +43,33 @@ GitHub and fill these in).
   install, the PawnIO driver, full sensor/fan access) and shows a clear "Restart as administrator"
   banner rather than silently failing when unelevated.
 - Network activity is limited to: `winget` (Microsoft's own package manager, invoked as a child
-  process, only for ticked/selected components or updates the user selects), a local-only
-  (`127.0.0.1`) TCP connection to a locally running OpenRGB SDK server, and the user's default
-  browser opening a documented external URL (`https://anydesk.com/download`) only when the user
-  clicks "Download AnyDesk manually". There is no telemetry, analytics, or automatic call-home.
-  Full detail: `docs/CODE_SIGNING_POLICY.md`'s privacy statement section.
+  process) - for ticked/selected components, for updates the user selects, **and automatically in
+  the background on every app start** to list available updates (a "Check for updates when PC
+  Manager starts" toggle, on by default, controls this; see Microsoft's
+  [privacy statement](https://privacy.microsoft.com/privacystatement) for what winget's own
+  network calls send); a local-only (`127.0.0.1` by default, configurable) TCP connection to a locally running
+  OpenRGB SDK server; AnyDesk's own network traffic whenever the locally installed AnyDesk process
+  is running (see [AnyDesk's privacy policy](https://anydesk.com/en/privacy)); and the user's
+  default browser opening a documented external URL (`https://anydesk.com/download`) only when the
+  user clicks "Download AnyDesk manually". There is no telemetry, analytics, or PC-Manager-operated
+  call-home server. Full detail: `docs/CODE_SIGNING_POLICY.md`'s privacy statement section.
 - The installer includes a documented, working uninstaller ("Apps & features" or the Start Menu
   shortcut) that removes PC Manager and, on request, its per-user settings/logs. It intentionally
   does not remove the separately-installed third-party tools (AnyDesk/OpenRGB/PawnIO), since those
   are independent applications the user may still want - this is disclosed on the uninstall finish
   page.
+
+**Third-party components (all permissively licensed, none copyleft-restrictive):**
+
+| Component | License | How it's used |
+|---|---|---|
+| `src/ThirdParty/OpenRGB.NET` (vendored, by Diogo Trindade) | MIT | RGB lighting control (OpenRGB SDK client) |
+| `LibreHardwareMonitorLib` | MPL-2.0 | Hardware sensor reading (temperatures, fans, voltages) |
+| `CommunityToolkit.Mvvm` | MIT | MVVM source generators (`[ObservableProperty]`, etc.) |
+| `Serilog`, `Serilog.Extensions.Hosting`, `Serilog.Sinks.File` | Apache-2.0 | Local file logging under `%APPDATA%\PCManager\logs` |
+| `Microsoft.Extensions.Hosting`, `Microsoft.Extensions.Logging.Abstractions` | MIT | .NET generic host / DI / logging abstractions |
+| `System.Management`, `System.Diagnostics.PerformanceCounter` | MIT | WMI and performance-counter based system info |
+| `xunit.v3` (Apache-2.0), `Microsoft.Extensions.TimeProvider.Testing` (MIT) | test-only, not shipped | Test framework and fake-clock testing helper |
 
 **Build system:** GitHub Actions, on GitHub-hosted `windows-latest` runners
 (`.github/workflows/release.yml`), triggered only by a `vX.Y.Z` tag pushed to this repository after
@@ -62,9 +79,11 @@ installer, and (once approved) submits both the published executable and the com
 SignPath for signing before creating the GitHub Release.
 
 **Maintainer / team:** Single maintainer, [@El1rans](https://github.com/El1rans), who is also the
-Committer, Reviewer and Approver for all changes (see `docs/CODE_SIGNING_POLICY.md`). Development
-is AI-assisted (changes are drafted with Claude Code as a coding agent), but every change is
-submitted as a pull request and reviewed and approved by the maintainer before merge or release.
+Committer and Reviewer for all changes (see `docs/CODE_SIGNING_POLICY.md`). Development is
+AI-assisted (changes are drafted with Claude Code as a coding agent), but every change goes through
+a pull request with required CI checks and is reviewed by the maintainer before merge (no formal
+self-approval exists). All team members (currently just the maintainer) use MFA on GitHub and
+SignPath.
 
 **Uninstall:** Standard Windows uninstall via "Apps & features", built from the Inno Setup script
 (`installer/PCManager.iss`); also available from the Start Menu group.

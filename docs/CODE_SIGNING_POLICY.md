@@ -1,6 +1,7 @@
 # Code signing policy
 
-Free code signing provided by SignPath.io, certificate by SignPath Foundation.
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by
+[SignPath Foundation](https://signpath.org).
 
 PC Manager applies for code signing through the [SignPath Foundation](https://signpath.org/)
 program for open source projects. This document is the "code signing policy" SignPath's
@@ -27,9 +28,12 @@ PC Manager currently has one maintainer and no separate review team. For SignPat
 | Reviewers / Approvers | [@El1rans](https://github.com/El1rans) |
 
 Development on this project is AI-assisted (changes are drafted with the help of Claude Code
-running as an agent), but every change is proposed as a pull request and is reviewed and approved
-by the maintainer, @El1rans, before it is merged to `main` or released. No one else can push to
-`main`, create a release, or approve a signing request.
+running as an agent), but every change goes through a pull request with required CI checks and is
+reviewed by the maintainer before merge (no formal self-approval exists - GitHub does not let a
+maintainer approve their own pull request; merges rely on the required checks passing plus the
+maintainer's own review of the diff before clicking merge). No one else can push to `main`, create
+a release, or approve a signing request. All team members (currently just the maintainer) use MFA
+on both GitHub and SignPath - see `docs/RELEASING.md`'s "Code signing (SignPath)" section.
 
 ## Privacy statement
 
@@ -52,6 +56,14 @@ network connection (`Process.Start`/`ProcessStartInfo`, `Socket`/`TcpClient`, an
 - **Checking for and installing app updates** (the Updates page) also runs `winget upgrade` /
   `winget install` per selected app - again Microsoft's own winget, started as a child process,
   never contacted directly by PC Manager's own code.
+- **On every app start** (unless the user turns off "Check for updates when PC Manager starts" on
+  the Updates page - on by default), PC Manager runs `winget upgrade --accept-source-agreements` in
+  the background to list available app updates (see `UpdatesAutoCheckHostedService`, registered in
+  `UpdatesFeature.cs`). This is the same `winget` child process described above - PC Manager itself
+  makes no network call - but `winget` contacts the winget package sources operated by Microsoft
+  to list what is available, without further action from the user. See Microsoft's own
+  [privacy statement](https://privacy.microsoft.com/privacystatement) for what Microsoft's winget
+  service receives. This can be turned off entirely via the toggle above.
 - **"Get help" (remote support)**: PC Manager starts the locally installed AnyDesk process
   (`Process.Start`) to read its assigned address and to launch it. PC Manager never sends that
   AnyDesk address, or any other data, to any server of its own or of ours - the address is only
@@ -59,14 +71,18 @@ network connection (`Process.Start`/`ProcessStartInfo`, `Socket`/`TcpClient`, an
   themselves (e.g. by reading it aloud or messaging it). The one exception is the "Download
   AnyDesk manually" link on that page, which opens `https://anydesk.com/download` in the user's
   default browser only when the user clicks it (`UrlLauncher.Open`, used from
-  `RemoteSupportViewModel.DownloadAnyDeskManually`).
+  `RemoteSupportViewModel.DownloadAnyDeskManually`). Whenever AnyDesk itself is running (whether
+  started by PC Manager or independently), AnyDesk connects to AnyDesk's own network to provide
+  remote-support relaying - that traffic is AnyDesk's, not PC Manager's; see
+  [AnyDesk's privacy policy](https://anydesk.com/en/privacy).
 - **Lighting (RGB control)**: PC Manager talks to a locally installed and running OpenRGB SDK
-  server over a plain TCP socket to `127.0.0.1` (the default `OpenRgbHost` in
-  `LightingSettings.cs`, implemented in the vendored `src/ThirdParty/OpenRGB.NET/`). This never
-  leaves the local machine.
-- **No telemetry, crash reporting, analytics, or update-check pings.** PC Manager does not call
-  home to any PC-Manager-operated server, and does not run any background network call the user
-  did not initiate through one of the actions above. Logs stay on disk under
+  server over a plain TCP socket, by default to `127.0.0.1` (loopback - the default `OpenRgbHost` in
+  `LightingSettings.cs`, implemented in the vendored `src/ThirdParty/OpenRGB.NET/`, MIT licensed).
+  This host is configurable in `settings.json` (`Lighting.OpenRgbHost`); as long as it is left at
+  its default it never leaves the local machine.
+- **No telemetry, crash reporting, or analytics.** PC Manager does not call home to any
+  PC-Manager-operated server, and runs no background network call other than the startup/Updates-page
+  winget check described above (both toggleable/user-initiated). Logs stay on disk under
   `%APPDATA%\PCManager\logs` and are never uploaded anywhere by the app.
 
 If a future change adds a new network call, this section must be updated in the same pull request

@@ -5,25 +5,31 @@ on:
     tags:
       - "v*.*.*"
 
-jobs:
-  release:
-    runs-on: windows-latest
-    # Least privilege: `contents: write` is needed only because this job creates the GitHub
-    # Release at the end; `actions: read` is needed only for the SignPath action's default
-    # github-token to read this run's own uploaded artifacts back (upload-artifact/download of an
-    # artifact from the *same* run needs actions:read even though it never touches another repo or
-    # workflow). Every other workflow/job in this repo keeps the default read-only GITHUB_TOKEN.
-    # Signing never runs on pull requests: this whole workflow only triggers on a `v*.*.*` tag
-    # push, and tags can only be pushed by someone with write access to this repository.
-    permissions:
-      contents: write
-      actions: read
-    env:
-      # Read once here rather than inlined as ${{ github.ref_name }} in each step's script body -
-      # keeps every step's PowerShell working with a plain environment variable instead of
-      # interpolating a GitHub Actions expression directly into script text.
-      TAG: ${{ github.ref_name }}
+env:
+  # Read once here rather than inlined as ${{ github.ref_name }} in each step's script body - keeps
+  # every step's PowerShell working with a plain environment variable instead of interpolating a
+  # GitHub Actions expression directly into script text. A top-level `env:` is visible to every job.
+  TAG: ${{ github.ref_name }}
 
+jobs:
+  # ---------------------------------------------------------------------------------------------
+  # build-sign: builds, tests, publishes, compiles the installer, and (if configured) submits both
+  # PCManager.exe and the compiled installer to SignPath for signing. Needs `contents: write`
+  # nowhere - it never touches the GitHub Release - so it only gets `contents: read` (to check out
+  # the repo) and `actions: read` (required by the SignPath action to read this same run's own
+  # uploaded artifacts back; see github-action-submit-signing-request's docs - this never grants
+  # access to another repo or workflow run). `environment: release` scopes SIGNPATH_API_TOKEN as an
+  # environment secret, gated by that environment's deployment rule restricting it to `v*.*.*` tags
+  # (see docs/RELEASING.md's "Code signing (SignPath)" section for the one-time setup).
+  build-sign:
+    runs-on: windows-latest
+    environment: release
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      signed: ${{ steps.signing.outputs.enabled }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -49,7 +55,8 @@ jobs:
         shell: pwsh
         run: |
           git fetch origin main
-          $isAncestor = & git merge-base --is-ancestor "$env:TAG" origin/main; $LASTEXITCODE -eq 0
+          & git merge-base --is-ancestor "$env:TAG" origin/main
+          $isAncestor = ($LASTEXITCODE -eq 0)
           if (-not $isAncestor) {
             throw "Tag '$env:TAG' is not an ancestor of origin/main - refusing to release a commit that was never merged."
           }
@@ -78,15 +85,23 @@ jobs:
         # docs/signing/APPLICATION.md is approved and the one-time setup in docs/RELEASING.md's
         # "Code signing (SignPath)" section is done - see docs/CODE_SIGNING_POLICY.md. Checked via
         # a script step (not a job/step `if:` expression) so a missing secret/variable can also
-        # print a clearly visible `::warning::` in the run's summary.
+        # print a clearly visible `::warning::` in the run's summary. The repo/environment variable
+        # SIGNPATH_REQUIRED=true opts into failing the release instead of silently publishing
+        # unsigned - flip it on once SignPath is expected to always be configured.
         id: signing
         shell: pwsh
         env:
           SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_REQUIRED: ${{ vars.SIGNPATH_REQUIRED }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_ORGANIZATION_ID) -or [string]::IsNullOrWhiteSpace($env:SIGNPATH_API_TOKEN)) {
-            Write-Host "::warning::SignPath code signing is not configured yet (repo variable SIGNPATH_ORGANIZATION_ID and/or repo secret SIGNPATH_API_TOKEN is missing) - publishing this release UNSIGNED. See docs/RELEASING.md's 'Code signing (SignPath)' section to set it up."
+          $configured = -not ([string]::IsNullOrWhiteSpace($env:SIGNPATH_ORGANIZATION_ID) -or [string]::IsNullOrWhiteSpace($env:SIGNPATH_API_TOKEN))
+          if (-not $configured) {
+            $message = "SignPath code signing is not configured yet (repo/environment variable SIGNPATH_ORGANIZATION_ID and/or environment secret SIGNPATH_API_TOKEN is missing)."
+            if ($env:SIGNPATH_REQUIRED -eq 'true') {
+              throw "$message SIGNPATH_REQUIRED is 'true', so refusing to publish an unsigned release. See docs/RELEASING.md's 'Code signing (SignPath)' section."
+            }
+            Write-Host "::warning::$message Publishing this release UNSIGNED. See docs/RELEASING.md's 'Code signing (SignPath)' section to set it up."
             "enabled=false" >> $env:GITHUB_OUTPUT
           } else {
             Write-Host "SignPath signing is configured - this release will be signed."
@@ -109,15 +124,12 @@ jobs:
           -o publish
 
       # --- Stage 1: sign PCManager.exe before it goes into the installer -----------------------
-
-      - name: Zip PCManager.exe for signing
-        if: steps.signing.outputs.enabled == 'true'
-        shell: pwsh
-        run: Compress-Archive -Path publish\PCManager.exe -DestinationPath app-to-sign.zip
-        # docs/signing/app.xml's artifact configuration expects a zip-file containing
-        # PCManager.exe (rather than the bare exe) - this is what lets SignPath return a signed
-        # zip that github-action-submit-signing-request can decompress back into a signed
-        # PCManager.exe, matching a plain <pe-file> configuration's single-file semantics.
+      #
+      # actions/upload-artifact always zips whatever `path` it is given before storing it, so
+      # uploading `publish/PCManager.exe` directly (no local Compress-Archive step) already
+      # produces exactly the zip-containing-PCManager.exe that docs/signing/app.xml's
+      # <zip-file><pe-file path="PCManager.exe"> configuration expects - matching what
+      # github-action-submit-signing-request hands back too (a decompressed PCManager.exe).
 
       - name: Upload app artifact for signing
         if: steps.signing.outputs.enabled == 'true'
@@ -125,7 +137,7 @@ jobs:
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: app-to-sign
-          path: app-to-sign.zip
+          path: publish/PCManager.exe
           retention-days: 1
 
       - name: Submit PCManager.exe for signing
@@ -142,6 +154,12 @@ jobs:
           signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
           artifact-configuration-slug: app
           github-artifact-id: ${{ steps.upload-app.outputs.artifact-id }}
+          # Maps to docs/signing/app.xml's <parameters><parameter name="version"> - enforced there
+          # as a required product-version metadata restriction (SignPath Foundation requires
+          # artifact metadata restrictions). github-token is left at its default (${{ github.token
+          # }}); this job's own `permissions:` above already keeps it read-only.
+          parameters: |
+            version: "${{ steps.version.outputs.version }}"
           wait-for-completion: true
           wait-for-completion-timeout-in-seconds: "1800" # 30 minutes - covers a manual SignPath approval click.
           output-artifact-directory: signed-app
@@ -157,6 +175,9 @@ jobs:
           }
           if ($sig.SignerCertificate.Subject -notmatch 'SignPath Foundation') {
             throw "PCManager.exe was signed, but not by SignPath Foundation (signer subject: $($sig.SignerCertificate.Subject))."
+          }
+          if ($null -eq $sig.TimeStamperCertificate) {
+            throw "PCManager.exe's signature has no timestamp - it would stop validating once the signing certificate expires."
           }
 
       - name: Use the signed PCManager.exe for the installer
@@ -181,6 +202,11 @@ jobs:
             "/O$PWD\dist"
 
       # --- Stage 2: sign the compiled installer -------------------------------------------------
+      #
+      # Same reasoning as Stage 1: upload-artifact zips dist/PCManager-Setup-<version>.exe as-is, so
+      # docs/signing/installer.xml is a <zip-file><pe-file path="PCManager-Setup-${version}.exe">
+      # configuration (the exact versioned filename, via the same `version` parameter, rather than
+      # a wildcard) matching that zip's contents.
 
       - name: Upload installer artifact for signing
         if: steps.signing.outputs.enabled == 'true'
@@ -202,6 +228,11 @@ jobs:
           signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
           artifact-configuration-slug: installer
           github-artifact-id: ${{ steps.upload-installer.outputs.artifact-id }}
+          # Maps to docs/signing/installer.xml's <parameters><parameter name="version"> - used both
+          # for the required product-version metadata restriction and to build the exact
+          # `PCManager-Setup-${version}.exe` path inside the uploaded zip.
+          parameters: |
+            version: "${{ steps.version.outputs.version }}"
           wait-for-completion: true
           wait-for-completion-timeout-in-seconds: "1800" # 30 minutes - covers a manual SignPath approval click.
           output-artifact-directory: signed-installer
@@ -220,6 +251,9 @@ jobs:
           }
           if ($sig.SignerCertificate.Subject -notmatch 'SignPath Foundation') {
             throw "The installer was signed, but not by SignPath Foundation (signer subject: $($sig.SignerCertificate.Subject))."
+          }
+          if ($null -eq $sig.TimeStamperCertificate) {
+            throw "The installer's signature has no timestamp - it would stop validating once the signing certificate expires."
           }
 
       - name: Use the signed installer for the release
@@ -273,20 +307,54 @@ jobs:
             throw "The '$heading' CHANGELOG.md section is empty - add release notes before tagging."
           }
 
+          # S4: make an unsigned release visibly unsigned in the notes themselves, not just in the
+          # SmartScreen warning a user hits later. S3: always link the code signing policy.
+          if ('${{ steps.signing.outputs.enabled }}' -ne 'true') {
+            $notes = "**This release is unsigned.** See [Code signing policy](https://github.com/El1rans/pc-manager/blob/main/docs/CODE_SIGNING_POLICY.md) for why and how that changes.`n`n$notes"
+          } else {
+            $notes = "$notes`n`n---`n[Code signing policy](https://github.com/El1rans/pc-manager/blob/main/docs/CODE_SIGNING_POLICY.md)"
+          }
+
           $notesPath = "release-notes.md"
           Set-Content -Path $notesPath -Value $notes
           "notesPath=$notesPath" >> $env:GITHUB_OUTPUT
 
+      - name: Upload release assets
+        # Hands the signed (or unsigned-fallback) installer, its checksum, and the release notes to
+        # the `publish` job, which is the only job with `contents: write` - see that job's comment.
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: release-assets
+          path: |
+            dist/PCManager-Setup-${{ steps.version.outputs.version }}.exe
+            dist/PCManager-Setup-${{ steps.version.outputs.version }}.exe.sha256
+            release-notes.md
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------------------------
+  # publish: the only job with `contents: write` (needed solely to create the GitHub Release), and
+  # the only one that runs `gh release create`. It never touches SignPath credentials and never
+  # builds anything itself - it just downloads what build-sign already produced and publishes it.
+  publish:
+    needs: build-sign
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: release-assets
+          path: release-assets
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.version.outputs.version }}
-          NOTES_PATH: ${{ steps.notes.outputs.notesPath }}
-        shell: pwsh
+          VERSION: ${{ needs.build-sign.outputs.version }}
         run: |
-          $exe = "dist\PCManager-Setup-$env:VERSION.exe"
-          gh release create "$env:TAG" `
-            "$exe" "$exe.sha256" `
-            --title "PC Manager $env:VERSION" `
-            --notes-file "$env:NOTES_PATH" `
+          exe="release-assets/dist/PCManager-Setup-${VERSION}.exe"
+          gh release create "$TAG" \
+            "$exe" "$exe.sha256" \
+            --title "PC Manager $VERSION" \
+            --notes-file "release-assets/release-notes.md" \
             --verify-tag

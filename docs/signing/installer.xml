@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  SignPath artifact configuration for the "installer" artifact: the compiled Inno Setup
-  PCManager-Setup-<version>.exe submitted directly (not zipped) for signing. Paste this into
-  SignPath's project as the artifact configuration for the "installer" artifact configuration
-  slug - see docs/RELEASING.md for the one-time SignPath project setup and
-  .github/workflows/release.yml for how the workflow submits the compiled installer for signing
-  under this configuration.
+  SignPath artifact configuration for the "installer" artifact: a zip file containing the compiled
+  Inno Setup PCManager-Setup-<version>.exe. Paste this into SignPath's project as the artifact
+  configuration for the "installer" artifact configuration slug - see docs/RELEASING.md for the
+  one-time SignPath project setup and .github/workflows/release.yml for how the workflow uploads
+  dist/PCManager-Setup-<version>.exe (actions/upload-artifact always zips the uploaded path itself,
+  so no local zip step is needed for this to line up with the <zip-file> below).
+
+  The exact file name inside the zip varies by release version, so the path below is built from the
+  same required "version" parameter used for the product-version metadata restriction below, rather
+  than a wildcard - .github/workflows/release.yml passes it as
+  `parameters: |\n  version: "<the release version>"` on the signing request.
 
   Note: this configuration cannot cover the installer's embedded uninstaller (unins000.exe) -
   see "Uninstaller signing limitation" in docs/CODE_SIGNING_POLICY.md.
@@ -13,7 +18,14 @@
   Schema reference: https://docs.signpath.io/artifact-configuration/reference
 -->
 <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
-  <pe-file>
-    <authenticode-sign />
-  </pe-file>
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <artifacts>
+      <pe-file path="PCManager-Setup-${version}.exe" product-name="PC Manager" product-version="${version}">
+        <authenticode-sign />
+      </pe-file>
+    </artifacts>
+  </zip-file>
 </artifact-configuration>
