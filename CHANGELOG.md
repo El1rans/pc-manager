@@ -11,3 +11,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Foundation: solution layout, host + DI, Serilog file logging, JSON settings store with atomic
   writes and corrupt-file recovery, WPF shell with navigation rail (Dashboard, Updates, Hardware,
   Lighting placeholders), admin elevation support, CI workflow and repo hygiene files.
+
+### Fixed
+
+- `SettingsStore.Save`/`Update` no longer throw when the settings file is transiently locked by
+  another process (e.g. Defender, the Search indexer, or OneDrive briefly holding the file during
+  the atomic rename). The final move now retries with bounded backoff, and if it still fails,
+  persistence is treated as best-effort: a warning is logged, in-memory `Current` stays
+  authoritative, and the next save retries. This fixes intermittent `UnauthorizedAccessException`
+  crashes on startup (`PC Manager could not start`) caused by the launch-count update.
