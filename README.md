@@ -44,6 +44,11 @@ milestone specs.
   updated once a second (paused while the window is minimized). Drives with a low-space warning,
   top processes by CPU/memory, a pending-restart badge, and static system info (computer name, OS,
   manufacturer/model, CPU, GPU, RAM).
+- Updates page: lists `winget upgrade` results with selection, filtering and an ignore list;
+  installs the selected apps one at a time with a live log and progress, "Silent install" and
+  "Include apps with unknown version" options, and "Stop after current" to cancel the rest of a
+  run. The nav badge shows how many updates are available; a check runs automatically at startup
+  and on Refresh.
 
 ## Planned modules
 
