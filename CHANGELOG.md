@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Screenshots: a DEBUG-only "demo data" mode (`PCMANAGER_DEMO_DATA=1`, see CONTRIBUTING.md) that
+  swaps the Dashboard's system-info, drive and process-list services for fake ones, so
+  documentation screenshots no longer need to show a real PC's computer name, hardware, drive
+  labels or installed apps. Does not exist in a Release build. Replaced every screenshot in
+  `docs/screenshots/` that showed real machine-identifying data with a redacted version, cropped
+  `first-run.png` down to just the app window (it previously captured the whole desktop), and
+  removed two obsolete/unused screenshots (`after-skip.png`, `foundation.png`).
 - Installer and releases: a self-contained, single-file win-x64 publish profile; an Inno Setup 6
   script (`installer/PCManager.iss`) that installs PC Manager per-machine to
   `Program Files\PC Manager` with Start menu/desktop/startup shortcuts, an optional Components
