@@ -58,6 +58,24 @@ public sealed class ComponentServiceTests : IDisposable
         Assert.Equal(ComponentState.Installed, status.State);
         Assert.Equal("9.7.16", status.Version);
         Assert.Equal(exePath, status.Path);
+        Assert.True(status.PathIsTrusted);
+    }
+
+    [Fact]
+    public async Task GetStatusAsync_HkcuUninstallEntry_ReturnsPathNotTrusted()
+    {
+        // A per-user (HKCU) install location is writable by the current user, not just an
+        // administrator - callers that would execute this path while elevated (see
+        // AnyDeskService.BuildStateAsync) must not trust it.
+        const string installLocation = @"C:\Users\parent\AppData\Local\AnyDesk";
+        _registryReader.SetUninstallEntry("AnyDesk", new UninstallEntry("9.7.16", installLocation, IsPerMachine: false));
+        _fileSystem.AddFile(Path.Combine(installLocation, "AnyDesk.exe"));
+        var service = CreateService();
+
+        var status = await service.GetStatusAsync(ComponentIds.AnyDesk, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ComponentState.Installed, status.State);
+        Assert.False(status.PathIsTrusted);
     }
 
     [Fact]
@@ -98,6 +116,7 @@ public sealed class ComponentServiceTests : IDisposable
 
         Assert.Equal(ComponentState.Installed, status.State);
         Assert.Equal(overridePath, status.Path);
+        Assert.False(status.PathIsTrusted);
     }
 
     [Fact]

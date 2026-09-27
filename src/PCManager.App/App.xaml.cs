@@ -9,6 +9,7 @@ using PCManager.App.Controls;
 using PCManager.App.Features.Dashboard;
 using PCManager.App.Features.Hardware;
 using PCManager.App.Features.Lighting;
+using PCManager.App.Features.RemoteSupport;
 using PCManager.App.Features.Setup;
 using PCManager.App.Features.Updates;
 using PCManager.App.Shell;
@@ -167,6 +168,7 @@ public partial class App : System.Windows.Application
         services.AddHardwareFeature();
         services.AddLightingFeature();
         services.AddHostedService<Features.Lighting.OpenRgbAutoStartHostedService>();
+        services.AddRemoteSupportFeature();
     }
 
     /// <summary>Applies every feature's <see cref="PageRegistration"/> to the view locator. Runs

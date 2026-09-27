@@ -31,6 +31,13 @@ public sealed partial class ComponentCardViewModel : ObservableObject, IDisposab
     [ObservableProperty]
     private string? _progressText;
 
+    /// <summary>True until the first <see cref="LoadAsync"/> call completes. Lets a hosting page
+    /// avoid flashing "Install" for a component that turns out to already be installed, by showing
+    /// a neutral "Checking..." state instead until detection has actually run once.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(PrimaryActionCommand))]
+    private bool _isLoading = true;
+
     public ComponentCardViewModel(
         ComponentDefinition definition,
         IComponentService componentService,
@@ -73,9 +80,9 @@ public sealed partial class ComponentCardViewModel : ObservableObject, IDisposab
 
     public bool IsError => Status.State == ComponentState.Error;
 
-    public bool ShowPrimaryButton => !IsBusy && !IsReady;
+    public bool ShowPrimaryButton => !IsBusy && !IsLoading && !IsReady;
 
-    public string StatusText => Status.Message ?? DefaultStatusText;
+    public string StatusText => IsLoading ? "Checking..." : Status.Message ?? DefaultStatusText;
 
     private string DefaultStatusText => Status.State switch
     {
@@ -106,6 +113,10 @@ public sealed partial class ComponentCardViewModel : ObservableObject, IDisposab
         catch (OperationCanceledException)
         {
             // Navigating away while detection was in flight; expected, not an error.
+        }
+        finally
+        {
+            IsLoading = false;
         }
     }
 
@@ -181,6 +192,12 @@ public sealed partial class ComponentCardViewModel : ObservableObject, IDisposab
     }
 
     partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(ShowPrimaryButton));
+
+    partial void OnIsLoadingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowPrimaryButton));
+        OnPropertyChanged(nameof(StatusText));
+    }
 
     public void Dispose()
     {

@@ -34,10 +34,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _pageViewLocator = pageViewLocator;
         _setupLauncher = setupLauncher;
         _logger = logger;
-        Pages = new ObservableCollection<IPage>(pages.OrderBy(p => p.Order));
+        var pageList = pages as IReadOnlyCollection<IPage> ?? pages.ToList();
+        Pages = new ObservableCollection<IPage>(pageList.Where(p => !p.IsPinnedToBottom).OrderBy(p => p.Order));
+        PinnedPages = new ObservableCollection<IPage>(pageList.Where(p => p.IsPinnedToBottom).OrderBy(p => p.Order));
     }
 
     public ObservableCollection<IPage> Pages { get; }
+
+    /// <summary>Pages shown in their own group at the bottom of the nav rail - see
+    /// <see cref="IPage.IsPinnedToBottom"/>.</summary>
+    public ObservableCollection<IPage> PinnedPages { get; }
 
     public bool IsElevated => _shellService.IsElevated;
 
