@@ -291,9 +291,10 @@ begin
 
   { Per-machine uninstall runs elevated as whichever account launched it - normally the same
     signed-in user (UAC keeps the same user token), but it does not have to be, e.g. a different
-    administrator account. {userappdata} here always resolves to the account actually running
-    this uninstaller, so only offer to delete that account's data; another account's PC Manager
-    data (if any) is left untouched rather than risk deleting the wrong profile's files. }
+    administrator account. The userappdata constant below always resolves to the account
+    actually running this uninstaller, so only offer to delete that account's data; another
+    account's PC Manager data (if any) is left untouched rather than risk deleting the wrong
+    profile's files. }
   DataDir := ExpandConstant('{userappdata}') + '\PCManager';
   if DirExists(DataDir) then
   begin
