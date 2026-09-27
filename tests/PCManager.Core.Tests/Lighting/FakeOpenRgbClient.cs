@@ -1,3 +1,4 @@
+using System.Threading;
 using PCManager.Core.Lighting;
 
 namespace PCManager.Core.Tests.Lighting;
@@ -10,35 +11,72 @@ public sealed class FakeOpenRgbClient : IOpenRgbClient
     private readonly List<RgbDevice> _devices = [];
     private readonly List<string> _profiles = [];
 
+    /// <summary>Signaled ("released") by default; reset by <see cref="HangUntilDisposed"/> to make
+    /// every call block, and set again by <see cref="Release"/> or <see cref="Dispose"/> - mirroring
+    /// OpenRGB.NET's own blocking read (<c>BlockingCollection.Take</c> with no timeout of its own),
+    /// which only unblocks when the connection is disposed.</summary>
+    private readonly ManualResetEventSlim _releaseSignal = new(initialState: true);
+
     /// <summary>When set, <see cref="Connect"/> throws this instead of connecting.</summary>
     public Exception? FailConnectionWith { get; set; }
 
     /// <summary>When set, every call throws this - simulates the socket dying mid-session.</summary>
     public Exception? FailAllCallsWith { get; set; }
 
-    /// <summary>When true, every call blocks until <see cref="Unblock"/> is called or the caller's
-    /// token is cancelled - used to exercise <see cref="LightingService"/>'s timeout path.</summary>
-    public bool HangCalls { get; set; }
+    /// <summary>When true, every call blocks until <see cref="Dispose"/> or <see cref="Release"/> is
+    /// called - used to exercise <see cref="LightingService"/>'s timeout, dispose-to-recover, and
+    /// heartbeat paths against something that behaves like the real library's blocking read rather
+    /// than one that conveniently throws.</summary>
+    public bool HangUntilDisposed
+    {
+        get => !_releaseSignal.IsSet;
+        set
+        {
+            if (value)
+            {
+                _releaseSignal.Reset();
+            }
+            else
+            {
+                _releaseSignal.Set();
+            }
+        }
+    }
 
     public int DisposeCallCount { get; private set; }
 
+    public int GetControllerCountCallCount { get; private set; }
+
+    public int GetAllControllerDataCallCount { get; private set; }
+
+    /// <summary>When a device index is present here, <see cref="UpdateLeds"/> throws its exception
+    /// for that device only - used to prove a single device's own failure does not stop the rest of
+    /// a "set all" loop.</summary>
+    public Dictionary<int, Exception> FailUpdateLedsForDevice { get; } = [];
+
     public List<(int DeviceIndex, IReadOnlyList<RgbColor> Colors)> UpdateLedsCalls { get; } = [];
 
-    public List<(int DeviceIndex, int ModeIndex)> SetModeCalls { get; } = [];
+    public List<(int DeviceIndex, int ModeIndex, IReadOnlyList<RgbColor>? Colors)> SetModeCalls { get; } = [];
 
     public string? LoadedProfile { get; private set; }
 
     public bool Connected { get; private set; }
 
+    public event EventHandler? DeviceListUpdated;
+
     public void AddDevice(RgbDevice device) => _devices.Add(device);
 
     public void AddProfile(string name) => _profiles.Add(name);
 
-    public void Unblock() => HangCalls = false;
+    /// <summary>Unblocks a call currently waiting on <see cref="HangUntilDisposed"/> without
+    /// disposing - simulates OpenRGB answering late rather than the socket being torn down.</summary>
+    public void Release() => _releaseSignal.Set();
+
+    public void RaiseDeviceListUpdated() => DeviceListUpdated?.Invoke(this, EventArgs.Empty);
 
     public void Connect()
     {
-        Block();
+        BlockUntilReleased();
         if (FailAllCallsWith is not null)
         {
             throw FailAllCallsWith;
@@ -53,56 +91,85 @@ public sealed class FakeOpenRgbClient : IOpenRgbClient
         Connected = true;
     }
 
+    public int GetControllerCount()
+    {
+        BlockThenThrowIfFailing();
+        GetControllerCountCallCount++;
+        return _devices.Count;
+    }
+
+    public RgbDevice GetControllerData(int deviceIndex)
+    {
+        BlockThenThrowIfFailing();
+        return _devices.FirstOrDefault(d => d.Index == deviceIndex)
+            ?? throw new InvalidOperationException($"No fake device with index {deviceIndex}.");
+    }
+
     public IReadOnlyList<RgbDevice> GetAllControllerData()
     {
-        ThrowIfFailing();
+        BlockThenThrowIfFailing();
+        GetAllControllerDataCallCount++;
         return _devices;
     }
 
     public IReadOnlyList<string> GetProfiles()
     {
-        ThrowIfFailing();
+        BlockThenThrowIfFailing();
         return _profiles;
     }
 
     public void LoadProfile(string name)
     {
-        ThrowIfFailing();
+        BlockThenThrowIfFailing();
         LoadedProfile = name;
     }
 
-    public void SetMode(int deviceIndex, int modeIndex)
+    public void SetMode(int deviceIndex, int modeIndex, IReadOnlyList<RgbColor>? colors = null)
     {
-        ThrowIfFailing();
-        SetModeCalls.Add((deviceIndex, modeIndex));
+        BlockThenThrowIfFailing();
+        SetModeCalls.Add((deviceIndex, modeIndex, colors));
     }
 
     public void UpdateLeds(int deviceIndex, IReadOnlyList<RgbColor> colors)
     {
-        ThrowIfFailing();
+        BlockThenThrowIfFailing();
+
+        if (FailUpdateLedsForDevice.TryGetValue(deviceIndex, out var deviceException))
+        {
+            throw deviceException;
+        }
+
+        // Mirrors the real OpenRGB.NET client, which throws on an empty color array - devices with
+        // zero LEDs must never reach this call (LightingService is expected to skip them).
+        if (colors.Count == 0)
+        {
+            throw new ArgumentException("The colors span is empty.", nameof(colors));
+        }
+
         UpdateLedsCalls.Add((deviceIndex, colors.ToArray()));
     }
 
-    public void Dispose() => DisposeCallCount++;
-
-    private void ThrowIfFailing()
+    public void Dispose()
     {
-        Block();
+        DisposeCallCount++;
+
+        // Mirrors OpenRGB.NET: disposing the connection unblocks any blocked read, but the object is
+        // now unusable - further calls throw instead of quietly succeeding, so an orphaned caller
+        // that was blocked on a stale call can't sneak in a reply once a new connection is made.
+        _releaseSignal.Set();
+    }
+
+    private void BlockThenThrowIfFailing()
+    {
+        BlockUntilReleased();
+
+        ObjectDisposedException.ThrowIf(DisposeCallCount > 0, this);
+
         if (FailAllCallsWith is not null)
         {
             throw FailAllCallsWith;
         }
     }
 
-    /// <summary>Busy-waits while <see cref="HangCalls"/> is set, simulating a server that never
-    /// answers. <see cref="LightingService"/>'s own timeout is what ends this from the caller's
-    /// side - this loop only stops if the test calls <see cref="Unblock"/> directly.</summary>
-    private void Block()
-    {
-        var spinWait = new SpinWait();
-        while (HangCalls)
-        {
-            spinWait.SpinOnce();
-        }
-    }
+    private void BlockUntilReleased() => _releaseSignal.Wait();
 }
