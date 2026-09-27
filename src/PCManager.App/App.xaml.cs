@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,12 +22,35 @@ using Serilog;
 
 namespace PCManager.App;
 
-public partial class App : System.Windows.Application
+public partial class App : System.Windows.Application, IDisposable
 {
     /// <summary>How long shutdown waits for the host to stop and dispose before giving up.</summary>
     private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// Fixed, well-known name for the app's single-instance mutex. The installer's
+    /// <c>[Setup]</c> section references this same name via <c>AppMutex</c>
+    /// (<c>installer/PCManager.iss</c>) so Inno Setup can detect a running PC Manager and ask the
+    /// user to close it before install/uninstall proceeds - see docs/specs/07-installer.md. Held
+    /// for the lifetime of the process only to make the app detectable; it does not enforce
+    /// single-instance behaviour on its own.
+    /// </summary>
+    public const string AppMutexName = "PCManagerAppMutex";
+
+    /// <summary>
+    /// Same mutex as <see cref="AppMutexName"/>, but in the "Global\" kernel object namespace
+    /// (visible across Terminal Services sessions), not the implicit per-session "Local\"
+    /// namespace <see cref="AppMutexName"/> lives in. PC Manager can autostart in any signed-in
+    /// user's session via the installer's Common Startup shortcut, so Setup - itself running in
+    /// whichever session launched it, not necessarily the same one - needs a name it can see from
+    /// any session to detect an instance running elsewhere. A standard (non-elevated) user can
+    /// create a "Global\" mutex; no special privilege is required.
+    /// </summary>
+    public const string GlobalAppMutexName = "Global\\PCManagerAppMutex";
+
     private IHost? _host;
+    private Mutex? _appMutex;
+    private Mutex? _globalAppMutex;
 
     /// <summary>
     /// Lets controls created outside DI (e.g. a <see cref="System.Windows.FrameworkElement"/>
@@ -56,6 +80,15 @@ public partial class App : System.Windows.Application
         AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         DispatcherUnhandledException += OnDispatcherUnhandledException;
+
+        // Named mutexes the installer/uninstaller looks for (Inno Setup's AppMutex, given both
+        // names comma-separated) so it can ask the user to close PC Manager before install/
+        // uninstall touches its files. Not used here to enforce single-instance behaviour - just
+        // held for the process lifetime so they exist while the app is running. Both are created
+        // regardless of which session/user is running: the "Global\" one is what lets Setup find
+        // an instance autostarted in a different session (see GlobalAppMutexName).
+        _appMutex = new Mutex(initiallyOwned: false, name: AppMutexName);
+        _globalAppMutex = new Mutex(initiallyOwned: false, name: GlobalAppMutexName);
 
         try
         {
@@ -127,7 +160,18 @@ public partial class App : System.Windows.Application
         }
 
         Serilog.Log.CloseAndFlush();
+        Dispose();
         base.OnExit(e);
+    }
+
+    /// <summary>Disposes <see cref="_appMutex"/> and <see cref="_globalAppMutex"/>. Called from
+    /// <see cref="OnExit"/> - satisfies CA1001 (a type that owns a disposable field must itself be
+    /// disposable) rather than being invoked by the WPF framework itself.</summary>
+    public void Dispose()
+    {
+        _appMutex?.Dispose();
+        _globalAppMutex?.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private static string BuildLogPath()

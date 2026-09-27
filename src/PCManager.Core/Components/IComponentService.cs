@@ -21,7 +21,7 @@ public interface IComponentService
     Task<ComponentStatus> GetStatusAsync(string id, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Installs the component via <c>winget install --id &lt;id&gt; --exact --silent
+    /// Installs the component via <c>winget install --id &lt;id&gt; --exact --source winget --silent
     /// --accept-package-agreements --accept-source-agreements --disable-interactivity</c>,
     /// streaming winget's output to <paramref name="log"/> and <paramref name="progress"/>. An
     /// "already installed" exit code counts as success; a "reboot required to finish" exit code

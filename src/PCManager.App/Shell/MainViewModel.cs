@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Reflection;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -48,6 +49,29 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public bool IsElevated => _shellService.IsElevated;
 
     public string AdminStatusText => IsElevated ? "Running as administrator" : "Not running as administrator";
+
+    /// <summary>Shown as small text in the sidebar footer, e.g. "Version 0.1.0". Read from the
+    /// entry assembly's informational version (set from the single `Version` in
+    /// Directory.Build.props) rather than duplicated here. Computed once into a field (rather than
+    /// an expression-bodied property) since the value never changes for the process lifetime.</summary>
+    public string VersionText { get; } = $"Version {GetAppVersion()}";
+
+    private static string GetAppVersion()
+    {
+        var assembly = Assembly.GetEntryAssembly();
+        var informational = assembly?
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion;
+
+        if (string.IsNullOrEmpty(informational))
+        {
+            return assembly?.GetName().Version?.ToString() ?? "0.0.0";
+        }
+
+        // Strip any source-control metadata suffix (e.g. "0.1.0+abcdef1234").
+        var plusIndex = informational.IndexOf('+', StringComparison.Ordinal);
+        return plusIndex < 0 ? informational : informational[..plusIndex];
+    }
 
     public IRelayCommand RestartElevatedCommand => _shellService.RestartElevatedCommand;
 

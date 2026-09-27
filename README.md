@@ -13,6 +13,38 @@ milestone 02 ports into the app; it is kept for reference and not built.
 
 To run the prototype standalone, double-click `prototype/Winget Updater.bat`.
 
+## Install
+
+Download `PCManager-Setup-<version>.exe` from the [Releases](../../releases) page and run it.
+
+- The installer is unsigned (see "Code signing" below), so Windows SmartScreen will warn that it
+  "prevented an unrecognized app from starting". Click **More info**, then **Run anyway** to
+  continue - this is expected for every release until the installer is code-signed.
+- Setup asks for administrator rights (needed for a per-machine install and, if you choose the
+  PawnIO driver below, its kernel driver), then lets you pick which optional components to set
+  up. Each is installed with `winget`, so it needs an internet connection the first time:
+  - **Remote help from family (AnyDesk)** - ticked by default. Lets a family member connect to
+    help you, from the "Get help" page.
+  - **RGB lighting control (OpenRGB)** - unticked by default. Needed for the Lighting page to
+    control RGB devices (motherboard, RAM, GPU, keyboard, ...).
+  - **Fan control and temperature sensors (PawnIO driver)** - unticked by default. Installs a
+    signed kernel driver PC Manager's Hardware page needs for full sensor access and software fan
+    control.
+  - If `winget` is not available on your PC, Setup skips these and tells you so - PC Manager's own
+    "Set up optional features" (in the sidebar) can install them later.
+  - You can also choose to create a desktop shortcut and/or start PC Manager when anyone signs in
+    to this PC.
+- Uninstalling PC Manager (Windows Settings > Apps) does **not** remove AnyDesk, OpenRGB or the
+  PawnIO driver - they are separate applications; uninstall them individually if you no longer
+  need them. You will be asked whether to also delete PC Manager's settings and logs.
+- For an unattended install, run the setup exe with `/VERYSILENT` and, to control which optional
+  components are installed, `/COMPONENTS="anydesk,openrgb,pawnio"` (comma-separated ids from
+  `installer/PCManager.iss`'s `[Components]` section; omit ids you don't want installed, or pass
+  `/COMPONENTS=""` to install none of them).
+
+See `docs/RELEASING.md` for how a new release is cut, and `docs/specs/07-installer.md` for the
+installer's full design.
+
 ## Building, running, and testing
 
 Requires the .NET SDK version pinned in `global.json` (Windows, since the app uses WPF).
@@ -29,7 +61,7 @@ milestone specs.
 ## Features
 
 - App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Get help), following
-  Windows light/dark theme.
+  Windows light/dark theme, with the app version shown in the sidebar footer.
 - Settings persisted as JSON under `%APPDATA%\PCManager\settings.json`, atomic writes, corrupt-file
   recovery.
 - Logs written to `%APPDATA%\PCManager\logs`.
