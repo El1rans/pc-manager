@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using PCManager.Core.Components;
 using PCManager.Core.Lighting;
 using Xunit;
 
@@ -16,10 +15,9 @@ public sealed class LightingServiceTests
 
     private static LightingService CreateService(
         FakeOpenRgbClient client,
-        FakeComponentService? componentService = null,
         TimeSpan? callTimeout = null,
         TimeSpan? heartbeatInterval = null) =>
-        new(client, componentService ?? new FakeComponentService(), NullLogger<LightingService>.Instance, callTimeout, heartbeatInterval);
+        new(client, NullLogger<LightingService>.Instance, callTimeout, heartbeatInterval);
 
     /// <summary>Polls until <paramref name="condition"/> is true or <see cref="EventWaitBudget"/>
     /// elapses - used for the heartbeat/disconnect tests, whose effects happen on a background
@@ -361,36 +359,42 @@ public sealed class LightingServiceTests
     }
 
     [Fact]
-    public async Task ComponentLeavesRunning_DisconnectsWithoutWaitingForNextCall()
+    public async Task Call_SucceedsButClientReportsNotConnected_DiscardsResultDisposesAndDisconnects()
     {
+        // Mirrors the vendored library's now-fixed phantom-reply bug (see
+        // docs/upstream/openrgb-net.md): a call can return a normal-looking result even though the
+        // client already knows it is no longer actually connected. LightingService must never trust
+        // that result, and must never just quietly flip IsConnected without disposing/announcing it.
         var client = new FakeOpenRgbClient();
-        var componentService = new FakeComponentService();
-        var service = CreateService(client, componentService, heartbeatInterval: TimeSpan.FromMinutes(5));
+        client.AddDevice(MakeDevice(0, "RAM", ledCount: 1, new RgbMode(0, "Direct", RgbColorMode.PerLed, 0)));
+        var service = CreateService(client);
         await service.ConnectAsync(TestContext.Current.CancellationToken);
 
         var disconnectedRaised = false;
         service.Disconnected += (_, _) => disconnectedRaised = true;
+        client.Connected = false;
 
-        componentService.RaiseStatusChanged(ComponentIds.OpenRgb, new ComponentStatus(ComponentState.NotInstalled));
+        var devices = await service.GetDevicesAsync(TestContext.Current.CancellationToken);
 
-        await WaitUntilAsync(() => disconnectedRaised);
-
+        Assert.Empty(devices); // the phantom "RAM" device is discarded, not trusted
+        Assert.True(disconnectedRaised);
         Assert.False(service.IsConnected);
         Assert.True(client.DisposeCallCount >= 1);
     }
 
     [Fact]
-    public async Task ComponentStatusChanged_ForADifferentComponent_IsIgnored()
+    public async Task ClientDeviceListUpdated_RaisesDevicesChanged()
     {
         var client = new FakeOpenRgbClient();
-        var componentService = new FakeComponentService();
-        var service = CreateService(client, componentService, heartbeatInterval: TimeSpan.FromMinutes(5));
+        var service = CreateService(client);
         await service.ConnectAsync(TestContext.Current.CancellationToken);
 
-        componentService.RaiseStatusChanged(ComponentIds.AnyDesk, new ComponentStatus(ComponentState.NotInstalled));
-        await Task.Delay(50, TestContext.Current.CancellationToken);
+        var devicesChangedRaised = false;
+        service.DevicesChanged += (_, _) => devicesChangedRaised = true;
 
-        Assert.True(service.IsConnected);
+        client.RaiseDeviceListUpdated();
+
+        Assert.True(devicesChangedRaised);
     }
 
     [Fact]

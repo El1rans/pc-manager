@@ -60,7 +60,10 @@ public sealed class FakeOpenRgbClient : IOpenRgbClient
 
     public string? LoadedProfile { get; private set; }
 
-    public bool Connected { get; private set; }
+    /// <summary>Public setter so a test can flip this to false independently of a call succeeding
+    /// or throwing - simulating the vendored library's now-fixed phantom-reply bug, where a call
+    /// could return a normal-looking result while the client already knew it was disconnected.</summary>
+    public bool Connected { get; set; }
 
     public event EventHandler? DeviceListUpdated;
 
