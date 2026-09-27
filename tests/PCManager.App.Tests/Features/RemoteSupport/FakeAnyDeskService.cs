@@ -5,6 +5,8 @@ namespace PCManager.App.Tests.Features.RemoteSupport;
 
 internal sealed class FakeAnyDeskService : IAnyDeskService
 {
+    private readonly Queue<AnyDeskState> _stateQueue = new();
+
     public AnyDeskState StateToReturn { get; set; } =
         new(IsInstalled: false, ExePath: null, Version: null, Id: null, Alias: null, IsRunning: false,
             ComponentStatus: ComponentStatus.NotInstalled);
@@ -17,14 +19,23 @@ internal sealed class FakeAnyDeskService : IAnyDeskService
 
     public int LaunchCallCount { get; private set; }
 
+    /// <summary>Queues states that <see cref="GetStateAsync"/> returns one at a time (in order)
+    /// before falling back to <see cref="StateToReturn"/> once the queue is empty - lets a test
+    /// simulate the address appearing on a later poll.</summary>
+    public void QueueStates(params AnyDeskState[] states)
+    {
+        foreach (var state in states)
+        {
+            _stateQueue.Enqueue(state);
+        }
+    }
+
     public Task<AnyDeskState> GetStateAsync(CancellationToken cancellationToken)
     {
         GetStateCallCount++;
-        return Task.FromResult(StateToReturn);
+        var state = _stateQueue.Count > 0 ? _stateQueue.Dequeue() : StateToReturn;
+        return Task.FromResult(state);
     }
-
-    public Task<AnyDeskState> InstallAsync(IProgress<string> log, CancellationToken cancellationToken) =>
-        throw new NotSupportedException("Not needed by RemoteSupportViewModel - install goes through IComponentService/ComponentCardViewModel.");
 
     public Task<AnyDeskState> LaunchAsync(CancellationToken cancellationToken)
     {

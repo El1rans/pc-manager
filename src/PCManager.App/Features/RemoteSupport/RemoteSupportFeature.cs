@@ -10,6 +10,8 @@ public static class RemoteSupportFeature
     {
         services.AddRemoteSupportCore();
         services.AddSingleton<IClipboardService, ClipboardService>();
+        services.AddSingleton<IUrlLauncher, UrlLauncher>();
+        services.AddSingleton<IWindowsVersionReader, WindowsVersionReader>();
         return services.AddPage<RemoteSupportViewModel, RemoteSupportView>();
     }
 }

@@ -7,7 +7,9 @@ namespace PCManager.App.Features.RemoteSupport;
 /// </summary>
 public interface IClipboardService
 {
-    /// <summary>Puts <paramref name="text"/> on the clipboard as plain text. Never throws; a
-    /// failure is logged and otherwise ignored, since a copy button is not worth crashing over.</summary>
-    void SetText(string text);
+    /// <summary>Puts <paramref name="text"/> on the clipboard as plain text. Never throws - a
+    /// failure (e.g. another app briefly holding the clipboard open) is logged and reported back as
+    /// <see langword="false"/> instead, so the caller can tell the user to try again rather than
+    /// claiming success.</summary>
+    bool SetText(string text);
 }

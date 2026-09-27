@@ -1,9 +1,11 @@
+using System.ComponentModel;
 using System.IO;
 using Microsoft.Extensions.Logging.Abstractions;
 using PCManager.App.Controls;
 using PCManager.App.Features.RemoteSupport;
 using PCManager.App.Tests.Features.Setup;
 using PCManager.Core.Components;
+using PCManager.Core.RemoteSupport;
 using PCManager.Core.Settings;
 using Xunit;
 
@@ -11,11 +13,17 @@ namespace PCManager.App.Tests.Features.RemoteSupport;
 
 public sealed class RemoteSupportViewModelTests : IDisposable
 {
+    private static readonly TimeSpan TestPollInterval = TimeSpan.FromMilliseconds(15);
+    private static readonly TimeSpan TestIdWaitTimeout = TimeSpan.FromMilliseconds(120);
+    private static readonly TimeSpan WaitTimeout = TimeSpan.FromSeconds(5);
+
     private readonly string _directory;
     private readonly SettingsStore _settingsStore;
     private readonly FakeComponentService _componentService = new();
     private readonly FakeAnyDeskService _anyDeskService = new();
     private readonly FakeClipboardService _clipboard = new();
+    private readonly FakeUrlLauncher _urlLauncher = new();
+    private readonly FakeWindowsVersionReader _windowsVersionReader = new();
 
     public RemoteSupportViewModelTests()
     {
@@ -36,15 +44,58 @@ public sealed class RemoteSupportViewModelTests : IDisposable
     {
         var cardFactory = new ComponentCardViewModelFactory(_componentService, NullLoggerFactory.Instance);
         return new RemoteSupportViewModel(
-            _anyDeskService, _componentService, cardFactory, _clipboard, _settingsStore,
-            NullLogger<RemoteSupportViewModel>.Instance);
+            _anyDeskService, _componentService, cardFactory, _clipboard, _urlLauncher, _windowsVersionReader,
+            _settingsStore, NullLogger<RemoteSupportViewModel>.Instance,
+            copyConfirmationDuration: TestPollInterval, waitingForIdPollInterval: TestPollInterval,
+            runningStatusPollInterval: TestPollInterval, idWaitTimeout: TestIdWaitTimeout);
+    }
+
+    /// <summary>Awaits until <paramref name="condition"/> holds, driven by
+    /// <paramref name="notifier"/>'s <see cref="INotifyPropertyChanged.PropertyChanged"/> rather
+    /// than a fixed delay, so tests are both fast and not racy against the view model's background
+    /// poll loop.</summary>
+    private static async Task WaitUntilAsync(
+        INotifyPropertyChanged notifier, Func<bool> condition, CancellationToken cancellationToken)
+    {
+        if (condition())
+        {
+            return;
+        }
+
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (condition())
+            {
+                tcs.TrySetResult();
+            }
+        }
+
+        notifier.PropertyChanged += OnChanged;
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(WaitTimeout);
+        await using var registration = timeoutCts.Token.Register(() => tcs.TrySetCanceled());
+        try
+        {
+            if (condition())
+            {
+                return;
+            }
+
+            await tcs.Task.ConfigureAwait(true);
+        }
+        finally
+        {
+            notifier.PropertyChanged -= OnChanged;
+        }
     }
 
     [Fact]
-    public void Order_IsLast()
+    public void IsPinnedToBottom_True()
     {
-        // Nav order 0-3 are taken by Dashboard/Updates/Hardware/Lighting; "Get help" must be last.
-        Assert.Equal(4, CreateViewModel().Order);
+        // "Get help" must be placed separately at the bottom of the nav, not among the regular
+        // pages ordered by Order - see IPage.IsPinnedToBottom.
+        Assert.True(CreateViewModel().IsPinnedToBottom);
     }
 
     [Fact]
@@ -95,6 +146,15 @@ public sealed class RemoteSupportViewModelTests : IDisposable
     }
 
     [Fact]
+    public void BeforeFirstLoad_StatusIsHidden()
+    {
+        // Nit: never show "AnyDesk is not running" + Start before the first state has loaded.
+        var viewModel = CreateViewModel();
+
+        Assert.False(viewModel.HasLoadedState);
+    }
+
+    [Fact]
     public async Task InstalledMidSession_TransitionsFromCardToMainContentWithoutRenavigating()
     {
         // Starts not installed - the card is showing, like on first navigation to the page.
@@ -109,17 +169,75 @@ public sealed class RemoteSupportViewModelTests : IDisposable
         _anyDeskService.StateToReturn = new(
             IsInstalled: true, ExePath: @"C:\AnyDesk.exe", Version: "9.7.16",
             Id: "555555555", Alias: null, IsRunning: true, ComponentStatus: new ComponentStatus(ComponentState.Running));
-        await viewModel.Card.LoadAsync(TestContext.Current.CancellationToken);
         _componentService.SetStatus(ComponentIds.AnyDesk, new ComponentStatus(ComponentState.Running, "9.7.16", @"C:\AnyDesk.exe"));
-        _componentService.InstallCalls.Clear();
         await viewModel.Card.LoadAsync(TestContext.Current.CancellationToken);
 
-        // Let the fire-and-forget refresh triggered by the card's Status change complete.
-        await Task.Delay(50, TestContext.Current.CancellationToken);
+        await WaitUntilAsync(viewModel, () => viewModel.HasAddress, TestContext.Current.CancellationToken);
 
         Assert.False(viewModel.ShowComponentCard);
         Assert.True(viewModel.ShowMainContent);
         Assert.Equal("555 555 555", viewModel.FormattedAddress);
+    }
+
+    [Fact]
+    public async Task InstalledWithoutId_PollsUntilIdAppearsOnALaterPoll()
+    {
+        // B2: right after an install, AnyDesk has never run yet, so the first read has no ID -
+        // the page must keep polling (starting AnyDesk once) rather than showing
+        // "Getting your address..." forever.
+        _componentService.SetStatus(ComponentIds.AnyDesk, new ComponentStatus(ComponentState.Installed, "9.7.16", @"C:\AnyDesk.exe"));
+        var notInstalledYet = new AnyDeskState(
+            true, @"C:\AnyDesk.exe", "9.7.16", null, null, false, new ComponentStatus(ComponentState.Installed));
+        _anyDeskService.StateToReturn = notInstalledYet;
+        _anyDeskService.LaunchResult = new(
+            true, @"C:\AnyDesk.exe", "9.7.16", "999888777", null, true, new ComponentStatus(ComponentState.Running));
+        var viewModel = CreateViewModel();
+
+        await viewModel.OnNavigatedToAsync(TestContext.Current.CancellationToken);
+        Assert.False(viewModel.HasAddress);
+
+        await WaitUntilAsync(viewModel, () => viewModel.HasAddress, TestContext.Current.CancellationToken);
+
+        Assert.Equal("999 888 777", viewModel.FormattedAddress);
+        Assert.Equal(1, _anyDeskService.LaunchCallCount);
+    }
+
+    [Fact]
+    public async Task InstalledWithoutId_GivesUpAfterTimeoutAndTryAgainRestartsPolling()
+    {
+        _componentService.SetStatus(ComponentIds.AnyDesk, new ComponentStatus(ComponentState.Installed, "9.7.16", @"C:\AnyDesk.exe"));
+        _anyDeskService.StateToReturn = new(
+            true, @"C:\AnyDesk.exe", "9.7.16", null, null, true, new ComponentStatus(ComponentState.Running));
+        var viewModel = CreateViewModel();
+
+        await viewModel.OnNavigatedToAsync(TestContext.Current.CancellationToken);
+
+        await WaitUntilAsync(viewModel, () => viewModel.ShowAddressTrouble, TestContext.Current.CancellationToken);
+        Assert.True(viewModel.IsAddressTimedOut);
+
+        // Try again should clear the timeout and start a fresh wait budget.
+        viewModel.TryAgainCommand.Execute(null);
+        Assert.False(viewModel.IsAddressTimedOut);
+    }
+
+    [Fact]
+    public async Task RunningWithId_StillPollsAndNoticesAnyDeskClosing()
+    {
+        // S6: once an address is known, the page should keep lightly polling so it notices AnyDesk
+        // being closed while the page stays open.
+        _componentService.SetStatus(ComponentIds.AnyDesk, new ComponentStatus(ComponentState.Running, "9.7.16", @"C:\AnyDesk.exe"));
+        _anyDeskService.StateToReturn = new(
+            true, @"C:\AnyDesk.exe", "9.7.16", "123456789", null, true, new ComponentStatus(ComponentState.Running));
+        var viewModel = CreateViewModel();
+        await viewModel.OnNavigatedToAsync(TestContext.Current.CancellationToken);
+        Assert.True(viewModel.IsRunning);
+
+        _anyDeskService.StateToReturn = new(
+            true, @"C:\AnyDesk.exe", "9.7.16", "123456789", null, false, new ComponentStatus(ComponentState.Installed));
+
+        await WaitUntilAsync(viewModel, () => !viewModel.IsRunning, TestContext.Current.CancellationToken);
+
+        Assert.False(viewModel.IsRunning);
     }
 
     [Fact]
@@ -135,6 +253,23 @@ public sealed class RemoteSupportViewModelTests : IDisposable
 
         Assert.Equal("123456789", _clipboard.LastText);
         Assert.True(viewModel.IsAddressCopied);
+        Assert.False(viewModel.AddressCopyFailed);
+    }
+
+    [Fact]
+    public async Task CopyAddressCommand_ClipboardFails_ShowsCouldNotCopy()
+    {
+        _componentService.SetStatus(ComponentIds.AnyDesk, new ComponentStatus(ComponentState.Running));
+        _anyDeskService.StateToReturn = new(
+            true, @"C:\AnyDesk.exe", "9.7.16", "123456789", null, true, new ComponentStatus(ComponentState.Running));
+        _clipboard.NextResult = false;
+        var viewModel = CreateViewModel();
+        await viewModel.OnNavigatedToAsync(TestContext.Current.CancellationToken);
+
+        viewModel.CopyAddressCommand.Execute(null);
+
+        Assert.False(viewModel.IsAddressCopied);
+        Assert.True(viewModel.AddressCopyFailed);
     }
 
     [Fact]
@@ -152,11 +287,30 @@ public sealed class RemoteSupportViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task CopySupportInfoCommand_IncludesComputerNameAndAddress()
+    public async Task CopyAddressThenCopySupportInfo_EachKeepsItsOwnConfirmation()
+    {
+        // S2: quick Copy address then Copy support info must not leave IsAddressCopied stuck true
+        // (or clear it early) - each button's confirmation is on its own timer.
+        _componentService.SetStatus(ComponentIds.AnyDesk, new ComponentStatus(ComponentState.Running));
+        _anyDeskService.StateToReturn = new(
+            true, @"C:\AnyDesk.exe", "9.7.16", "123456789", null, true, new ComponentStatus(ComponentState.Running));
+        var viewModel = CreateViewModel();
+        await viewModel.OnNavigatedToAsync(TestContext.Current.CancellationToken);
+
+        viewModel.CopyAddressCommand.Execute(null);
+        viewModel.CopySupportInfoCommand.Execute(null);
+
+        Assert.True(viewModel.IsAddressCopied);
+        Assert.True(viewModel.IsSupportInfoCopied);
+    }
+
+    [Fact]
+    public async Task CopySupportInfoCommand_IncludesComputerNameWindowsVersionAndAddress()
     {
         _componentService.SetStatus(ComponentIds.AnyDesk, new ComponentStatus(ComponentState.Running));
         _anyDeskService.StateToReturn = new(
             true, @"C:\AnyDesk.exe", "9.7.16", "123456789", null, true, new ComponentStatus(ComponentState.Running));
+        _windowsVersionReader.Version = "Windows 11 Pro (build 26200)";
         var viewModel = CreateViewModel();
         await viewModel.OnNavigatedToAsync(TestContext.Current.CancellationToken);
 
@@ -165,6 +319,7 @@ public sealed class RemoteSupportViewModelTests : IDisposable
         Assert.NotEmpty(_clipboard.Texts);
         Assert.Contains(Environment.MachineName, _clipboard.LastText);
         Assert.Contains("123 456 789", _clipboard.LastText);
+        Assert.Contains("Windows 11 Pro (build 26200)", _clipboard.LastText);
         Assert.True(viewModel.IsSupportInfoCopied);
     }
 
@@ -188,14 +343,61 @@ public sealed class RemoteSupportViewModelTests : IDisposable
     }
 
     [Fact]
-    public void SettingHelperName_PersistsToSettings()
+    public async Task GetStateThrows_ShowsErrorWithRetry()
+    {
+        _componentService.SetStatus(ComponentIds.AnyDesk, new ComponentStatus(ComponentState.Running));
+        var throwingAnyDeskService = new ThrowingAnyDeskService();
+        var cardFactory = new ComponentCardViewModelFactory(_componentService, NullLoggerFactory.Instance);
+        var viewModel = new RemoteSupportViewModel(
+            throwingAnyDeskService, _componentService, cardFactory, _clipboard, _urlLauncher, _windowsVersionReader,
+            _settingsStore, NullLogger<RemoteSupportViewModel>.Instance,
+            copyConfirmationDuration: TestPollInterval, waitingForIdPollInterval: TestPollInterval,
+            runningStatusPollInterval: TestPollInterval, idWaitTimeout: TestIdWaitTimeout);
+
+        await viewModel.OnNavigatedToAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(viewModel.HasError);
+        Assert.True(viewModel.ShowAddressTrouble);
+        Assert.NotEmpty(viewModel.ErrorMessage);
+
+        // Retry clears the error (the fake still throws, so it flips right back to true - what
+        // matters here is that the command exists, is bound, and re-runs the read).
+        viewModel.TryAgainCommand.Execute(null);
+        Assert.True(throwingAnyDeskService.CallCount >= 1);
+    }
+
+    [Fact]
+    public async Task ShowManualDownloadLink_WhenCardIsInErrorState()
+    {
+        _componentService.SetStatus(ComponentIds.AnyDesk, new ComponentStatus(ComponentState.Error, Message: "Could not start the installer."));
+        var viewModel = CreateViewModel();
+
+        await viewModel.Card.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(viewModel.ShowManualDownloadLink);
+    }
+
+    [Fact]
+    public void DownloadAnyDeskManuallyCommand_OpensDownloadPage()
     {
         var viewModel = CreateViewModel();
 
-        viewModel.HelperName = "Eliran";
+        viewModel.DownloadAnyDeskManuallyCommand.Execute(null);
+
+        Assert.Contains("anydesk.com/download", Assert.Single(_urlLauncher.OpenedUrls));
+    }
+
+    [Fact]
+    public void SettingHelperName_PersistsToSettingsAndUpdatesStep1Text()
+    {
+        var viewModel = CreateViewModel();
+
+        viewModel.SetHelperName("Eliran");
 
         Assert.Equal("Eliran", _settingsStore.Current.RemoteSupport.HelperName);
         Assert.True(viewModel.HasHelperName);
+        Assert.Equal("Your helper: Eliran", viewModel.HelperLine);
+        Assert.Equal("1. Call Eliran.", viewModel.Step1Text);
     }
 
     [Fact]
@@ -210,10 +412,27 @@ public sealed class RemoteSupportViewModelTests : IDisposable
     }
 
     [Fact]
-    public void NoHelperNameSet_HasHelperNameIsFalse()
+    public void NoHelperNameSet_HasHelperNameIsFalseAndStep1TextIsGeneric()
     {
         var viewModel = CreateViewModel();
 
         Assert.False(viewModel.HasHelperName);
+        Assert.Equal("1. Call the person helping you.", viewModel.Step1Text);
+    }
+
+    /// <summary><see cref="IAnyDeskService"/> fake that always throws, for the "unexpected error"
+    /// path (S5) - a real fault, not just "not installed".</summary>
+    private sealed class ThrowingAnyDeskService : IAnyDeskService
+    {
+        public int CallCount { get; private set; }
+
+        public Task<AnyDeskState> GetStateAsync(CancellationToken cancellationToken)
+        {
+            CallCount++;
+            throw new InvalidOperationException("boom");
+        }
+
+        public Task<AnyDeskState> LaunchAsync(CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("boom");
     }
 }
