@@ -12,4 +12,6 @@ public sealed record PerformanceSnapshot(
     double? DiskReadBytesPerSecond,
     double? DiskWriteBytesPerSecond,
     double? NetworkDownloadBytesPerSecond,
-    double? NetworkUploadBytesPerSecond);
+    double? NetworkUploadBytesPerSecond,
+    long NetworkTotalDownloadedBytes,
+    long NetworkTotalUploadedBytes);

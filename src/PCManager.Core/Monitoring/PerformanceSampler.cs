@@ -14,46 +14,39 @@ public sealed partial class PerformanceSampler : IPerformanceSampler
     private const string GpuUtilizationCounter = "Utilization Percentage";
 
     private readonly ILogger<PerformanceSampler> _logger;
-    private readonly PerformanceCounter? _cpuCounter;
-    private readonly PerformanceCounter? _diskIdleCounter;
-    private readonly PerformanceCounter? _diskReadCounter;
-    private readonly PerformanceCounter? _diskWriteCounter;
-    private readonly bool _gpuCategoryAvailable;
-    private readonly Stopwatch _networkStopwatch = Stopwatch.StartNew();
+    private readonly Stopwatch _networkStopwatch = new();
+    private readonly object _initLock = new();
+
+    private PerformanceCounter? _cpuCounter;
+    private PerformanceCounter? _diskIdleCounter;
+    private PerformanceCounter? _diskReadCounter;
+    private PerformanceCounter? _diskWriteCounter;
+    private bool _gpuCategoryAvailable;
+    private bool _initialized;
 
     private Dictionary<string, CounterSample> _previousGpuSamples = [];
-    private long _previousDownloadBytes;
-    private long _previousUploadBytes;
-    private bool _hasPreviousNetworkSample;
+    private Dictionary<string, NetworkAdapterSample> _previousNetworkSamples = new(StringComparer.Ordinal);
+    private long _cumulativeDownloadBytes;
+    private long _cumulativeUploadBytes;
 
     public PerformanceSampler(ILogger<PerformanceSampler> logger)
     {
         _logger = logger;
 
-        // "Processor Information / % Processor Utility" matches Task Manager on modern Windows;
-        // "Processor / % Processor Time" is the classic fallback for older/locked-down machines.
-        _cpuCounter = CreateCounter("Processor Information", "% Processor Utility", "_Total")
-            ?? CreateCounter("Processor", "% Processor Time", "_Total");
-
-        _diskIdleCounter = CreateCounter("PhysicalDisk", "% Idle Time", "_Total");
-        _diskReadCounter = CreateCounter("PhysicalDisk", "Disk Read Bytes/sec", "_Total");
-        _diskWriteCounter = CreateCounter("PhysicalDisk", "Disk Write Bytes/sec", "_Total");
-
-        _gpuCategoryAvailable = CategoryExists(GpuEngineCategory);
-
-        // Prime rate counters: the first NextValue() after creation is always 0.
-        _cpuCounter?.NextValue();
-        _diskIdleCounter?.NextValue();
-        _diskReadCounter?.NextValue();
-        _diskWriteCounter?.NextValue();
-        if (_gpuCategoryAvailable)
-        {
-            _previousGpuSamples = ReadGpuSamples();
-        }
+        // Counter creation/priming (and the first GPU ReadCategory call) is slow - measured at
+        // ~1 second - so it must not run in the constructor: DI resolves this singleton on the UI
+        // thread (as a MainViewModel/MainWindow dependency chain), and doing this work there would
+        // freeze the window before it is even shown. Deferred to the first Sample() call instead,
+        // which always runs on the dashboard's background sampling loop thread (see
+        // DashboardViewModel.RunAsync). Sample() is only ever called sequentially from that one
+        // thread, so EnsureInitialized() does not need to guard against concurrent callers, but the
+        // lock is kept cheap insurance against that assumption changing later.
     }
 
     public PerformanceSnapshot Sample()
     {
+        EnsureInitialized();
+
         var cpuPercent = SafeRead(_cpuCounter, v => Math.Clamp(v, 0, 100));
         var (memoryUsed, memoryTotal) = SampleMemory();
         var gpuPercent = _gpuCategoryAvailable ? SampleGpu() : null;
@@ -72,7 +65,9 @@ public sealed partial class PerformanceSampler : IPerformanceSampler
             diskRead,
             diskWrite,
             download,
-            upload);
+            upload,
+            _cumulativeDownloadBytes,
+            _cumulativeUploadBytes);
     }
 
     public void Dispose()
@@ -81,6 +76,48 @@ public sealed partial class PerformanceSampler : IPerformanceSampler
         _diskIdleCounter?.Dispose();
         _diskReadCounter?.Dispose();
         _diskWriteCounter?.Dispose();
+    }
+
+    private void EnsureInitialized()
+    {
+        if (_initialized)
+        {
+            return;
+        }
+
+        lock (_initLock)
+        {
+            if (_initialized)
+            {
+                return;
+            }
+
+            // "Processor Information / % Processor Utility" matches Task Manager on modern
+            // Windows; "Processor / % Processor Time" is the classic fallback for older/locked-down
+            // machines.
+            _cpuCounter = CreateCounter("Processor Information", "% Processor Utility", "_Total")
+                ?? CreateCounter("Processor", "% Processor Time", "_Total");
+
+            _diskIdleCounter = CreateCounter("PhysicalDisk", "% Idle Time", "_Total");
+            _diskReadCounter = CreateCounter("PhysicalDisk", "Disk Read Bytes/sec", "_Total");
+            _diskWriteCounter = CreateCounter("PhysicalDisk", "Disk Write Bytes/sec", "_Total");
+
+            _gpuCategoryAvailable = CategoryExists(GpuEngineCategory);
+
+            // Prime rate counters: the first NextValue() after creation is always 0.
+            _cpuCounter?.NextValue();
+            _diskIdleCounter?.NextValue();
+            _diskReadCounter?.NextValue();
+            _diskWriteCounter?.NextValue();
+            if (_gpuCategoryAvailable)
+            {
+                _previousGpuSamples = ReadGpuSamples() ?? [];
+            }
+
+            _networkStopwatch.Start();
+
+            _initialized = true;
+        }
     }
 
     private static (long? Used, long? Total) SampleMemory()
@@ -98,40 +135,40 @@ public sealed partial class PerformanceSampler : IPerformanceSampler
 
     private double? SampleGpu()
     {
-        try
+        var currentSamples = ReadGpuSamples();
+        if (currentSamples is null)
         {
-            var currentSamples = ReadGpuSamples();
-            var deltas = new List<(string InstanceName, double Value)>();
-
-            foreach (var (instanceName, current) in currentSamples)
-            {
-                if (_previousGpuSamples.TryGetValue(instanceName, out var previous))
-                {
-                    deltas.Add((instanceName, CounterSample.Calculate(previous, current)));
-                }
-            }
-
-            _previousGpuSamples = currentSamples;
-            return deltas.Count == 0 ? 0 : GpuEngineAggregator.Aggregate(deltas);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException or Win32Exception)
-        {
-            LogGpuSampleFailed(ex, GpuEngineCategory);
+            // The read itself failed (category vanished, access denied, ...) - genuinely unknown
+            // this tick, not "0% busy".
             return null;
         }
+
+        var deltas = new List<(string InstanceName, double Value)>();
+        foreach (var (instanceName, current) in currentSamples)
+        {
+            if (_previousGpuSamples.TryGetValue(instanceName, out var previous))
+            {
+                deltas.Add((instanceName, CounterSample.Calculate(previous, current)));
+            }
+        }
+
+        _previousGpuSamples = currentSamples;
+        return deltas.Count == 0 ? 0 : GpuEngineAggregator.Aggregate(deltas);
     }
 
     /// <summary>Reads every GPU Engine instance's Utilization Percentage in one call
     /// (<see cref="PerformanceCounterCategory.ReadCategory"/>) rather than creating one
     /// <see cref="PerformanceCounter"/> per process/engine instance, which is far cheaper - GPU
-    /// Engine instances churn constantly as processes start/stop using the GPU.</summary>
-    private Dictionary<string, CounterSample> ReadGpuSamples()
+    /// Engine instances churn constantly as processes start/stop using the GPU. Null means the read
+    /// itself failed (source unavailable this tick); an empty (non-null) dictionary means the read
+    /// succeeded but no process is currently using the GPU.</summary>
+    private Dictionary<string, CounterSample>? ReadGpuSamples()
     {
-        var samples = new Dictionary<string, CounterSample>(StringComparer.OrdinalIgnoreCase);
         try
         {
             var category = new PerformanceCounterCategory(GpuEngineCategory);
             var data = category.ReadCategory();
+            var samples = new Dictionary<string, CounterSample>(StringComparer.OrdinalIgnoreCase);
             if (!data.Contains(GpuUtilizationCounter))
             {
                 return samples;
@@ -144,59 +181,74 @@ public sealed partial class PerformanceSampler : IPerformanceSampler
                     samples[instanceName] = instanceData.Sample;
                 }
             }
+
+            return samples;
         }
         catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException or Win32Exception)
         {
             LogGpuCategoryReadFailed(ex, GpuEngineCategory);
+            return null;
         }
-
-        return samples;
     }
 
     private (double? Download, double? Upload) SampleNetwork()
     {
         try
         {
-            long downloadTotal = 0, uploadTotal = 0;
-            foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
-            {
-                if (nic.OperationalStatus != OperationalStatus.Up)
-                {
-                    continue;
-                }
-
-                if (nic.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel)
-                {
-                    continue;
-                }
-
-                var stats = nic.GetIPStatistics();
-                downloadTotal += stats.BytesReceived;
-                uploadTotal += stats.BytesSent;
-            }
-
+            var current = ReadNetworkAdapterSamples();
             var elapsed = _networkStopwatch.Elapsed;
             _networkStopwatch.Restart();
 
-            if (!_hasPreviousNetworkSample || elapsed <= TimeSpan.Zero)
+            var (downloadBytes, uploadBytes) = NetworkThroughputCalculator.CalculateDelta(_previousNetworkSamples, current);
+            _previousNetworkSamples = ToDictionaryByAdapterId(current);
+            _cumulativeDownloadBytes += downloadBytes;
+            _cumulativeUploadBytes += uploadBytes;
+
+            if (elapsed <= TimeSpan.Zero)
             {
-                _previousDownloadBytes = downloadTotal;
-                _previousUploadBytes = uploadTotal;
-                _hasPreviousNetworkSample = true;
                 return (null, null);
             }
 
-            var downloadRate = Math.Max(0, downloadTotal - _previousDownloadBytes) / elapsed.TotalSeconds;
-            var uploadRate = Math.Max(0, uploadTotal - _previousUploadBytes) / elapsed.TotalSeconds;
-            _previousDownloadBytes = downloadTotal;
-            _previousUploadBytes = uploadTotal;
-            return (downloadRate, uploadRate);
+            return (downloadBytes / elapsed.TotalSeconds, uploadBytes / elapsed.TotalSeconds);
         }
         catch (NetworkInformationException ex)
         {
             LogNetworkSampleFailed(ex);
             return (null, null);
         }
+    }
+
+    private static List<NetworkAdapterSample> ReadNetworkAdapterSamples()
+    {
+        var samples = new List<NetworkAdapterSample>();
+        foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (nic.OperationalStatus != OperationalStatus.Up)
+            {
+                continue;
+            }
+
+            if (nic.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel)
+            {
+                continue;
+            }
+
+            var stats = nic.GetIPStatistics();
+            samples.Add(new NetworkAdapterSample(nic.Id, stats.BytesReceived, stats.BytesSent));
+        }
+
+        return samples;
+    }
+
+    private static Dictionary<string, NetworkAdapterSample> ToDictionaryByAdapterId(List<NetworkAdapterSample> samples)
+    {
+        var dictionary = new Dictionary<string, NetworkAdapterSample>(samples.Count, StringComparer.Ordinal);
+        foreach (var sample in samples)
+        {
+            dictionary[sample.AdapterId] = sample;
+        }
+
+        return dictionary;
     }
 
     private PerformanceCounter? CreateCounter(string category, string counter, string instance)
@@ -273,9 +325,6 @@ public sealed partial class PerformanceSampler : IPerformanceSampler
     // Source-generated (guarded by IsEnabled internally) so the message is never formatted when
     // Debug logging is disabled - see CA1873. All failures here are expected degraded-hardware
     // paths (missing counter category, access denied), never surfaced to the user.
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Failed to sample {Category} counters.")]
-    private partial void LogGpuSampleFailed(Exception ex, string category);
-
     [LoggerMessage(Level = LogLevel.Debug, Message = "Failed to read {Category} category.")]
     private partial void LogGpuCategoryReadFailed(Exception ex, string category);
 

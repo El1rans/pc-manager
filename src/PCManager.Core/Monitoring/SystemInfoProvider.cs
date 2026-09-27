@@ -1,12 +1,18 @@
 using System.Management;
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 
 namespace PCManager.Core.Monitoring;
 
 /// <inheritdoc cref="ISystemInfoProvider"/>
-public sealed class SystemInfoProvider(ILogger<SystemInfoProvider> logger) : ISystemInfoProvider
+public sealed partial class SystemInfoProvider(ILogger<SystemInfoProvider> logger) : ISystemInfoProvider
 {
     private const string Unknown = "Unknown";
+
+    /// <summary>Caps how long a single WMI query can block. A disabled/unreachable WMI service
+    /// (COMException 0x80070422, or an RPC server unavailable) would otherwise hang indefinitely
+    /// rather than falling back to "Unknown".</summary>
+    private static readonly TimeSpan WmiQueryTimeout = TimeSpan.FromSeconds(5);
 
     public Task<SystemInfo> GetAsync(CancellationToken cancellationToken) =>
         Task.Run(() => Build(cancellationToken), cancellationToken);
@@ -36,7 +42,7 @@ public sealed class SystemInfoProvider(ILogger<SystemInfoProvider> logger) : ISy
     {
         try
         {
-            using var searcher = new ManagementObjectSearcher("SELECT Caption, BuildNumber, LastBootUpTime FROM Win32_OperatingSystem");
+            using var searcher = CreateSearcher("SELECT Caption, BuildNumber, LastBootUpTime FROM Win32_OperatingSystem");
             using var results = searcher.Get();
             foreach (ManagementBaseObject item in results)
             {
@@ -55,13 +61,9 @@ public sealed class SystemInfoProvider(ILogger<SystemInfoProvider> logger) : ISy
                 }
             }
         }
-        catch (ManagementException ex)
+        catch (Exception ex) when (IsExpectedWmiFailure(ex))
         {
-            logger.LogDebug(ex, "Failed to query Win32_OperatingSystem.");
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            logger.LogDebug(ex, "Access denied querying Win32_OperatingSystem.");
+            LogWmiQueryFailed(ex, "Win32_OperatingSystem");
         }
 
         return (Unknown, Unknown, null);
@@ -71,7 +73,7 @@ public sealed class SystemInfoProvider(ILogger<SystemInfoProvider> logger) : ISy
     {
         try
         {
-            using var searcher = new ManagementObjectSearcher("SELECT Name, Manufacturer, Model, TotalPhysicalMemory FROM Win32_ComputerSystem");
+            using var searcher = CreateSearcher("SELECT Name, Manufacturer, Model, TotalPhysicalMemory FROM Win32_ComputerSystem");
             using var results = searcher.Get();
             foreach (ManagementBaseObject item in results)
             {
@@ -86,13 +88,9 @@ public sealed class SystemInfoProvider(ILogger<SystemInfoProvider> logger) : ISy
                 }
             }
         }
-        catch (ManagementException ex)
+        catch (Exception ex) when (IsExpectedWmiFailure(ex))
         {
-            logger.LogDebug(ex, "Failed to query Win32_ComputerSystem.");
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            logger.LogDebug(ex, "Access denied querying Win32_ComputerSystem.");
+            LogWmiQueryFailed(ex, "Win32_ComputerSystem");
         }
 
         return (Unknown, Unknown, Unknown, 0);
@@ -102,7 +100,7 @@ public sealed class SystemInfoProvider(ILogger<SystemInfoProvider> logger) : ISy
     {
         try
         {
-            using var searcher = new ManagementObjectSearcher("SELECT Name, NumberOfCores, NumberOfLogicalProcessors FROM Win32_Processor");
+            using var searcher = CreateSearcher("SELECT Name, NumberOfCores, NumberOfLogicalProcessors FROM Win32_Processor");
             using var results = searcher.Get();
             string? cpuName = null;
             var physicalCores = 0;
@@ -123,13 +121,9 @@ public sealed class SystemInfoProvider(ILogger<SystemInfoProvider> logger) : ISy
                 return (cpuName, physicalCores, logicalProcessors);
             }
         }
-        catch (ManagementException ex)
+        catch (Exception ex) when (IsExpectedWmiFailure(ex))
         {
-            logger.LogDebug(ex, "Failed to query Win32_Processor.");
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            logger.LogDebug(ex, "Access denied querying Win32_Processor.");
+            LogWmiQueryFailed(ex, "Win32_Processor");
         }
 
         return (Unknown, 0, 0);
@@ -140,7 +134,7 @@ public sealed class SystemInfoProvider(ILogger<SystemInfoProvider> logger) : ISy
         var names = new List<string>();
         try
         {
-            using var searcher = new ManagementObjectSearcher("SELECT Name FROM Win32_VideoController");
+            using var searcher = CreateSearcher("SELECT Name FROM Win32_VideoController");
             using var results = searcher.Get();
             foreach (ManagementBaseObject item in results)
             {
@@ -154,15 +148,29 @@ public sealed class SystemInfoProvider(ILogger<SystemInfoProvider> logger) : ISy
                 }
             }
         }
-        catch (ManagementException ex)
+        catch (Exception ex) when (IsExpectedWmiFailure(ex))
         {
-            logger.LogDebug(ex, "Failed to query Win32_VideoController.");
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            logger.LogDebug(ex, "Access denied querying Win32_VideoController.");
+            LogWmiQueryFailed(ex, "Win32_VideoController");
         }
 
         return names;
     }
+
+    private static ManagementObjectSearcher CreateSearcher(string query) =>
+        new(query) { Options = new System.Management.EnumerationOptions { Timeout = WmiQueryTimeout } };
+
+    /// <summary>
+    /// Every way a WMI query can fail on a real machine: the class/provider itself
+    /// (<see cref="ManagementException"/>), permissions (<see cref="UnauthorizedAccessException"/>),
+    /// WMI disabled or unreachable - e.g. 0x80070422, or the RPC server unavailable
+    /// (<see cref="COMException"/>) - and a malformed date from
+    /// <see cref="ManagementDateTimeConverter.ToDateTime(string)"/>
+    /// (<see cref="FormatException"/>, <see cref="ArgumentOutOfRangeException"/>).
+    /// </summary>
+    private static bool IsExpectedWmiFailure(Exception ex) =>
+        ex is ManagementException or UnauthorizedAccessException or COMException
+            or FormatException or ArgumentOutOfRangeException;
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Failed to query {WmiClass}; leaving its fields Unknown.")]
+    private partial void LogWmiQueryFailed(Exception ex, string wmiClass);
 }

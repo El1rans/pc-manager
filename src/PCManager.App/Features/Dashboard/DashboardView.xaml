@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:controls="clr-namespace:PCManager.App.Controls"
+             xmlns:automation="clr-namespace:System.Windows.Automation;assembly=PresentationCore"
              xmlns:dashboard="clr-namespace:PCManager.App.Features.Dashboard"
              d:DataContext="{d:DesignInstance dashboard:DashboardViewModel}"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700">
@@ -12,7 +13,8 @@
 
         <DataTemplate DataType="{x:Type dashboard:MetricTileViewModel}">
             <Border Style="{StaticResource Card}" Margin="0,0,12,12"
-                    ToolTip="{Binding TooltipText}">
+                    ToolTip="{Binding TooltipText}"
+                    automation:AutomationProperties.HelpText="{Binding TooltipText}">
                 <StackPanel>
                     <TextBlock Text="{Binding Title}" Style="{StaticResource CardTitle}" Margin="0,0,0,4"/>
                     <TextBlock Text="{Binding ValueText}" FontSize="26" FontWeight="SemiBold"/>
@@ -34,6 +36,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold"/>
@@ -42,13 +45,13 @@
                     <TextBlock Text="&#xE7BA;" Style="{StaticResource Icon}" FontSize="13"
                                Foreground="{DynamicResource SystemFillColorCautionBrush}" Margin="0,0,4,0"/>
                     <TextBlock Text="Low space" FontSize="12"
-                               Foreground="{DynamicResource SystemFillColorCautionBrush}"/>
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
                 </StackPanel>
 
                 <ProgressBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Height="6" Margin="0,4,0,4"
                              Minimum="0" Maximum="100" Value="{Binding UsedPercent, Mode=OneWay}"/>
-                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Text="{Binding DetailText}"
-                           Style="{StaticResource Secondary}" FontSize="12" Margin="0,10,0,0"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Text="{Binding DetailText}"
+                           Style="{StaticResource Secondary}" FontSize="12" Margin="0,6,0,0"/>
             </Grid>
         </DataTemplate>
 
@@ -95,7 +98,7 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE7BA;" Style="{StaticResource Icon}" FontSize="14"
                                    Foreground="{DynamicResource SystemFillColorCautionBrush}" Margin="0,0,6,0"/>
-                        <TextBlock Text="Restart pending" Foreground="{DynamicResource SystemFillColorCautionBrush}"/>
+                        <TextBlock Text="Restart pending" Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
                     </StackPanel>
                 </Border>
             </DockPanel>
