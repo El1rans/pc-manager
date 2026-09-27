@@ -54,10 +54,10 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="{Binding Glyph}" Style="{StaticResource Icon}"
                                                FontSize="16" Margin="4,0,12,0"
-                                               Foreground="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}"/>
+                                               Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"/>
                                     <TextBlock Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center"
                                                FontWeight="SemiBold"
-                                               Foreground="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}"/>
+                                               Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"/>
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>

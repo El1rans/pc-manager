@@ -12,8 +12,7 @@
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
             <Button Content="Cancel" Click="Cancel_Click" Margin="0,0,8,0" IsCancel="True"/>
             <Button Content="OK" Click="Ok_Click" IsDefault="True"
-                    Background="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}"
-                    Foreground="White" BorderThickness="0" Padding="16,6"/>
+                    Style="{DynamicResource AccentButtonStyle}"/>
         </StackPanel>
     </StackPanel>
 </Window>
