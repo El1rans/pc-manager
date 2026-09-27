@@ -18,6 +18,7 @@ public sealed partial class SetupViewModel : ObservableObject, IDisposable
     private readonly ISettingsStore _settingsStore;
     private readonly ILogger<SetupViewModel> _logger;
     private CancellationTokenSource _cts = new();
+    private bool _disposed;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PrimaryActionCommand))]
@@ -149,8 +150,17 @@ public sealed partial class SetupViewModel : ObservableObject, IDisposable
     /// Closed handler calls it again) is harmless.</summary>
     public void MarkFirstRunCompleted() => _settingsStore.Update(s => s.Setup.FirstRunCompleted = true);
 
+    /// <summary>Idempotent: <see cref="SetupWindow"/>'s Closed handler disposes this view model, and
+    /// the DI container (which tracks transient <see cref="IDisposable"/>s it creates) disposes it
+    /// again on host shutdown - cancelling an already-disposed CTS would throw.</summary>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _cts.Cancel();
         _cts.Dispose();
     }
