@@ -6,9 +6,17 @@ namespace Porchlight.Core.Tests.Lighting;
 
 public sealed class LightingServiceTests
 {
-    private static readonly TimeSpan ShortTimeout = TimeSpan.FromMilliseconds(150);
+    /// <summary>Call timeout for the tests whose subject is a call that hangs forever. It must
+    /// still comfortably exceed how long a <em>healthy</em> call (the connect before the hang) can
+    /// take to get scheduled on a heavily loaded machine - otherwise that healthy call spuriously
+    /// "times out" and disconnects before the test even starts hanging the client. It only costs
+    /// test time on the hang path itself, once per test.</summary>
+    private static readonly TimeSpan ShortTimeout = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan ShortHeartbeat = TimeSpan.FromMilliseconds(100);
-    private static readonly TimeSpan EventWaitBudget = TimeSpan.FromSeconds(5);
+
+    /// <summary>Only there so a genuine hang fails the test instead of stalling the whole run -
+    /// not a timing expectation.</summary>
+    private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(30);
 
     private static RgbDevice MakeDevice(int index, string name, int ledCount, params RgbMode[] modes) =>
         new(index, name, RgbDeviceType.Keyboard, "Acme", modes, modes.Length > 0 ? modes[0].Name : "", ledCount, Zones: []);
@@ -19,18 +27,14 @@ public sealed class LightingServiceTests
         TimeSpan? heartbeatInterval = null) =>
         new(client, NullLogger<LightingService>.Instance, callTimeout, heartbeatInterval);
 
-    /// <summary>Polls until <paramref name="condition"/> is true or <see cref="EventWaitBudget"/>
-    /// elapses - used for the heartbeat/disconnect tests, whose effects happen on a background
-    /// timer rather than on the awaited call itself.</summary>
-    private static async Task WaitUntilAsync(Func<bool> condition)
+    /// <summary>Completes when <paramref name="service"/> raises Disconnected - used for the
+    /// heartbeat test, whose effect happens on a background timer rather than on an awaited call.
+    /// Subscribe before doing anything that could raise it, so it can never be missed.</summary>
+    private static Task DisconnectedSignal(LightingService service)
     {
-        var deadline = DateTime.UtcNow + EventWaitBudget;
-        while (!condition() && DateTime.UtcNow < deadline)
-        {
-            await Task.Delay(20);
-        }
-
-        Assert.True(condition(), "Condition was not met within the wait budget.");
+        var raised = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.Disconnected += (_, _) => raised.TrySetResult();
+        return raised.Task;
     }
 
     // ---------------------------------------------------------------- connect
@@ -296,7 +300,7 @@ public sealed class LightingServiceTests
     {
         var client = new FakeOpenRgbClient();
         var service = CreateService(client, callTimeout: ShortTimeout);
-        await service.ConnectAsync(TestContext.Current.CancellationToken);
+        Assert.True(await service.ConnectAsync(TestContext.Current.CancellationToken));
 
         var disconnectedRaised = false;
         service.Disconnected += (_, _) => disconnectedRaised = true;
@@ -315,7 +319,9 @@ public sealed class LightingServiceTests
         // Recovering: a fresh connect (against a client that no longer hangs) must succeed cleanly,
         // proving the gate is free and nothing is left running against the disposed client.
         var freshClient = new FakeOpenRgbClient();
-        var recovered = await CreateService(freshClient, callTimeout: ShortTimeout)
+        // Default call timeout: nothing hangs here, so there is no reason to risk a spurious
+        // timeout of this healthy connect on a loaded machine.
+        var recovered = await CreateService(freshClient)
             .ConnectAsync(TestContext.Current.CancellationToken);
         Assert.True(recovered);
     }
@@ -344,16 +350,14 @@ public sealed class LightingServiceTests
     {
         var client = new FakeOpenRgbClient();
         var service = CreateService(client, callTimeout: ShortTimeout, heartbeatInterval: ShortHeartbeat);
-        await service.ConnectAsync(TestContext.Current.CancellationToken);
-
-        var disconnectedRaised = false;
-        service.Disconnected += (_, _) => disconnectedRaised = true;
+        var disconnected = DisconnectedSignal(service);
+        Assert.True(await service.ConnectAsync(TestContext.Current.CancellationToken));
 
         // A remote close that OpenRGB.NET's own read loop treats as a normal end rather than an
         // error: nothing throws, the socket just never answers again. Only the heartbeat notices.
         client.HangUntilDisposed = true;
 
-        await WaitUntilAsync(() => disconnectedRaised);
+        await disconnected.WaitAsync(HangGuard, TestContext.Current.CancellationToken);
 
         Assert.False(service.IsConnected);
     }
