@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Porchlight.Core.Processes;
 using Xunit;
@@ -43,23 +44,58 @@ public sealed class ProcessRunnerTests
     public async Task RunAsync_Cancelled_ThrowsAndKillsProcessTree()
     {
         var runner = CreateRunner();
-        using var cts = new CancellationTokenSource();
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var pidsReported = new TaskCompletionSource<(int Child, int Grandchild)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
 
-        // cmd.exe spawns PING.EXE as a child; entireProcessTree:true must kill both.
+        // PowerShell starts PING.EXE as its own child, then reports both PIDs on stdout, so the
+        // test cancels only once the whole tree is known to be running (no wall-clock race) and
+        // checks exactly those two processes rather than every PING on the machine.
         var runTask = runner.RunAsync(
-            "cmd.exe", ["/c", "ping -n 30 127.0.0.1 >nul"], onLine: null, onProgress: null, cts.Token);
+            "powershell.exe",
+            ["-NoProfile", "-NonInteractive", "-Command", ReportPidsThenWaitScript],
+            new CallbackProgress(line =>
+            {
+                if (TryParsePids(line, out var pids))
+                {
+                    pidsReported.TrySetResult(pids);
+                }
+            }),
+            onProgress: null,
+            cts.Token);
 
-        cts.CancelAfter(TimeSpan.FromMilliseconds(200));
+        var (childPid, grandchildPid) = await pidsReported.Task
+            .WaitAsync(StartupTimeout, TestContext.Current.CancellationToken);
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runTask);
-
-        // Give the OS a moment to finish tearing down the child before asserting it is gone.
-        for (var attempt = 0; attempt < 20 && Process.GetProcessesByName("PING").Length > 0; attempt++)
+        // Open handles now, while both are known to be alive, so the exit checks below track these
+        // exact processes even if the OS later reuses their PIDs.
+        using var child = OpenTracked(childPid);
+        using var grandchild = OpenTracked(grandchildPid);
+        try
         {
-            await Task.Delay(50, TestContext.Current.CancellationToken);
-        }
+            await cts.CancelAsync();
 
-        Assert.Empty(Process.GetProcessesByName("PING"));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runTask);
+
+            await child.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(ExitTimeout, TestContext.Current.CancellationToken);
+            await grandchild.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(ExitTimeout, TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            // Only reached with live processes if an assertion above failed; never leave the
+            // processes this test started running.
+            KillIfRunning(child);
+            KillIfRunning(grandchild);
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_AlreadyCancelled_Throws()
+    {
+        var runner = CreateRunner();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runner.RunAsync(
+            "cmd.exe", ["/c", "exit 0"], onLine: null, onProgress: null, new CancellationToken(canceled: true)));
     }
 
     [Fact]
@@ -93,8 +129,69 @@ public sealed class ProcessRunnerTests
             TestContext.Current.CancellationToken));
     }
 
+    private const string PidsPrefix = "PIDS ";
+
+    // Generous: PowerShell can take several seconds to start on a heavily loaded machine. These
+    // bound how long a broken build hangs; they are not part of the synchronization.
+    private static readonly TimeSpan StartupTimeout = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan ExitTimeout = TimeSpan.FromSeconds(30);
+
+    private const string ReportPidsThenWaitScript =
+        "$p = Start-Process -FilePath ping.exe -ArgumentList '-n','60','127.0.0.1' -NoNewWindow -PassThru; " +
+        "[Console]::Out.WriteLine('" + PidsPrefix + "' + $PID + ' ' + $p.Id); [Console]::Out.Flush(); " +
+        "$p.WaitForExit()";
+
+    private static bool TryParsePids(string line, out (int Child, int Grandchild) pids)
+    {
+        pids = default;
+        if (!line.StartsWith(PidsPrefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var parts = line[PidsPrefix.Length..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 2
+            && int.TryParse(parts[0], CultureInfo.InvariantCulture, out var child)
+            && int.TryParse(parts[1], CultureInfo.InvariantCulture, out var grandchild))
+        {
+            pids = (child, grandchild);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static Process OpenTracked(int pid)
+    {
+        var process = Process.GetProcessById(pid);
+        _ = process.SafeHandle; // opens and caches the handle, pinning this process's identity
+        return process;
+    }
+
+    private static void KillIfRunning(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // Exited between HasExited and Kill(); nothing left to clean up.
+        }
+    }
+
     private sealed class RecordingProgress(List<string> target) : IProgress<string>
     {
         public void Report(string value) => target.Add(value);
+    }
+
+    /// <summary>Invokes the callback synchronously on the reporting thread (unlike
+    /// <see cref="Progress{T}"/>, which posts to the thread pool).</summary>
+    private sealed class CallbackProgress(Action<string> callback) : IProgress<string>
+    {
+        public void Report(string value) => callback(value);
     }
 }
