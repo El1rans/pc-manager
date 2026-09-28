@@ -79,6 +79,15 @@ public sealed partial class ProcessRunner : IProcessRunner
 
         await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
 
+        // Neither of the awaits above reliably observes a cancellation that fires mid-run. Killing
+        // the tree closes the pipes, so a read the token failed to interrupt (the stdout/stderr
+        // pipes are synchronous handles, and interrupting a blocked read is best-effort) simply
+        // returns EOF, and WaitForExitAsync returns normally - even with a cancelled token - once
+        // the process has already exited. Without this check a killed process would be reported
+        // as a normal run with exit code -1 instead of the OperationCanceledException the
+        // IProcessRunner contract promises.
+        cancellationToken.ThrowIfCancellationRequested();
+
         return new ProcessRunResult(process.ExitCode, outputReader.Lines, errorReader.Lines);
     }
 
