@@ -39,6 +39,11 @@ public sealed class HardwareSettingsSerializationTests
                     CurvePoints = [new(30, 30), new(50, 50), new(70, 80), new(90, 100)],
                 },
             },
+            FanDisplayNames = new Dictionary<string, string>
+            {
+                ["fan-fixed"] = "Front intake",
+                ["fan-curve"] = "Rear exhaust",
+            },
         };
 
         var json = JsonSerializer.Serialize(settings, JsonOptions);
@@ -62,6 +67,41 @@ public sealed class HardwareSettingsSerializationTests
         Assert.Equal("cpu/0/temperature/0", curveProfile.SourceSensorId);
         Assert.Equal(4, curveProfile.CurvePoints.Count);
         Assert.Equal(new FanCurvePoint(70, 80), curveProfile.CurvePoints[2]);
+
+        Assert.Equal(2, restored.FanDisplayNames.Count);
+        Assert.Equal("Front intake", restored.FanDisplayNames["fan-fixed"]);
+        Assert.Equal("Rear exhaust", restored.FanDisplayNames["fan-curve"]);
+    }
+
+    [Fact]
+    public void FanDisplayNames_RoundTripsThroughSettingsStore_KeyedByStableFanId_AndFallsBackWhenMissing()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "PorchlightTests_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "settings.json");
+            var store = new SettingsStore(Microsoft.Extensions.Logging.Abstractions.NullLogger<SettingsStore>.Instance, path);
+            store.Update(s => s.Hardware.FanDisplayNames["cpu-fan-control-0"] = "Top radiator");
+
+            var reloaded = new SettingsStore(Microsoft.Extensions.Logging.Abstractions.NullLogger<SettingsStore>.Instance, path);
+
+            // Persists keyed by the fan's stable controller id and survives a reload.
+            Assert.Equal("Top radiator", reloaded.Current.Hardware.FanDisplayNames["cpu-fan-control-0"]);
+            Assert.Equal(
+                "Top radiator",
+                FanNaming.ResolveDisplayName("cpu-fan-control-0", "CPU fan", reloaded.Current.Hardware.FanDisplayNames));
+
+            // A fan with no entry falls back to its hardware-reported name.
+            Assert.False(reloaded.Current.Hardware.FanDisplayNames.ContainsKey("gpu-fan-control-0"));
+            Assert.Equal(
+                "GPU fan",
+                FanNaming.ResolveDisplayName("gpu-fan-control-0", "GPU fan", reloaded.Current.Hardware.FanDisplayNames));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]
@@ -75,6 +115,7 @@ public sealed class HardwareSettingsSerializationTests
         Assert.Equal(FanControlOptions.DefaultFailsafeTemperatureC, settings.FailsafeTemperatureC);
         Assert.Empty(settings.FanProfiles);
         Assert.True(settings.HideUnusedSensors);
+        Assert.Empty(settings.FanDisplayNames);
     }
 
     [Fact]

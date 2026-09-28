@@ -36,7 +36,8 @@ public sealed partial class SensorSectionViewModel : ObservableObject
     public void UpdateFrom(
         IReadOnlyList<SensorReading> readings,
         UnusedSensorTracker unusedTracker,
-        Dictionary<string, SensorRowViewModel> existingRowsById)
+        Dictionary<string, SensorRowViewModel> existingRowsById,
+        IReadOnlyDictionary<string, string>? fanDisplayNameOverrides = null)
     {
         var seen = new HashSet<string>(readings.Count);
         for (var i = 0; i < readings.Count; i++)
@@ -44,10 +45,14 @@ public sealed partial class SensorSectionViewModel : ObservableObject
             var reading = readings[i];
             seen.Add(reading.Id);
             var isUsed = unusedTracker.Observe(reading);
+            var displayNameOverride = fanDisplayNameOverrides is { Count: > 0 } &&
+                fanDisplayNameOverrides.TryGetValue(reading.Id, out var custom)
+                ? custom
+                : null;
 
             if (existingRowsById.TryGetValue(reading.Id, out var row))
             {
-                row.UpdateFrom(reading, isUsed);
+                row.UpdateFrom(reading, isUsed, displayNameOverride);
                 var currentIndex = Sensors.IndexOf(row);
                 if (currentIndex < 0)
                 {
@@ -69,7 +74,7 @@ public sealed partial class SensorSectionViewModel : ObservableObject
             }
             else
             {
-                row = new SensorRowViewModel(reading, isUsed);
+                row = new SensorRowViewModel(reading, isUsed, displayNameOverride);
                 if (i < Sensors.Count)
                 {
                     Sensors.Insert(i, row);

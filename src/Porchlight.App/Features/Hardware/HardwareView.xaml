@@ -169,7 +169,7 @@
             </Border>
         </StackPanel>
 
-        <TabControl Grid.Row="2" Margin="0,4,0,0">
+        <TabControl x:Name="MainTabControl" Grid.Row="2" Margin="0,4,0,0" SelectionChanged="MainTabControl_SelectionChanged">
             <TabItem Header="Sensors">
                 <DockPanel Margin="0,12,0,0">
                     <!-- Summary strip: "At a glance" (spec 10) - up to 4 tiles, hidden entirely when
@@ -199,8 +199,20 @@
                 </DockPanel>
             </TabItem>
 
-            <TabItem Header="Fans">
+            <TabItem x:Name="FansTabItem" Header="Fans">
                 <DockPanel Margin="0,12,0,0">
+                    <Border DockPanel.Dock="Top" Style="{StaticResource Card}" Margin="0,0,0,12"
+                            Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
+                            BorderBrush="{DynamicResource SystemFillColorCautionBrush}" BorderThickness="1"
+                            Visibility="{Binding ShowConflictWarning, Converter={StaticResource BoolToVis}}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" Style="{StaticResource Icon}"
+                                       Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                                       FontSize="18" Margin="0,0,12,0" VerticalAlignment="Top"/>
+                            <TextBlock Text="{Binding ConflictWarningMessage}" TextWrapping="Wrap"/>
+                        </DockPanel>
+                    </Border>
+
                     <Border DockPanel.Dock="Top" Style="{StaticResource Card}" Margin="0,0,0,12">
                         <StackPanel>
                             <TextBlock Text="Global fan control" Style="{StaticResource CardTitle}"/>
@@ -215,10 +227,10 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                                    <TextBlock Text="Overheat failsafe temperature (C)" Style="{StaticResource Secondary}"/>
+                                    <TextBlock Text="Overheat failsafe temperature (°C)" Style="{StaticResource Secondary}"/>
                                     <Slider Minimum="70" Maximum="95" Value="{Binding FailsafeTemperatureC}"
                                             TickFrequency="1" IsSnapToTickEnabled="True"/>
-                                    <TextBlock Text="{Binding FailsafeTemperatureC, StringFormat={}{0:0} C}"/>
+                                    <TextBlock Text="{Binding FailsafeTemperatureC, StringFormat={}{0:0} °C}"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="1">
                                     <TextBlock Text="Minimum fan percent" Style="{StaticResource Secondary}"/>
@@ -240,15 +252,36 @@
                         <ItemsControl ItemsSource="{Binding Fans}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type local:FanCardViewModel}">
-                                    <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                                    <Border Style="{StaticResource Card}" Margin="0,0,0,12"
+                                            Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
                                         <StackPanel>
                                             <DockPanel>
-                                                <TextBlock Text="{Binding Name}" Style="{StaticResource CardTitle}" Margin="0"/>
                                                 <TextBlock DockPanel.Dock="Right" HorizontalAlignment="Right">
-                                                    <Run Text="{Binding CurrentRpm, StringFormat={}{0:0} RPM, Mode=OneWay}"/>
+                                                    <Run Text="{Binding RpmDisplayText, Mode=OneWay}"/>
                                                     <Run Text=" - "/>
                                                     <Run Text="{Binding CurrentPercent, StringFormat={}{0:0}%, Mode=OneWay}"/>
                                                 </TextBlock>
+
+                                                <!-- Spec 04 addendum: inline rename - a "Rename" button swaps the
+                                                     title for an editable box; the original hardware-reported name
+                                                     shows as secondary/subtitle text whenever a custom one is set. -->
+                                                <StackPanel Visibility="{Binding IsEditingName, Converter={StaticResource InverseBoolToVis}}">
+                                                    <DockPanel>
+                                                        <Button DockPanel.Dock="Right" Content="Rename" Padding="8,2"
+                                                                Command="{Binding BeginRenamingCommand}"/>
+                                                        <TextBlock Text="{Binding DisplayName}" Style="{StaticResource CardTitle}" Margin="0"/>
+                                                    </DockPanel>
+                                                    <TextBlock Text="{Binding Name}" Style="{StaticResource Secondary}" FontSize="11"
+                                                               Visibility="{Binding HasCustomName, Converter={StaticResource BoolToVis}}"/>
+                                                </StackPanel>
+                                                <DockPanel Visibility="{Binding IsEditingName, Converter={StaticResource BoolToVis}}">
+                                                    <Button DockPanel.Dock="Right" Content="Save" Padding="8,2" Margin="6,0,0,0"
+                                                            Command="{Binding CommitRenameCommand}"/>
+                                                    <Button DockPanel.Dock="Right" Content="Cancel" Padding="8,2"
+                                                            Command="{Binding CancelRenamingCommand}"/>
+                                                    <TextBox Text="{Binding NameEditText, UpdateSourceTrigger=PropertyChanged}"
+                                                              ToolTip="{Binding Name}"/>
+                                                </DockPanel>
                                             </DockPanel>
 
                                             <ComboBox ItemsSource="{Binding Modes}" SelectedItem="{Binding Mode}" Margin="0,8,0,0" HorizontalAlignment="Left" MinWidth="120"

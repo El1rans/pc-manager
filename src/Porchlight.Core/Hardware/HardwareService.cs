@@ -373,6 +373,7 @@ public sealed class HardwareService : IHardwareService, IDisposable
     {
         var sensors = new List<SensorReading>();
         var now = DateTimeOffset.UtcNow;
+        var nodeType = MapNodeType(hardware.HardwareType);
 
         var fanSensorsByIndex = new Dictionary<int, ISensor>();
         foreach (var s in hardware.Sensors)
@@ -390,7 +391,7 @@ public sealed class HardwareService : IHardwareService, IDisposable
                 if (sensor.Control is not null)
                 {
                     fanSensorsByIndex.TryGetValue(sensor.Index, out var rpmSensor);
-                    controllers.Add(new LhmFanController(sensor, rpmSensor));
+                    controllers.Add(new LhmFanController(sensor, rpmSensor, nodeType));
                 }
 
                 // Duty-cycle percent surfaces through the fan card (IFanController.CurrentPercent)
@@ -409,7 +410,7 @@ public sealed class HardwareService : IHardwareService, IDisposable
         return new HardwareNode(
             hardware.Identifier.ToString(),
             hardware.Name,
-            MapNodeType(hardware.HardwareType),
+            nodeType,
             sensors,
             children);
     }

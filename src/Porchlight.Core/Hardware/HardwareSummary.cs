@@ -30,7 +30,16 @@ public static class HardwareSummarySelector
     /// "Caution" rather than "Normal" - an early warning before the failsafe itself would trip.</summary>
     private const double CautionMarginBelowFailsafeC = 15;
 
-    public static IReadOnlyList<HardwareSummaryTile> Build(HardwareSnapshot snapshot, double failsafeTemperatureC)
+    /// <param name="snapshot">The current hardware read.</param>
+    /// <param name="failsafeTemperatureC">Current overheat failsafe threshold, for severity.</param>
+    /// <param name="fanDisplayNameOverrides">Fans polish addendum: custom names keyed by RPM
+    /// sensor id, used for the "Hottest fan" tile so it agrees with whatever name the Fans tab and
+    /// Sensors tab show for the same fan - see <see cref="FanNaming"/>. Optional; null/empty means
+    /// every fan uses its hardware-reported name.</param>
+    public static IReadOnlyList<HardwareSummaryTile> Build(
+        HardwareSnapshot snapshot,
+        double failsafeTemperatureC,
+        IReadOnlyDictionary<string, string>? fanDisplayNameOverrides = null)
     {
         var tiles = new List<HardwareSummaryTile>();
 
@@ -73,10 +82,13 @@ public static class HardwareSummarySelector
         var hottestFan = SelectHottestFan(snapshot.Nodes);
         if (hottestFan is not null)
         {
+            var displayName = fanDisplayNameOverrides is { Count: > 0 }
+                ? FanNaming.ResolveDisplayName(hottestFan.Id, hottestFan.Name, fanDisplayNameOverrides)
+                : hottestFan.Name;
             tiles.Add(new HardwareSummaryTile(
                 "Hottest fan",
                 SensorFormatter.Format(hottestFan.Value, SensorType.Fan),
-                hottestFan.Name,
+                displayName,
                 HardwareSummarySeverity.Normal));
         }
 

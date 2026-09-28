@@ -32,6 +32,25 @@ public sealed class HardwareServiceBuildNodeTests
         Assert.Equal(rpm.Identifier.ToString(), fan.RpmSensorId);
         Assert.Equal(20d, fan.MinSoftwarePercent);
         Assert.Equal(100d, fan.MaxSoftwarePercent);
+        Assert.Equal(HardwareNodeType.Motherboard, fan.NodeType);
+    }
+
+    [Fact]
+    public void BuildNode_GpuControlSensor_ControllerReportsGpuNodeType()
+    {
+        // Fans polish addendum: the Fans tab must never hide a GPU fan regardless of its RPM
+        // history - this requires knowing a controller's owning node type, which BuildNode derives
+        // from the same hardware.HardwareType it already maps for the node itself.
+        var hardware = new FakeLhmHardware("/gpu/0", "GPU", LhmHardwareType.GpuNvidia);
+        var control = new FakeLhmSensor("/gpu/0/control/0", "GPU fan control", LhmSensorType.Control, index: 0, hardware) { Value = 60 };
+        control.Control = new FakeLhmControl(control);
+        hardware.SensorList.Add(control);
+
+        var controllers = new List<IFanController>();
+        HardwareService.BuildNode(hardware, controllers, NewObservationCache());
+
+        var fan = Assert.Single(controllers);
+        Assert.Equal(HardwareNodeType.Gpu, fan.NodeType);
     }
 
     [Fact]

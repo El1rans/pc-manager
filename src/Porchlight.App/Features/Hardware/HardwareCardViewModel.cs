@@ -39,12 +39,12 @@ public sealed partial class HardwareCardViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ShowCollapsedStats))]
     private string _collapsedStatsText = string.Empty;
 
-    public HardwareCardViewModel(HardwareNode node, UnusedSensorTracker unusedTracker)
+    public HardwareCardViewModel(HardwareNode node, UnusedSensorTracker unusedTracker, IReadOnlyDictionary<string, string>? fanDisplayNameOverrides = null)
     {
         Id = node.Id;
         Type = node.Type;
         IsExpanded = Type is HardwareNodeType.Cpu or HardwareNodeType.Gpu;
-        UpdateFrom(node, unusedTracker);
+        UpdateFrom(node, unusedTracker, fanDisplayNameOverrides);
     }
 
     public string Id { get; }
@@ -77,7 +77,7 @@ public sealed partial class HardwareCardViewModel : ObservableObject
         ? $"{Name}, {CollapsedStatsText.Replace(StatsSeparator, ", ", StringComparison.Ordinal)}"
         : Name;
 
-    public void UpdateFrom(HardwareNode node, UnusedSensorTracker unusedTracker)
+    public void UpdateFrom(HardwareNode node, UnusedSensorTracker unusedTracker, IReadOnlyDictionary<string, string>? fanDisplayNameOverrides = null)
     {
         Name = node.Name;
         CollapsedStatsText = string.Join(StatsSeparator, HardwareCardStatsSelector.Build(node));
@@ -124,7 +124,7 @@ public sealed partial class HardwareCardViewModel : ObservableObject
                 }
             }
 
-            section.UpdateFrom(group.ToList(), unusedTracker, existingRowsById);
+            section.UpdateFrom(group.ToList(), unusedTracker, existingRowsById, fanDisplayNameOverrides);
         }
 
         for (var i = Sections.Count - 1; i >= 0; i--)

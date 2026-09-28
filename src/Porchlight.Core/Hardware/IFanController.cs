@@ -12,6 +12,11 @@ public interface IFanController
     /// <summary>Display name, e.g. "CPU fan".</summary>
     string Name { get; }
 
+    /// <summary>Which top-level hardware group this fan belongs to. Used by the Fans tab (spec 04
+    /// addendum) to never hide a GPU fan regardless of its RPM history - GPUs commonly run a
+    /// 0-RPM "idle" fan mode, unlike an unconnected motherboard header.</summary>
+    HardwareNodeType NodeType { get; }
+
     /// <summary>Current duty cycle, 0-100, or null if unknown.</summary>
     double? CurrentPercent { get; }
 

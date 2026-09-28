@@ -38,19 +38,22 @@ public sealed partial class SensorRowViewModel : ObservableObject
     [ObservableProperty]
     private bool _isUsed = true;
 
-    public SensorRowViewModel(SensorReading reading, bool isUsed)
+    public SensorRowViewModel(SensorReading reading, bool isUsed, string? displayNameOverride = null)
     {
         Id = reading.Id;
-        UpdateFrom(reading, isUsed);
+        UpdateFrom(reading, isUsed, displayNameOverride);
     }
 
     public string Id { get; }
 
     public SensorType Type { get; private set; }
 
-    public void UpdateFrom(SensorReading reading, bool isUsed)
+    /// <param name="displayNameOverride">Fans polish addendum: the fan's custom display name
+    /// (<see cref="Porchlight.Core.Hardware.FanNaming"/>), when this row is a fan's RPM sensor and
+    /// the user has renamed it. Null for every non-fan sensor, and for a fan with no custom name.</param>
+    public void UpdateFrom(SensorReading reading, bool isUsed, string? displayNameOverride = null)
     {
-        Name = reading.Name;
+        Name = displayNameOverride ?? reading.Name;
         Type = reading.Type;
         ValueText = SensorFormatter.Format(reading.Value, reading.Type);
         MinText = SensorFormatter.Format(reading.Min, reading.Type);

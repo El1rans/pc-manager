@@ -14,6 +14,8 @@ public sealed class FakeFanController : IFanController
 
     public string Name { get; }
 
+    public HardwareNodeType NodeType { get; set; } = HardwareNodeType.Other;
+
     public double? CurrentPercent { get; set; }
 
     public bool IsUnderSoftwareControl { get; private set; }

@@ -125,7 +125,12 @@ milestone specs.
   prominent value, Min/Max are secondary. A "Hide unused sensors" toggle (on by default) hides
   sensors that have never reported a real reading (unconnected fan headers, unpopulated voltage
   rails); a filter box and "Reset min/max" still work across every card. A fans tab (Default/
-  Fixed/Curve control per fan, with a draggable-point curve editor) sits alongside it. Software fan control is off by
+  Fixed/Curve control per fan, with a draggable-point curve editor) sits alongside it - empty
+  motherboard fan headers that have never reported RPM are hidden the same way (GPU fans are never
+  hidden, since a 0-RPM idle mode is normal for them - shown as "Stopped (idle)"), each fan can be
+  given a custom display name (shown everywhere its name appears), and a banner warns when another
+  fan-control tool (Armoury Crate, MSI Center, iCUE, ...) is detected running alongside Porchlight.
+  Software fan control is off by
   default, requires a one-time risk confirmation, and is only ever active while the page itself
   reports `Ready` (elevated, driver installed, hardware read healthy) - a fan profile enabled during
   an earlier elevated session never drives a fan on a later non-elevated launch. A safety engine

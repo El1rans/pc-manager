@@ -28,6 +28,12 @@ public sealed class UnusedSensorTracker
         return isReal;
     }
 
+    /// <summary>Read-only query for a sensor id already observed this session (e.g. earlier in the
+    /// same tick, via <see cref="Observe"/>) - true if it has ever reported a real reading. Returns
+    /// false for an id never observed at all, matching "not known to be used yet" rather than
+    /// asserting it is unused.</summary>
+    public bool IsEverUsed(string id) => _everReal.TryGetValue(id, out var real) && real;
+
     /// <summary>Whether <paramref name="reading"/>'s current value alone counts as "real", ignoring
     /// any prior history.</summary>
     public static bool IsRealValue(SensorReading reading) =>
