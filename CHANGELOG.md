@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Hardware: Fans tab polish from maintainer testing on an ASUS ROG STRIX B550-F with Armoury Crate
+  (`docs/specs/04-hardware-fans.md` addendum). Empty motherboard fan headers (never once reported
+  RPM > 0) are now hidden when "Hide unused sensors" is on, reusing the Sensors tab's existing
+  tracker/setting; a GPU fan is never hidden regardless of RPM history and shows "Stopped (idle)"
+  instead of "0 RPM" for its legitimate 0-RPM idle mode. Fans can now be given a custom display
+  name (inline "Rename" on the Fans tab), persisted keyed by the fan's stable controller id and
+  shown everywhere a fan name appears (Fans tab, Sensors tab RPM rows, the "Hottest fan" summary
+  tile), with the original hardware-reported name kept as subtitle text. The failsafe temperature
+  slider and its label now show "°C" instead of a bare "C". Added detection (not prevention) of
+  known vendor fan-control software - Armoury Crate/AsusFanControlService, MSI Center/Dragon
+  Center, Gigabyte SIV/Control Center, FanControl, SpeedFan, Argus Monitor, iCUE, NZXT CAM, Lian Li
+  L-Connect - running alongside Porchlight, with a caution banner on the Fans tab when one is
+  found, re-checked whenever the Fans tab is opened. Fan-control actions (arming, pausing/restoring
+  fans on exit or via "Restore BIOS control", a user changing a fan's mode or target duty, a
+  detected conflict) are now logged at Information level; previously only failures were logged.
+
 - Hardware: redesigned the Sensors tab for readability (`docs/specs/10-readable-sensors.md`) - an
   "At a glance" summary strip (CPU/GPU temperature, CPU package power, hottest fan) above one card
   per device (CPU, GPU, motherboard, memory, storage, network; CPU/GPU expanded by default), each

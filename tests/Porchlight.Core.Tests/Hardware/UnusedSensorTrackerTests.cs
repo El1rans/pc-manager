@@ -76,6 +76,30 @@ public sealed class UnusedSensorTrackerTests
     }
 
     [Fact]
+    public void IsEverUsed_UnknownId_ReturnsFalse()
+    {
+        var tracker = new UnusedSensorTracker();
+        Assert.False(tracker.IsEverUsed("fan-1"));
+    }
+
+    [Fact]
+    public void IsEverUsed_QueriesWithoutMutatingHistory_MatchesTheMostRecentObserve()
+    {
+        // Fans polish addendum: the Fans tab reads this after the sensor tree has already Observe()d
+        // the same tick's RPM reading, so it must reflect that call without needing its own Observe.
+        var tracker = new UnusedSensorTracker();
+        tracker.Observe(Reading("fan-1", SensorType.Fan, 0));
+        Assert.False(tracker.IsEverUsed("fan-1"));
+
+        tracker.Observe(Reading("fan-1", SensorType.Fan, 1500));
+        Assert.True(tracker.IsEverUsed("fan-1"));
+
+        // Fan later idles at 0 RPM - once real, stays "used" (visible) forever, per spec 10/04.
+        tracker.Observe(Reading("fan-1", SensorType.Fan, 0));
+        Assert.True(tracker.IsEverUsed("fan-1"));
+    }
+
+    [Fact]
     public void PruneTo_DropsHistoryForIdsNoLongerPresent()
     {
         var tracker = new UnusedSensorTracker();

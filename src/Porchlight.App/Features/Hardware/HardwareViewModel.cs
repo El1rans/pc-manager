@@ -19,7 +19,9 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
     private readonly FanControlManager _fanControlManager;
     private readonly ISettingsStore _settingsStore;
     private readonly IElevationService _elevationService;
+    private readonly IFanControlConflictDetector _conflictDetector;
     private readonly ILogger<HardwareViewModel> _logger;
+    private readonly ILogger<FanCardViewModel> _fanCardLogger;
     private readonly Dispatcher _dispatcher;
     private readonly UnusedSensorTracker _unusedSensorTracker = new();
     private bool _loadingToggle;
@@ -48,19 +50,31 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
     [ObservableProperty]
     private double _failsafeTemperatureC = FanControlOptions.DefaultFailsafeTemperatureC;
 
+    /// <summary>Spec 04 addendum: display names of every known fan-control tool currently detected
+    /// running alongside Porchlight - see <see cref="IFanControlConflictDetector"/>. Empty when
+    /// none are detected (the common case).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowConflictWarning))]
+    [NotifyPropertyChangedFor(nameof(ConflictWarningMessage))]
+    private IReadOnlyList<string> _detectedConflictingSoftware = [];
+
     public HardwareViewModel(
         IHardwareService hardwareService,
         FanControlManager fanControlManager,
         ISettingsStore settingsStore,
         IElevationService elevationService,
         IComponentCardViewModelFactory componentCardFactory,
-        ILogger<HardwareViewModel> logger)
+        IFanControlConflictDetector conflictDetector,
+        ILogger<HardwareViewModel> logger,
+        ILogger<FanCardViewModel> fanCardLogger)
     {
         _hardwareService = hardwareService;
         _fanControlManager = fanControlManager;
         _settingsStore = settingsStore;
         _elevationService = elevationService;
+        _conflictDetector = conflictDetector;
         _logger = logger;
+        _fanCardLogger = fanCardLogger;
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
 
         PawnIoCard = componentCardFactory.Create(ComponentIds.PawnIo);
@@ -126,6 +140,17 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
         _ => string.Empty,
     };
 
+    /// <summary>Spec 04 addendum: whether the Fans tab's conflicting-software warning banner
+    /// should show.</summary>
+    public bool ShowConflictWarning => DetectedConflictingSoftware.Count > 0;
+
+    /// <summary>Spec 04 addendum: the Fans tab's conflicting-software warning banner text.</summary>
+    public string ConflictWarningMessage => DetectedConflictingSoftware.Count == 0
+        ? string.Empty
+        : $"{string.Join(", ", DetectedConflictingSoftware)} " +
+          (DetectedConflictingSoftware.Count == 1 ? "is" : "are") +
+          " also controlling your fans. Porchlight's settings may be overridden. Close/disable it to use Porchlight fan control.";
+
     /// <summary>"At a glance" summary strip (spec 10): up to 4 tiles, merged in place every tick.</summary>
     public ObservableCollection<HardwareSummaryTileViewModel> SummaryTiles { get; } = [];
 
@@ -143,7 +168,27 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
         // it only resumes once the Hardware page has actually loaded (this call), so there is never
         // silent control at app startup before the user has seen this page is active.
         _fanControlManager.Activate();
+        _ = RefreshConflictDetectionCommand.ExecuteAsync(null);
         return Task.CompletedTask;
+    }
+
+    /// <summary>Spec 04 addendum: called from the view's code-behind whenever the Fans tab becomes
+    /// the selected tab, so a tool started/closed after the page first loaded is still noticed
+    /// without polling every snapshot tick (process/service enumeration is comparatively
+    /// expensive).</summary>
+    public void OnFansTabSelected() => _ = RefreshConflictDetectionCommand.ExecuteAsync(null);
+
+    [RelayCommand]
+    private async Task RefreshConflictDetectionAsync()
+    {
+        try
+        {
+            DetectedConflictingSoftware = await Task.Run(_conflictDetector.DetectConflicts);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not check for conflicting fan-control software.");
+        }
     }
 
     [RelayCommand]
@@ -163,6 +208,10 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
     {
         _settingsStore.Update(s => s.Hardware.HideUnusedSensors = value);
         ApplyFilter();
+        foreach (var fan in Fans)
+        {
+            fan.UpdateHideUnusedSensorsSetting(value);
+        }
     }
 
     partial void OnMinFanPercentChanged(int value)
@@ -280,12 +329,39 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanToggleSoftwareFanControl));
         OnPropertyChanged(nameof(SoftwareFanControlDisabledReason));
 
-        MergeCards(snapshot.Nodes);
+        var fanDisplayNameOverrides = BuildFanDisplayNameOverridesByRpmSensorId();
+        MergeCards(snapshot.Nodes, fanDisplayNameOverrides);
         ApplyFilter();
         _unusedSensorTracker.PruneTo(snapshot.AllSensors().Select(s => s.Id).ToList());
-        MergeSummaryTiles(HardwareSummarySelector.Build(snapshot, FailsafeTemperatureC));
+        MergeSummaryTiles(HardwareSummarySelector.Build(snapshot, FailsafeTemperatureC, fanDisplayNameOverrides));
         UpdateFans(snapshot);
         OnPropertyChanged(nameof(ShowNoControllableFansMessage));
+    }
+
+    /// <summary>Spec 04 addendum: maps every controller's custom display name (keyed by
+    /// <see cref="IFanController.Id"/> in settings) to its paired RPM sensor id, since that is the
+    /// id the Sensors tab's rows and the "Hottest fan" summary tile key by. A controller with no
+    /// RPM sensor (rare) or no custom name is simply absent from the result.</summary>
+    private Dictionary<string, string> BuildFanDisplayNameOverridesByRpmSensorId()
+    {
+        var customNames = _settingsStore.Current.Hardware.FanDisplayNames;
+        var overrides = new Dictionary<string, string>();
+        if (customNames.Count == 0)
+        {
+            return overrides;
+        }
+
+        foreach (var controller in _hardwareService.Controllers)
+        {
+            if (controller.RpmSensorId is { } rpmId &&
+                customNames.TryGetValue(controller.Id, out var custom) &&
+                !string.IsNullOrWhiteSpace(custom))
+            {
+                overrides[rpmId] = custom;
+            }
+        }
+
+        return overrides;
     }
 
     /// <summary>Sensors-tab card order (spec 10): "CPU, GPU, Motherboard, Memory, Storage,
@@ -303,7 +379,7 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
 
     /// <summary>S10: updates existing card view models in place (and lets each merge its own
     /// sections/sensors) instead of clearing and rebuilding <see cref="Cards"/> every tick.</summary>
-    private void MergeCards(IReadOnlyList<HardwareNode> nodes)
+    private void MergeCards(IReadOnlyList<HardwareNode> nodes, IReadOnlyDictionary<string, string> fanDisplayNameOverrides)
     {
         var byId = new Dictionary<string, HardwareCardViewModel>(Cards.Count);
         foreach (var existing in Cards)
@@ -325,7 +401,7 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
 
             if (byId.TryGetValue(node.Id, out var existingVm))
             {
-                existingVm.UpdateFrom(node, _unusedSensorTracker);
+                existingVm.UpdateFrom(node, _unusedSensorTracker, fanDisplayNameOverrides);
                 var currentIndex = Cards.IndexOf(existingVm);
                 if (currentIndex != i && i < Cards.Count)
                 {
@@ -334,7 +410,7 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
             }
             else
             {
-                var created = new HardwareCardViewModel(node, _unusedSensorTracker);
+                var created = new HardwareCardViewModel(node, _unusedSensorTracker, fanDisplayNameOverrides);
                 if (i < Cards.Count)
                 {
                     Cards.Insert(i, created);
@@ -439,7 +515,7 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
             var card = Fans.FirstOrDefault(f => f.FanId == controller.Id);
             if (card is null)
             {
-                card = new FanCardViewModel(controller.Id, controller.Name, _settingsStore);
+                card = new FanCardViewModel(controller.Id, controller.Name, controller.NodeType, _settingsStore, _fanCardLogger);
                 Fans.Add(card);
             }
 
@@ -452,6 +528,15 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
             card.UpdateAvailableTemperatureSensors(temperatureSensors);
             card.UpdateMinFanPercent(MinFanPercent);
             card.UpdateModeEditable(CanToggleSoftwareFanControl && SoftwareFanControlEnabled);
+
+            // Fans polish addendum: hide a fan header that has never once reported RPM > 0 (an
+            // unconnected motherboard header) when "Hide unused sensors" is on - reusing the same
+            // tracker/setting the Sensors tab's "Hide unused sensors" toggle already uses, so the
+            // two never disagree about what "unused" means. A GPU fan is never hidden regardless
+            // of its RPM history (GPUs commonly run a legitimate 0-RPM idle mode), and a fan with
+            // no matching RPM sensor at all is never hidden either (nothing to judge history from).
+            var everReportedRpm = rpmSensor is null || _unusedSensorTracker.IsEverUsed(rpmSensor.Id);
+            card.UpdateVisibility(HideUnusedSensors, everReportedRpm);
         }
     }
 

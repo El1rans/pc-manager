@@ -23,7 +23,9 @@ public sealed class HardwareViewModelTests
         var viewModel = new HardwareViewModel(
             hardwareService, fanControlManager, settings, new FakeElevationService(),
             new ComponentCardViewModelFactory(componentService, NullLoggerFactory.Instance),
-            NullLogger<HardwareViewModel>.Instance);
+            new FakeFanControlConflictDetector(),
+            NullLogger<HardwareViewModel>.Instance,
+            NullLogger<FanCardViewModel>.Instance);
         Assert.Equal(1, componentService.StatusChangedSubscriberCount);
 
         viewModel.Dispose();
@@ -85,5 +87,10 @@ public sealed class HardwareViewModelTests
         public bool IsElevated => false;
 
         public bool RestartElevated() => false;
+    }
+
+    private sealed class FakeFanControlConflictDetector : IFanControlConflictDetector
+    {
+        public IReadOnlyList<string> DetectConflicts() => [];
     }
 }

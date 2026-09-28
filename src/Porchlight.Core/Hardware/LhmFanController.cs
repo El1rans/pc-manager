@@ -27,18 +27,23 @@ public sealed class LhmFanController : IFanController
     /// sensor whose <see cref="ISensor.Control"/> is not null.</param>
     /// <param name="rpmSensor">The RPM sensor sharing this control's index on the same hardware, if
     /// one exists (optional - some controllable fans report no tachometer).</param>
-    public LhmFanController(ISensor controlSensor, ISensor? rpmSensor)
+    /// <param name="nodeType">The hardware node this control sensor belongs to - see
+    /// <see cref="NodeType"/>.</param>
+    public LhmFanController(ISensor controlSensor, ISensor? rpmSensor, HardwareNodeType nodeType)
     {
         ArgumentNullException.ThrowIfNull(controlSensor);
         _controlSensor = controlSensor;
         _control = controlSensor.Control
             ?? throw new ArgumentException("Control sensor has no control channel.", nameof(controlSensor));
         _rpmSensor = rpmSensor;
+        NodeType = nodeType;
     }
 
     public string Id => _controlSensor.Identifier.ToString();
 
     public string Name => _rpmSensor?.Name ?? _controlSensor.Name;
+
+    public HardwareNodeType NodeType { get; }
 
     public double? CurrentPercent => _controlSensor.Value;
 

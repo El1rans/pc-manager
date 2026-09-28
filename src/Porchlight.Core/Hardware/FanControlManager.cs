@@ -27,7 +27,7 @@ namespace Porchlight.Core.Hardware;
 /// application already had under its own software control, and never as a reflexive "just in case"
 /// on every launch.
 /// </remarks>
-public sealed class FanControlManager : IDisposable
+public sealed partial class FanControlManager : IDisposable
 {
     /// <summary>How long an external call (restore on exit/suspend, re-arm) waits for the hardware
     /// thread before falling back to a direct call - see <see cref="IHardwareService.RunOnOwnerThread"/>.</summary>
@@ -213,6 +213,7 @@ public sealed class FanControlManager : IDisposable
             _pausedByResumableSuspend = resumableBySystemResume;
         }
 
+        LogPaused(reason);
         RestoreAll();
         RaiseStatus(FanControlAlertLevel.Caution, $"Fan control paused ({reason}).");
     }
@@ -266,6 +267,7 @@ public sealed class FanControlManager : IDisposable
         }
 
         Interlocked.Exchange(ref _lastActiveEvaluationUtcTicks, _timeProvider.GetUtcNow().UtcDateTime.Ticks);
+        LogArmed();
     }
 
     /// <summary>N1/N3: whether fan control is currently meant to be doing anything at all. Every
@@ -667,6 +669,7 @@ public sealed class FanControlManager : IDisposable
             {
                 controller.RestoreDefault();
                 RegisterPendingRestoreVerification(controller.Id);
+                LogRestored(controller.Id, controller.Name);
             }
             catch (Exception ex)
             {
@@ -854,4 +857,16 @@ public sealed class FanControlManager : IDisposable
     /// calls made for this hand-back (the original plus retries); <paramref name="TicksSinceLastAttempt"/>
     /// counts snapshot ticks observed since the most recent one, reset on every retry.</summary>
     private readonly record struct RestorePendingState(int Attempts, int TicksSinceLastAttempt);
+
+    // Requirement #5 (fans polish addendum): Information-level logging for fan-control actions,
+    // source-generated per CA1873 (avoid boxing/evaluating log arguments when Information logging
+    // happens to be disabled) rather than plain ILogger extension calls.
+    [LoggerMessage(Level = LogLevel.Information, Message = "Software fan control armed.")]
+    private partial void LogArmed();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Software fan control paused ({Reason}); restoring every owned fan to BIOS control.")]
+    private partial void LogPaused(string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Restored fan {FanId} ({FanName}) to BIOS/default control.")]
+    private partial void LogRestored(string fanId, string fanName);
 }

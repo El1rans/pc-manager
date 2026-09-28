@@ -35,6 +35,8 @@ public static class HardwareServiceCollectionExtensions
         services.AddSingleton(sp => new FanControlEngine(sp.GetRequiredService<IClock>()));
         services.AddSingleton<IFanControlActivityMarker, FanControlActivityMarker>();
         services.AddSingleton<FanControlManager>();
+        services.AddSingleton<IRunningSoftwareLister, RunningSoftwareLister>();
+        services.AddSingleton<IFanControlConflictDetector, FanControlConflictDetector>();
         return services;
     }
 }

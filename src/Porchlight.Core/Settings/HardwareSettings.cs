@@ -32,6 +32,13 @@ public sealed class HardwareSettings
     /// non-null) value - unconnected fan headers, unpopulated voltage rails - are hidden. Defaults
     /// to on, since most boards expose more headers than are physically connected.</summary>
     public bool HideUnusedSensors { get; set; } = true;
+
+    /// <summary>Fans tab addendum: user-chosen display name per fan, keyed by the fan's stable
+    /// controller id (<see cref="IFanController.Id"/> - never an index, which can shift when the
+    /// hardware tree re-enumerates). Missing or empty means "use the hardware-reported name" - see
+    /// <see cref="FanNaming.ResolveDisplayName"/>, which every place a fan name is shown (Fans tab,
+    /// Sensors tab RPM rows, the "Hottest fan" summary tile) goes through.</summary>
+    public Dictionary<string, string> FanDisplayNames { get; set; } = [];
 }
 
 /// <summary>Persisted form of a fan's profile - <see cref="FanCurvePoint"/> is reused directly since
