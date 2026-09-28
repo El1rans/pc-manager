@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using Microsoft.Extensions.Logging;
+using Porchlight.App.Shell;
 using Porchlight.Core.Components;
 
 namespace Porchlight.App.Features.Setup;
@@ -21,6 +22,10 @@ public partial class SetupWindow : Window
         _logger = logger;
         DataContext = viewModel;
         InitializeComponent();
+
+        // See WhiteFlashGuard: without this, the freshly shown window can paint solid white until
+        // the user clicks it.
+        WhiteFlashGuard.Attach(this);
 
         _viewModel.CloseRequested += OnCloseRequested;
         Loaded += OnLoaded;

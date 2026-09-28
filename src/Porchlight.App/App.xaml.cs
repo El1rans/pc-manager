@@ -243,6 +243,13 @@ public partial class App : System.Windows.Application, IDisposable
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         SuspendFansBestEffort();
+
+        // If the crash happened during a window's own first layout/render pass, that window could
+        // still be cloaked by WhiteFlashGuard - its own fallback timer would eventually reveal it,
+        // but not necessarily before the dialog below tries to show owned by it. Force every
+        // cloaked window visible now so the dialog is never hidden behind one.
+        WhiteFlashGuard.UncloakAll();
+
         LogUnhandledException(e.Exception, "Unhandled dispatcher exception.");
         ShowUnexpectedErrorDialog();
         e.Handled = true;
