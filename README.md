@@ -113,9 +113,14 @@ milestone specs.
   running/not-running status with a "Start AnyDesk" button, step-by-step instructions, a
   scam-safety warning, and "Copy support info" for sharing computer name/Windows version/address by
   message. Porchlight never changes any AnyDesk security setting.
-- Hardware: a sensors tab (temperatures, fan speeds, load, clocks, voltages and power for CPU, GPU,
-  motherboard, memory, storage and network, filterable, with min/max reset) and a fans tab (Default/
-  Fixed/Curve control per fan, with a draggable-point curve editor). Software fan control is off by
+- Hardware: a sensors tab with an "At a glance" summary strip (CPU/GPU temperature, CPU package
+  power, hottest fan) above one card per device (CPU, GPU, motherboard, memory, storage, network -
+  CPU/GPU expanded by default), each grouped into sections (temperatures, fans, load, power,
+  clocks, voltages, then the rest) with aligned Name/Current/Min/Max columns - Current is the
+  prominent value, Min/Max are secondary. A "Hide unused sensors" toggle (on by default) hides
+  sensors that have never reported a real reading (unconnected fan headers, unpopulated voltage
+  rails); a filter box and "Reset min/max" still work across every card. A fans tab (Default/
+  Fixed/Curve control per fan, with a draggable-point curve editor) sits alongside it. Software fan control is off by
   default, requires a one-time risk confirmation, and is only ever active while the page itself
   reports `Ready` (elevated, driver installed, hardware read healthy) - a fan profile enabled during
   an earlier elevated session never drives a fan on a later non-elevated launch. A safety engine

@@ -21,6 +21,7 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
     private readonly IElevationService _elevationService;
     private readonly ILogger<HardwareViewModel> _logger;
     private readonly Dispatcher _dispatcher;
+    private readonly UnusedSensorTracker _unusedSensorTracker = new();
     private bool _loadingToggle;
     private bool _disposed;
 
@@ -32,6 +33,11 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
 
     [ObservableProperty]
     private string _filterText = string.Empty;
+
+    /// <summary>Spec 10: "Hide unused sensors" toggle, on by default, persisted via
+    /// <see cref="ISettingsStore"/>.</summary>
+    [ObservableProperty]
+    private bool _hideUnusedSensors;
 
     [ObservableProperty]
     private bool _softwareFanControlEnabled;
@@ -61,6 +67,7 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
         PawnIoCard.PropertyChanged += OnPawnIoCardPropertyChanged;
 
         var hardware = settingsStore.Current.Hardware;
+        _hideUnusedSensors = hardware.HideUnusedSensors;
         _softwareFanControlEnabled = hardware.FanControlEnabled;
         _minFanPercent = Math.Max(hardware.MinFanPercent, FanControlOptions.LowestAllowedMinPercent);
         // S2: clamp on load too - a value only ever clamped in the property-changed handler leaves
@@ -119,12 +126,14 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
         _ => string.Empty,
     };
 
-    /// <summary>Root hardware nodes, merged in place every tick (S10) - see
-    /// <see cref="SensorTreeNodeViewModel.UpdateFrom"/>. Membership never changes on a filter alone;
-    /// only <see cref="SensorTreeNodeViewModel.IsVisible"/> does, so expansion state and the
-    /// underlying <c>TreeViewItem</c> containers are never discarded just because the filter text
-    /// changed.</summary>
-    public ObservableCollection<SensorTreeNodeViewModel> SensorNodes { get; } = [];
+    /// <summary>"At a glance" summary strip (spec 10): up to 4 tiles, merged in place every tick.</summary>
+    public ObservableCollection<HardwareSummaryTileViewModel> SummaryTiles { get; } = [];
+
+    /// <summary>One card per hardware device, merged in place every tick (S10) - see
+    /// <see cref="HardwareCardViewModel.UpdateFrom"/>. Membership never changes on a filter alone;
+    /// only each card/section/row's <c>IsVisible</c> does, so expansion state and the Expander
+    /// containers are never discarded just because the filter text changed.</summary>
+    public ObservableCollection<HardwareCardViewModel> Cards { get; } = [];
 
     public ObservableCollection<FanCardViewModel> Fans { get; } = [];
 
@@ -149,6 +158,12 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
     }
 
     partial void OnFilterTextChanged(string value) => ApplyFilter();
+
+    partial void OnHideUnusedSensorsChanged(bool value)
+    {
+        _settingsStore.Update(s => s.Hardware.HideUnusedSensors = value);
+        ApplyFilter();
+    }
 
     partial void OnMinFanPercentChanged(int value)
     {
@@ -265,56 +280,126 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanToggleSoftwareFanControl));
         OnPropertyChanged(nameof(SoftwareFanControlDisabledReason));
 
-        MergeSensorNodes(snapshot.Nodes);
+        MergeCards(snapshot.Nodes);
         ApplyFilter();
+        _unusedSensorTracker.PruneTo(snapshot.AllSensors().Select(s => s.Id).ToList());
+        MergeSummaryTiles(HardwareSummarySelector.Build(snapshot, FailsafeTemperatureC));
         UpdateFans(snapshot);
         OnPropertyChanged(nameof(ShowNoControllableFansMessage));
     }
 
-    /// <summary>S10: updates existing root node view models in place (and lets each merge its own
-    /// children/sensors) instead of clearing and rebuilding <see cref="SensorNodes"/> every tick.</summary>
-    private void MergeSensorNodes(IReadOnlyList<HardwareNode> nodes)
+    /// <summary>Sensors-tab card order (spec 10): "CPU, GPU, Motherboard, Memory, Storage,
+    /// Network" - anything else sorts after Network, in the order the snapshot itself reports it.</summary>
+    private static int CardOrderRank(HardwareNodeType type) => type switch
     {
-        var byId = new Dictionary<string, SensorTreeNodeViewModel>(SensorNodes.Count);
-        foreach (var existing in SensorNodes)
+        HardwareNodeType.Cpu => 0,
+        HardwareNodeType.Gpu => 1,
+        HardwareNodeType.Motherboard => 2,
+        HardwareNodeType.Memory => 3,
+        HardwareNodeType.Storage => 4,
+        HardwareNodeType.Network => 5,
+        _ => 6,
+    };
+
+    /// <summary>S10: updates existing card view models in place (and lets each merge its own
+    /// sections/sensors) instead of clearing and rebuilding <see cref="Cards"/> every tick.</summary>
+    private void MergeCards(IReadOnlyList<HardwareNode> nodes)
+    {
+        var byId = new Dictionary<string, HardwareCardViewModel>(Cards.Count);
+        foreach (var existing in Cards)
         {
             byId[existing.Id] = existing;
         }
 
-        var seen = new HashSet<string>(nodes.Count);
-        for (var i = 0; i < nodes.Count; i++)
+        var ordered = nodes
+            .Select((node, index) => (Node: node, Index: index))
+            .OrderBy(t => CardOrderRank(t.Node.Type))
+            .ThenBy(t => t.Index)
+            .ToList();
+
+        var seen = new HashSet<string>(ordered.Count);
+        for (var i = 0; i < ordered.Count; i++)
         {
-            var node = nodes[i];
+            var node = ordered[i].Node;
             seen.Add(node.Id);
 
             if (byId.TryGetValue(node.Id, out var existingVm))
             {
-                existingVm.UpdateFrom(node);
-                var currentIndex = SensorNodes.IndexOf(existingVm);
-                if (currentIndex != i && i < SensorNodes.Count)
+                existingVm.UpdateFrom(node, _unusedSensorTracker);
+                var currentIndex = Cards.IndexOf(existingVm);
+                if (currentIndex != i && i < Cards.Count)
                 {
-                    SensorNodes.Move(currentIndex, i);
+                    Cards.Move(currentIndex, i);
                 }
             }
             else
             {
-                var created = new SensorTreeNodeViewModel(node);
-                if (i < SensorNodes.Count)
+                var created = new HardwareCardViewModel(node, _unusedSensorTracker);
+                if (i < Cards.Count)
                 {
-                    SensorNodes.Insert(i, created);
+                    Cards.Insert(i, created);
                 }
                 else
                 {
-                    SensorNodes.Add(created);
+                    Cards.Add(created);
                 }
             }
         }
 
-        for (var i = SensorNodes.Count - 1; i >= 0; i--)
+        for (var i = Cards.Count - 1; i >= 0; i--)
         {
-            if (!seen.Contains(SensorNodes[i].Id))
+            if (!seen.Contains(Cards[i].Id))
             {
-                SensorNodes.RemoveAt(i);
+                Cards.RemoveAt(i);
+            }
+        }
+    }
+
+    /// <summary>Merges the summary strip in place by title so its tile order stays stable tick to
+    /// tick even though a tile can appear/disappear (e.g. no GPU temperature sensor found).</summary>
+    private void MergeSummaryTiles(IReadOnlyList<HardwareSummaryTile> tiles)
+    {
+        var byTitle = new Dictionary<string, HardwareSummaryTileViewModel>(SummaryTiles.Count);
+        foreach (var existing in SummaryTiles)
+        {
+            byTitle[existing.Title] = existing;
+        }
+
+        var seen = new HashSet<string>(tiles.Count);
+        for (var i = 0; i < tiles.Count; i++)
+        {
+            var tile = tiles[i];
+            seen.Add(tile.Title);
+
+            if (byTitle.TryGetValue(tile.Title, out var existingVm))
+            {
+                existingVm.UpdateFrom(tile);
+                var currentIndex = SummaryTiles.IndexOf(existingVm);
+                if (currentIndex != i && i < SummaryTiles.Count)
+                {
+                    SummaryTiles.Move(currentIndex, i);
+                }
+            }
+            else
+            {
+                var created = new HardwareSummaryTileViewModel();
+                created.UpdateFrom(tile);
+                if (i < SummaryTiles.Count)
+                {
+                    SummaryTiles.Insert(i, created);
+                }
+                else
+                {
+                    SummaryTiles.Add(created);
+                }
+            }
+        }
+
+        for (var i = SummaryTiles.Count - 1; i >= 0; i--)
+        {
+            if (!seen.Contains(SummaryTiles[i].Title))
+            {
+                SummaryTiles.RemoveAt(i);
             }
         }
     }
@@ -322,9 +407,9 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
     private void ApplyFilter()
     {
         var filter = FilterText.Trim();
-        foreach (var node in SensorNodes)
+        foreach (var card in Cards)
         {
-            node.ApplyFilter(filter);
+            card.ApplyFilter(filter, HideUnusedSensors);
         }
     }
 

@@ -9,6 +9,12 @@ namespace Porchlight.App.Features.Hardware;
 /// binding a row's <see cref="IsVisible"/> to the filter box does not fight with the tree rebuilding
 /// itself every second (S10).
 /// </summary>
+/// <remarks>
+/// Spec 10: <see cref="ValueText"/> (Current) is the primary, most prominent text on the row - bound
+/// with no dim/secondary style in <c>HardwareView.xaml</c> - while <see cref="MinText"/>/
+/// <see cref="MaxText"/> use the secondary brush. Formatting itself is delegated to
+/// <see cref="SensorFormatter"/> so every <see cref="SensorType"/> gets a correct, consistent unit.
+/// </remarks>
 public sealed partial class SensorRowViewModel : ObservableObject
 {
     [ObservableProperty]
@@ -26,58 +32,40 @@ public sealed partial class SensorRowViewModel : ObservableObject
     [ObservableProperty]
     private bool _isVisible = true;
 
-    public SensorRowViewModel(SensorReading reading)
+    /// <summary>Whether this sensor has ever reported a real (non-zero, non-null) value - see
+    /// <see cref="UnusedSensorTracker"/>. Drives <see cref="IsVisible"/> together with the filter
+    /// text when "Hide unused sensors" is on.</summary>
+    [ObservableProperty]
+    private bool _isUsed = true;
+
+    public SensorRowViewModel(SensorReading reading, bool isUsed)
     {
         Id = reading.Id;
-        UpdateFrom(reading);
+        UpdateFrom(reading, isUsed);
     }
 
     public string Id { get; }
 
-    public void UpdateFrom(SensorReading reading)
+    public SensorType Type { get; private set; }
+
+    public void UpdateFrom(SensorReading reading, bool isUsed)
     {
         Name = reading.Name;
-        ValueText = Format(reading.Value, reading.Type);
-        MinText = Format(reading.Min, reading.Type);
-        MaxText = Format(reading.Max, reading.Type);
+        Type = reading.Type;
+        ValueText = SensorFormatter.Format(reading.Value, reading.Type);
+        MinText = SensorFormatter.Format(reading.Min, reading.Type);
+        MaxText = SensorFormatter.Format(reading.Max, reading.Type);
+        IsUsed = isUsed;
     }
 
-    public bool Matches(string filter) => Name.Contains(filter, StringComparison.OrdinalIgnoreCase);
+    public bool MatchesName(string filter) => Name.Contains(filter, StringComparison.OrdinalIgnoreCase);
 
-    private static string Format(double? value, SensorType type)
+    /// <summary>Recomputes <see cref="IsVisible"/> from the filter text, the "Hide unused sensors"
+    /// toggle, and whether an ancestor (the device card or this sensor's section) already matched
+    /// the filter by name - in which case every sensor under it shows regardless of its own name.</summary>
+    public void ApplyVisibility(string filter, bool hideUnused, bool ancestorMatched)
     {
-        if (value is null || double.IsNaN(value.Value))
-        {
-            return "-";
-        }
-
-        if (type == SensorType.Throughput)
-        {
-            // LHM reports throughput in bytes/second; scale to whichever unit reads best.
-            var bytesPerSecond = value.Value;
-            return bytesPerSecond >= 1024 * 1024
-                ? $"{(bytesPerSecond / (1024 * 1024)).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)} MB/s"
-                : $"{(bytesPerSecond / 1024).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)} KB/s";
-        }
-
-        var unit = Unit(type);
-        var digits = type is SensorType.Fan or SensorType.Clock ? "0" : "0.#";
-        return $"{value.Value.ToString(digits, System.Globalization.CultureInfo.InvariantCulture)} {unit}".TrimEnd();
+        var matchesFilter = ancestorMatched || string.IsNullOrEmpty(filter) || MatchesName(filter);
+        IsVisible = matchesFilter && (!hideUnused || IsUsed);
     }
-
-    private static string Unit(SensorType type) => type switch
-    {
-        SensorType.Temperature => "C",
-        SensorType.Fan => "RPM",
-        SensorType.Load => "%",
-        SensorType.Clock => "MHz",
-        SensorType.Voltage => "V",
-        SensorType.Power => "W",
-        SensorType.Data => "GB",
-        SensorType.SmallData => "MB",
-        SensorType.Current => "A",
-        SensorType.Energy => "mWh",
-        SensorType.Level => "%",
-        _ => string.Empty,
-    };
 }

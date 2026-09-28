@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Hardware: redesigned the Sensors tab for readability (`docs/specs/10-readable-sensors.md`) - an
+  "At a glance" summary strip (CPU/GPU temperature, CPU package power, hottest fan) above one card
+  per device (CPU, GPU, motherboard, memory, storage, network; CPU/GPU expanded by default), each
+  grouped into sections (temperatures, fans, load, power, clocks, voltages, then the rest) with
+  aligned Name/Current/Min/Max columns across every card. Current is now the primary/bold text and
+  Min/Max secondary - the previous tree view inherited a dim foreground from its `TreeViewItem`
+  container for the Name/Current columns, the opposite of the intended emphasis. Every
+  `SensorType` now has an explicit, correct unit (`SensorFormatter`) - including the Factor type,
+  which previously rendered with no unit at all (the maintainer's "Core #1  34" row was a per-core
+  multiplier sensor). Added a "Hide unused sensors" toggle (on by default, persisted) that hides a
+  sensor whose value has been null or exactly zero for its entire observed history (unconnected fan
+  headers, unpopulated voltage rails) while never hiding a temperature that has reported a real
+  value.
+
+### Verified
+
+- Hardware: investigated the maintainer's screenshot where every CPU core's Load sensor read
+  "100 %" Current at once. `HardwareService.BuildNode` maps `SensorReading.Value`/`Min`/`Max`
+  straight from LHM's own `ISensor.Value`/`Min`/`Max` for every sensor, one-to-one, with no
+  cross-sensor aggregation or copy-paste between rows, so Current cannot be bound to the wrong
+  value there or in the new `SensorRowViewModel`/`SensorFormatter` display path. All-cores-100%
+  is a real, momentary reading (something else was using the CPU when that screenshot was taken),
+  not a bug; the demo data (`DemoHardwareService`) now shows genuinely mixed per-core load instead
+  so this never looks like a rendering artifact again.
+
 ### Changed
 
 - Renamed to Porchlight (from "PC Manager"), with a new brand kit (icon, logo, installer wizard
