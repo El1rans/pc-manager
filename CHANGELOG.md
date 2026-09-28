@@ -124,7 +124,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `DWMWA_CLOAK` from the moment its native handle exists until WPF has actually presented a
   rendered frame, so DWM never gets a chance to composite the blank surface in the first place -
   see https://github.com/scjv/wpf-window-white-flash for the underlying investigation this fix is
-  based on.
+  based on. Cloaking alone would trade one failure mode for a worse one - a window that never
+  reaches `ContentRendered` (an exception during its first layout/render pass, or being shown
+  minimized) would otherwise stay cloaked, i.e. invisible but still present in the taskbar, forever.
+  `CloakLifecycle` (`Porchlight.App/Shell/CloakLifecycle.cs`, unit tested) guarantees an uncloak via
+  a bounded fallback timer regardless of what happens on the render path; `WhiteFlashGuard` also
+  forces an uncloak on the window's state changing (e.g. restored from minimized) or closing, and
+  exposes `UncloakAll()`, called from the app's unhandled-exception handler so a crash during a
+  window's first render can never leave its owned error dialog hidden behind it. Manually verified
+  the fallback path by forcing `ContentRendered` to never fire: the window stayed fully invisible
+  until the fallback timer elapsed, then appeared already fully painted.
 - `SettingsStore.Save`/`Update` no longer throw when the settings file is transiently locked by
   another process (e.g. Defender, the Search indexer, or OneDrive briefly holding the file during
   the atomic rename). The final move now retries with bounded backoff, and if it still fails,
