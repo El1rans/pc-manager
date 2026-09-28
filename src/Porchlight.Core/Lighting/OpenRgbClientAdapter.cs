@@ -2,6 +2,7 @@ using NativeColor = OpenRGB.NET.Color;
 using NativeColorMode = OpenRGB.NET.ColorMode;
 using NativeDevice = OpenRGB.NET.Device;
 using NativeDeviceType = OpenRGB.NET.DeviceType;
+using NativeZoneType = OpenRGB.NET.ZoneType;
 
 namespace Porchlight.Core.Lighting;
 
@@ -184,7 +185,7 @@ public sealed class OpenRgbClientAdapter : IOpenRgbClient
     private static RgbDevice ToRgbDevice(NativeDevice device)
     {
         var modes = Array.ConvertAll(device.Modes, ToRgbMode);
-        var zones = Array.ConvertAll(device.Zones, z => new RgbZone(z.Name, (int)z.LedCount));
+        var zones = Array.ConvertAll(device.Zones, z => new RgbZone(z.Name, (int)z.LedCount, z.Type == NativeZoneType.Matrix));
 
         var activeMode = device.ActiveModeIndex >= 0 && device.ActiveModeIndex < device.Modes.Length
             ? device.Modes[device.ActiveModeIndex].Name

@@ -236,6 +236,81 @@
                     </StackPanel>
                 </Border>
 
+                <!-- LED effects (see docs/specs/11-led-effects.md) -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                    <StackPanel>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="{Binding PauseEffectsButtonLabel}"
+                                    Command="{Binding ToggleEffectsPausedCommand}"
+                                    AutomationProperties.Name="{Binding PauseEffectsButtonLabel}"
+                                    ToolTip="Pause or resume every device's custom LED effect"/>
+                            <TextBlock Text="Effects" Style="{StaticResource CardTitle}"/>
+                        </DockPanel>
+                        <TextBlock Text="Custom effects run while Porchlight is open."
+                                   Style="{StaticResource Secondary}" Margin="0,2,0,10"/>
+
+                        <CheckBox Content="Updates alert overlay"
+                                  IsChecked="{Binding UpdatesAlertOverlayEnabled, Mode=TwoWay}"
+                                  Margin="0,0,0,14"
+                                  ToolTip="Pulses a warning color over each device's effect while app updates are pending"
+                                  AutomationProperties.Name="Updates alert overlay"/>
+
+                        <ItemsControl ItemsSource="{Binding Devices}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,16"
+                                                Visibility="{Binding IsExcluded, Converter={StaticResource InverseBoolToVis}}">
+                                        <DockPanel>
+                                            <TextBlock DockPanel.Dock="Left" Text="{Binding Glyph}"
+                                                       Style="{StaticResource Icon}" FontSize="16"
+                                                       Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                            <TextBlock DockPanel.Dock="Left" Text="{Binding Name}"
+                                                       VerticalAlignment="Center" MinWidth="150" Margin="0,0,10,0"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <ComboBox ItemsSource="{Binding AvailableEffects}"
+                                                      SelectedItem="{Binding SelectedEffectName, Mode=TwoWay}"
+                                                      Width="190" HorizontalAlignment="Left"
+                                                      AutomationProperties.Name="{Binding Name, StringFormat='Effect for {0}'}"/>
+                                        </DockPanel>
+
+                                        <StackPanel Margin="26,8,0,0"
+                                                    Visibility="{Binding ShowEffectSettings, Converter={StaticResource BoolToVis}}">
+                                            <DockPanel Margin="0,0,0,8"
+                                                       Visibility="{Binding ShowSpeedSetting, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock DockPanel.Dock="Left" Text="Speed" Width="70"
+                                                           Style="{StaticResource Secondary}" VerticalAlignment="Center"/>
+                                                <Slider Minimum="0.25" Maximum="3" Value="{Binding EffectSpeed}"
+                                                        Width="220" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                        AutomationProperties.Name="{Binding Name, StringFormat='Effect speed for {0}'}"/>
+                                            </DockPanel>
+
+                                            <StackPanel Margin="0,0,0,8"
+                                                        Visibility="{Binding ShowColorSetting, Converter={StaticResource BoolToVis}}">
+                                                <controls:ColorWheelPicker SelectedColorHex="{Binding EffectColorHex, Mode=TwoWay}"/>
+                                            </StackPanel>
+
+                                            <DockPanel Visibility="{Binding ShowTemperatureRangeSetting, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock DockPanel.Dock="Left" Text="Min &#176;C" Width="70"
+                                                           Style="{StaticResource Secondary}" VerticalAlignment="Center"/>
+                                                <TextBox DockPanel.Dock="Left" Width="60" Margin="0,0,20,0"
+                                                         Text="{Binding EffectMinTempC, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                         AutomationProperties.Name="{Binding Name, StringFormat='Minimum temperature for {0}'}"/>
+                                                <TextBlock DockPanel.Dock="Left" Text="Max &#176;C" Width="70"
+                                                           Style="{StaticResource Secondary}" VerticalAlignment="Center"/>
+                                                <TextBox Width="60"
+                                                         Text="{Binding EffectMaxTempC, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                         AutomationProperties.Name="{Binding Name, StringFormat='Maximum temperature for {0}'}"/>
+                                            </DockPanel>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="No devices found." Style="{StaticResource Secondary}"
+                                   Visibility="{Binding Devices.Count, Converter={StaticResource InverseCountToVis}}"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- Profiles -->
                 <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                     <StackPanel>

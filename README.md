@@ -149,7 +149,11 @@ milestone specs.
   connection (including a silent remote close, caught by a periodic heartbeat) returns to a
   reconnect state instead of crashing the page. Talks to OpenRGB through a vendored, patched copy
   of `OpenRGB.NET` at `src/ThirdParty/OpenRGB.NET/` - see `THIRD-PARTY-NOTICES.md` and
-  `docs/upstream/openrgb-net.md` for why.
+  `docs/upstream/openrgb-net.md` for why. The Lighting page's Effects card assigns a custom
+  animated effect per device - Rainbow wave, Breathing, CPU temperature (color follows CPU
+  temperature between a min/max °C), and, for a device with a matrix (per-key) zone, Pac-Man and
+  Rain - plus a global "updates pending" overlay and a "Pause effects" button. See
+  `docs/specs/11-led-effects.md`.
 
 ## Planned modules
 

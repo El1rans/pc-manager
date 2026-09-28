@@ -17,6 +17,7 @@ using Porchlight.App.Shell;
 using Porchlight.Core.Components;
 using Porchlight.Core.Elevation;
 using Porchlight.Core.Hardware;
+using Porchlight.Core.Lighting.Effects;
 using Porchlight.Core.Settings;
 using Serilog;
 using Serilog.Extensions.Logging;
@@ -225,6 +226,7 @@ public partial class App : System.Windows.Application, IDisposable
         services.AddUpdatesFeature();
         services.AddHardwareFeature();
         services.AddLightingFeature();
+        services.AddLedEffectsCore();
         services.AddHostedService<Features.Lighting.OpenRgbAutoStartHostedService>();
         services.AddRemoteSupportFeature();
     }

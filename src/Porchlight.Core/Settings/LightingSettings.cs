@@ -1,3 +1,5 @@
+using Porchlight.Core.Lighting.Effects;
+
 namespace Porchlight.Core.Settings;
 
 /// <summary>Settings owned by the Lighting feature (populated starting with milestone 05).</summary>
@@ -31,4 +33,9 @@ public sealed class LightingSettings
     /// be set individually.
     /// </summary>
     public List<string> ExcludedDeviceNames { get; set; } = [];
+
+    /// <summary>Per-device LED effect assignments for the effects engine (see
+    /// docs/specs/11-led-effects.md), keyed by device name inside each entry. Empty means no device
+    /// has an effect assigned - the engine (started by the phase 2 UI) then does nothing.</summary>
+    public List<EffectAssignment> EffectAssignments { get; set; } = [];
 }
