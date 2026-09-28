@@ -22,4 +22,13 @@ public sealed class LightingSettings
 
     /// <summary>Up to 8 saved favorite colors, each as a <c>#RRGGBB</c> string, oldest first.</summary>
     public List<string> FavoriteColors { get; set; } = [];
+
+    /// <summary>
+    /// Names (<see cref="Porchlight.Core.Lighting.RgbDevice.Name"/>) of devices the user marked
+    /// "Don't control this device" on the Lighting page - e.g. a keyboard they'd rather leave to its
+    /// vendor's own software (see docs/specs/05-lighting.md addendum, "Per-device exclusion").
+    /// "Apply to all"/"Turn off all" skip these; the device still appears in the list and can still
+    /// be set individually.
+    /// </summary>
+    public List<string> ExcludedDeviceNames { get; set; } = [];
 }

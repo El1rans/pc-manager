@@ -27,6 +27,14 @@ public interface IRegistryReader
     /// this is only a hint for which ones to leave unticked by default.
     /// </summary>
     IReadOnlyList<string> GetInstallerHandledComponentIds();
+
+    /// <summary>
+    /// Reads a DWORD value under <c>HKEY_CURRENT_USER\<paramref name="subKey"/></c>, or null if the
+    /// key or value does not exist or is not a DWORD. Used by lighting-conflict detection to read
+    /// Windows Dynamic Lighting's own settings (<c>Software\Microsoft\Lighting</c>) without giving
+    /// callers direct registry access - see <c>LightingConflictDetector</c>.
+    /// </summary>
+    int? GetCurrentUserDwordValue(string subKey, string valueName);
 }
 
 /// <summary>An uninstall registry entry matched by <see cref="IRegistryReader.FindUninstallEntry"/>.</summary>

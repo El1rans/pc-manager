@@ -20,6 +20,8 @@ public static class LightingServiceCollectionExtensions
             return new OpenRgbClientAdapter(lighting.OpenRgbHost, lighting.OpenRgbPort, OpenRgbSocketTimeoutMs);
         });
 
+        services.AddSingleton<ILightingConflictDetector, LightingConflictDetector>();
+
 #if DEBUG
         // Non-shipping (DEBUG-only) escape hatch for capturing Lighting page documentation
         // screenshots without exposing the real machine's actual RGB devices - see

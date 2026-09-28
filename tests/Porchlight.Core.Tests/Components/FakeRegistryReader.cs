@@ -19,5 +19,13 @@ internal sealed class FakeRegistryReader : IRegistryReader
 
     public IReadOnlyList<string> InstallerHandledComponentIds { get; set; } = [];
 
+    private readonly Dictionary<(string SubKey, string ValueName), int> _currentUserDwords = new();
+
     public IReadOnlyList<string> GetInstallerHandledComponentIds() => InstallerHandledComponentIds;
+
+    public void SetCurrentUserDwordValue(string subKey, string valueName, int value) =>
+        _currentUserDwords[(subKey, valueName)] = value;
+
+    public int? GetCurrentUserDwordValue(string subKey, string valueName) =>
+        _currentUserDwords.TryGetValue((subKey, valueName), out var value) ? value : null;
 }

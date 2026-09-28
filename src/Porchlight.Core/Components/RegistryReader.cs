@@ -74,6 +74,15 @@ public sealed class RegistryReader : IRegistryReader
         return raw.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
     }
 
+    public int? GetCurrentUserDwordValue(string subKey, string valueName)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(subKey);
+        ArgumentException.ThrowIfNullOrEmpty(valueName);
+
+        using var key = Registry.CurrentUser.OpenSubKey(subKey);
+        return key?.GetValue(valueName) is int value ? value : null;
+    }
+
     private static string? ReadInstallerComponentsValue(string keyPath)
     {
         using var installerKey = Registry.LocalMachine.OpenSubKey(keyPath);

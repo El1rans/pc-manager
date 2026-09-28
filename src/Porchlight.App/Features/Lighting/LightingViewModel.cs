@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Porchlight.App.Controls;
+using Porchlight.App.Features.RemoteSupport;
 using Porchlight.App.Shell;
 using Porchlight.Core.Components;
 using Porchlight.Core.Lighting;
@@ -35,12 +36,26 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
         "#00FFFF", "#0080FF", "#8000FF", "#FF00FF", "#000000",
     ];
 
+    /// <summary>How often <see cref="FireAndForgetReconnectAttempt"/> retries while disconnected,
+    /// so the page recovers on its own once OpenRGB is reachable again instead of requiring the
+    /// user to click Retry - see docs/specs/05-lighting.md addendum, "Auto-reconnect".</summary>
+    private static readonly TimeSpan ReconnectInterval = TimeSpan.FromSeconds(10);
+
     private readonly ILightingService _lightingService;
+    private readonly ILightingConflictDetector _conflictDetector;
+    private readonly IUrlLauncher _urlLauncher;
     private readonly ISettingsStore _settingsStore;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<LightingViewModel> _logger;
     private readonly Dispatcher _dispatcher;
+    private readonly ColorApplyRateLimiter _liveApplyRateLimiter = new();
     private CancellationTokenSource _cts = new();
+    private Timer? _reconnectTimer;
+
+    /// <summary>Dismissed for this app session only (not persisted) - see
+    /// docs/specs/05-lighting.md addendum, "Lighting conflict warning".</summary>
+    private bool _conflictsDismissed;
+
     private bool _disposed;
 
     /// <summary>Tracks whether <see cref="OpenRgbCard"/> was already ready before the most recent
@@ -77,10 +92,14 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
     public LightingViewModel(
         IComponentCardViewModelFactory componentCardFactory,
         ILightingService lightingService,
+        ILightingConflictDetector conflictDetector,
+        IUrlLauncher urlLauncher,
         ISettingsStore settingsStore,
         ILoggerFactory loggerFactory)
     {
         _lightingService = lightingService;
+        _conflictDetector = conflictDetector;
+        _urlLauncher = urlLauncher;
         _settingsStore = settingsStore;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<LightingViewModel>();
@@ -117,8 +136,18 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
 
     public bool CanSaveFavorite => FavoriteColors.Count < MaxFavoriteColors;
 
+    /// <summary>Other software detected that can also control an RGB device's lighting (Windows
+    /// Dynamic Lighting, vendor RGB apps) - see docs/specs/05-lighting.md addendum, "Lighting
+    /// conflict warning". Shown regardless of <see cref="ShowSetup"/>/<see cref="IsConnected"/>:
+    /// it's about other software, not about OpenRGB itself.</summary>
+    public ObservableCollection<LightingConflictWarning> Conflicts { get; } = [];
+
+    public bool ShowConflicts => !_conflictsDismissed && Conflicts.Count > 0;
+
     public override async Task OnNavigatedToAsync(CancellationToken cancellationToken)
     {
+        var conflictsTask = LoadConflictsAsync(cancellationToken);
+
         var wasReady = OpenRgbCard.IsReady;
         await OpenRgbCard.LoadAsync(cancellationToken).ConfigureAwait(true);
 
@@ -130,6 +159,48 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
         if (wasReady && OpenRgbCard.IsReady)
         {
             await RefreshAsync().ConfigureAwait(true);
+        }
+
+        await conflictsTask.ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private void DismissConflicts()
+    {
+        _conflictsDismissed = true;
+        OnPropertyChanged(nameof(ShowConflicts));
+    }
+
+    [RelayCommand]
+    private void OpenConflictAction(LightingConflictWarning warning)
+    {
+        if (warning.ActionUri is { Length: > 0 } uri)
+        {
+            _urlLauncher.Open(uri);
+        }
+    }
+
+    private async Task LoadConflictsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var warnings = await _conflictDetector.DetectAsync(cancellationToken).ConfigureAwait(true);
+            Conflicts.Clear();
+            foreach (var warning in warnings)
+            {
+                Conflicts.Add(warning);
+            }
+
+            OnPropertyChanged(nameof(ShowConflicts));
+        }
+        catch (OperationCanceledException)
+        {
+            // Navigated away mid-check; expected, not an error.
+        }
+        catch (Exception ex)
+        {
+            // Best-effort, informational only - never block the page on this.
+            _logger.LogWarning(ex, "Could not check for lighting conflicts.");
         }
     }
 
@@ -155,7 +226,7 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
         try
         {
             var scaled = color.Scale(BrightnessPercent / 100.0);
-            var result = await _lightingService.SetAllColorAsync(scaled, _cts.Token).ConfigureAwait(true);
+            var result = await ApplyColorToAllowedDevicesAsync(scaled, _cts.Token).ConfigureAwait(true);
             LastActionMessage = DescribeFailure(result, "apply the color to");
         }
         catch (OperationCanceledException ex)
@@ -174,7 +245,7 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
         IsBusy = true;
         try
         {
-            var result = await _lightingService.TurnOffAllAsync(_cts.Token).ConfigureAwait(true);
+            var result = await ApplyColorToAllowedDevicesAsync(RgbColor.Black, _cts.Token).ConfigureAwait(true);
             LastActionMessage = DescribeFailure(result, "turn off");
         }
         catch (OperationCanceledException ex)
@@ -184,6 +255,100 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Sets <paramref name="color"/> on every device except one the user marked "Don't control this
+    /// device" (see <see cref="DeviceRowViewModel.IsExcluded"/> and docs/specs/05-lighting.md
+    /// addendum, "Per-device exclusion"). When nothing is excluded this is exactly
+    /// <see cref="ILightingService.SetAllColorAsync"/> (the common case, and what
+    /// <c>TurnOffAllAsync</c>/<c>SetAllColorAsync</c> are already optimized for); only once at least
+    /// one device is excluded does it fall back to setting devices one at a time so the excluded one
+    /// can be skipped - OpenRGB's own bulk API has no per-device opt-out.
+    /// </summary>
+    private async Task<LightingApplyResult> ApplyColorToAllowedDevicesAsync(RgbColor color, CancellationToken cancellationToken)
+    {
+        if (Devices.Count == 0 || Devices.All(d => !d.IsExcluded))
+        {
+            // The common case (nothing excluded): OpenRGB's own bulk call, unchanged from before
+            // per-device exclusion existed.
+            return await _lightingService.SetAllColorAsync(color, cancellationToken).ConfigureAwait(true);
+        }
+
+        var succeeded = 0;
+        var failed = 0;
+        foreach (var device in Devices.Where(d => !d.IsExcluded))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var ok = await _lightingService.SetDeviceColorAsync(device.Index, color, cancellationToken).ConfigureAwait(true);
+            if (ok)
+            {
+                succeeded++;
+            }
+            else
+            {
+                failed++;
+            }
+        }
+
+        return new LightingApplyResult(succeeded, failed);
+    }
+
+    private void OnDeviceExclusionChanged(DeviceRowViewModel device) =>
+        _settingsStore.Update(s =>
+        {
+            var names = s.Lighting.ExcludedDeviceNames;
+            if (device.IsExcluded)
+            {
+                if (!names.Contains(device.Name))
+                {
+                    names.Add(device.Name);
+                }
+            }
+            else
+            {
+                names.Remove(device.Name);
+            }
+        });
+
+    /// <summary>Applies a color picked from the "All devices" <c>ColorWheelPicker</c> while it is
+    /// being dragged (throttled - <paramref name="isFinal"/> false) or once dragging ends
+    /// (<paramref name="isFinal"/> true, always applied). The control's own
+    /// <see cref="Controls.ColorWheelPicker.SelectedColorHex"/> two-way binding already keeps
+    /// <see cref="SelectedColorHex"/> (and so the hex box/favorites) in sync; this only decides
+    /// whether/when to push the color to OpenRGB. See docs/specs/05-lighting.md addendum, "Color
+    /// wheel picker".</summary>
+    public void OnAllDevicesColorPicked(RgbColor color, bool isFinal)
+    {
+        if (!isFinal && !_liveApplyRateLimiter.TryAcquire())
+        {
+            return;
+        }
+
+        if (isFinal)
+        {
+            _liveApplyRateLimiter.Reset();
+        }
+
+        _ = ApplyLiveColorAsync(color);
+    }
+
+    private async Task ApplyLiveColorAsync(RgbColor color)
+    {
+        if (!IsConnected)
+        {
+            return;
+        }
+
+        try
+        {
+            var scaled = color.Scale(BrightnessPercent / 100.0);
+            await ApplyColorToAllowedDevicesAsync(scaled, _cts.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogDebug(ex, "Live color-wheel apply was cancelled (page navigated away or retried).");
         }
     }
 
@@ -319,15 +484,22 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
                 ConnectionStatusText = NotConnectedMessage;
                 Devices.Clear();
                 Profiles.Clear();
+                StartReconnectTimer();
                 return;
             }
 
+            var excludedDeviceNames = _settingsStore.Current.Lighting.ExcludedDeviceNames;
             var devices = await _lightingService.GetDevicesAsync(cancellationToken).ConfigureAwait(true);
             Devices.Clear();
             foreach (var device in devices)
             {
                 Devices.Add(new DeviceRowViewModel(
-                    device, _lightingService, GetSelectedColorForDevices, _loggerFactory.CreateLogger<DeviceRowViewModel>()));
+                    device,
+                    _lightingService,
+                    GetSelectedColorForDevices,
+                    _loggerFactory.CreateLogger<DeviceRowViewModel>(),
+                    isExcluded: excludedDeviceNames.Contains(device.Name),
+                    onExclusionChanged: OnDeviceExclusionChanged));
             }
 
             var profiles = await _lightingService.GetProfilesAsync(cancellationToken).ConfigureAwait(true);
@@ -338,6 +510,7 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
             }
 
             ConnectionStatusText = $"Connected to OpenRGB - {Devices.Count} devices";
+            StopReconnectTimer();
         }
         catch (OperationCanceledException)
         {
@@ -350,6 +523,7 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
             _logger.LogError(ex, "Unexpected failure refreshing the Lighting page.");
             IsConnected = false;
             ConnectionStatusText = NotConnectedMessage;
+            StartReconnectTimer();
         }
         finally
         {
@@ -386,7 +560,55 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
         {
             IsConnected = false;
             ConnectionStatusText = NotConnectedMessage;
+            StartReconnectTimer();
         });
+
+    /// <summary>Starts (if not already running) a timer that retries the connection every
+    /// <see cref="ReconnectInterval"/> while disconnected, so the page recovers on its own once
+    /// OpenRGB is reachable again - see docs/specs/05-lighting.md addendum, "Auto-reconnect".
+    /// Stopped by <see cref="StopReconnectTimer"/> as soon as a connection succeeds again, or by
+    /// <see cref="Dispose"/>.</summary>
+    private void StartReconnectTimer() =>
+        _reconnectTimer ??= new Timer(_ => FireAndForgetReconnectAttempt(), null, ReconnectInterval, ReconnectInterval);
+
+    private void StopReconnectTimer()
+    {
+        _reconnectTimer?.Dispose();
+        _reconnectTimer = null;
+    }
+
+    private void FireAndForgetReconnectAttempt()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _ = _dispatcher.InvokeAsync(async () =>
+        {
+            if (_disposed || IsConnected)
+            {
+                return;
+            }
+
+            try
+            {
+                await OpenRgbCard.LoadAsync(_cts.Token).ConfigureAwait(true);
+                if (OpenRgbCard.IsReady)
+                {
+                    await RefreshAsync().ConfigureAwait(true);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Page navigated away or another refresh started; the next timer tick tries again.
+            }
+            catch (ObjectDisposedException)
+            {
+                // Raced Dispose(); nothing left to reconnect for.
+            }
+        });
+    }
 
     private void OnLightingServiceDevicesChanged(object? sender, EventArgs e) =>
         _dispatcher.InvokeAsync(async () =>
@@ -408,6 +630,7 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
         }
 
         _disposed = true;
+        StopReconnectTimer();
         OpenRgbCard.PropertyChanged -= OnOpenRgbCardPropertyChanged;
         OpenRgbCard.Dispose();
         _lightingService.Disconnected -= OnLightingServiceDisconnected;
