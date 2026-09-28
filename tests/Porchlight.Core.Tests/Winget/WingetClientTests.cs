@@ -83,6 +83,63 @@ public sealed class WingetClientTests
     }
 
     [Fact]
+    public async Task UpgradeAsync_LogsFullCommandLineIncludingSilentFlag()
+    {
+        var runner = new FakeProcessRunner();
+        var client = new WingetClient(runner, NullLogger<WingetClient>.Instance);
+        var log = new CapturingProgress();
+
+        await client.UpgradeAsync("Some.Id", silent: true, log, progress: null, CancellationToken.None);
+
+        Assert.Equal(
+            "> winget upgrade --id Some.Id --exact --include-unknown --accept-package-agreements " +
+            "--accept-source-agreements --disable-interactivity --silent",
+            Assert.Single(log.Lines));
+    }
+
+    [Fact]
+    public async Task UpgradeAsync_NoLog_DoesNotThrow()
+    {
+        var runner = new FakeProcessRunner();
+        var client = new WingetClient(runner, NullLogger<WingetClient>.Instance);
+
+        var result = await client.UpgradeAsync("Some.Id", silent: false, log: null, progress: null, CancellationToken.None);
+
+        Assert.Equal(0, result.ExitCode);
+    }
+
+    [Fact]
+    public async Task UninstallAsync_BuildsExpectedArgumentsAndLogsCommandLine()
+    {
+        var runner = new FakeProcessRunner();
+        var client = new WingetClient(runner, NullLogger<WingetClient>.Instance);
+        var log = new CapturingProgress();
+
+        await client.UninstallAsync("Some.Id", silent: true, log, CancellationToken.None);
+
+        Assert.Equal(
+            ["uninstall", "--id", "Some.Id", "--exact", "--disable-interactivity", "--silent"],
+            runner.RunCalls[0].Arguments);
+        Assert.Equal("> winget uninstall --id Some.Id --exact --disable-interactivity --silent", Assert.Single(log.Lines));
+    }
+
+    [Fact]
+    public async Task InstallAsync_BuildsExpectedArguments()
+    {
+        var runner = new FakeProcessRunner();
+        var client = new WingetClient(runner, NullLogger<WingetClient>.Instance);
+
+        await client.InstallAsync("Some.Id", silent: false, log: null, progress: null, CancellationToken.None);
+
+        Assert.Equal(
+            [
+                "install", "--id", "Some.Id", "--exact", "--source", "winget",
+                "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity",
+            ],
+            runner.RunCalls[0].Arguments);
+    }
+
+    [Fact]
     public async Task GetUpgradesAsync_WingetMissing_ThrowsWingetNotFoundException()
     {
         var runner = new ThrowingProcessRunner(nativeErrorCode: 2); // ERROR_FILE_NOT_FOUND
@@ -127,6 +184,17 @@ public sealed class WingetClientTests
 
         public void StartDetached(string fileName, IReadOnlyList<string> arguments) =>
             throw new NotSupportedException();
+    }
+
+    /// <summary>Synchronous <see cref="IProgress{T}"/> fake - unlike <see cref="Progress{T}"/>,
+    /// invokes <see cref="Report"/> immediately on the calling thread rather than posting through a
+    /// captured <see cref="System.Threading.SynchronizationContext"/>, so a test can assert on
+    /// <see cref="Lines"/> deterministically right after the awaited call returns.</summary>
+    private sealed class CapturingProgress : IProgress<string>
+    {
+        public List<string> Lines { get; } = [];
+
+        public void Report(string value) => Lines.Add(value);
     }
 
     private sealed class ThrowingProcessRunner(int nativeErrorCode) : IProcessRunner

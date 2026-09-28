@@ -64,12 +64,58 @@ public sealed partial class WingetClient : IWingetClient
         return new WingetResult(result.ExitCode, result.StandardOutputLines);
     }
 
+    public async Task<WingetResult> UninstallAsync(
+        string id, bool silent, IProgress<string>? log, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(id);
+
+        List<string> arguments = ["uninstall", "--id", id, "--exact", "--disable-interactivity"];
+        if (silent)
+        {
+            arguments.Add("--silent");
+        }
+
+        var result = await RunAsync(arguments, log, onProgress: null, cancellationToken).ConfigureAwait(false);
+        return new WingetResult(result.ExitCode, result.StandardOutputLines);
+    }
+
+    public async Task<WingetResult> InstallAsync(
+        string id, bool silent, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(id);
+
+        List<string> arguments =
+        [
+            "install",
+            "--id", id,
+            "--exact",
+            "--source", "winget",
+            "--accept-package-agreements",
+            "--accept-source-agreements",
+            "--disable-interactivity",
+        ];
+        if (silent)
+        {
+            arguments.Add("--silent");
+        }
+
+        var result = await RunAsync(arguments, log, progress, cancellationToken).ConfigureAwait(false);
+        return new WingetResult(result.ExitCode, result.StandardOutputLines);
+    }
+
     private async Task<ProcessRunResult> RunAsync(
         IReadOnlyList<string> arguments,
         IProgress<string>? onLine,
         IProgress<string>? onProgress,
         CancellationToken cancellationToken)
     {
+        // Logs the exact command line (every argument, not just --id) before running it - a
+        // maintainer diagnosing a real failure needs to see --silent/--include-unknown/etc. exactly
+        // as passed, not a hand-written approximation. No secrets ever appear here (package ids and
+        // winget's own fixed flags only). Only reported when the caller actually wants a log (a
+        // plain listing check passes onLine: null and has no per-run log entry of its own).
+        onLine?.Report("> " + Executable + " " + string.Join(' ', arguments));
+
         try
         {
             return await _processRunner.RunAsync(Executable, arguments, onLine, onProgress, cancellationToken)
