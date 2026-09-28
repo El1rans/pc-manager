@@ -10,6 +10,7 @@ using Porchlight.App.Features.RemoteSupport;
 using Porchlight.App.Shell;
 using Porchlight.Core.Components;
 using Porchlight.Core.Lighting;
+using Porchlight.Core.Lighting.Effects;
 using Porchlight.Core.Settings;
 
 namespace Porchlight.App.Features.Lighting;
@@ -45,6 +46,7 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
     private readonly ILightingConflictDetector _conflictDetector;
     private readonly IUrlLauncher _urlLauncher;
     private readonly ISettingsStore _settingsStore;
+    private readonly EffectEngine _effectEngine;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<LightingViewModel> _logger;
     private readonly Dispatcher _dispatcher;
@@ -89,18 +91,33 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
     [NotifyCanExecuteChangedFor(nameof(LoadProfileCommand))]
     private bool _isBusy;
 
+    /// <summary>Global "Pause effects" toggle (see docs/specs/11-led-effects.md) - session-only,
+    /// like <see cref="_conflictsDismissed"/>; effects resume running (if any are assigned) the next
+    /// time Porchlight starts.</summary>
+    [ObservableProperty]
+    private bool _effectsPaused;
+
+    /// <summary>Global "Updates alert overlay" toggle - composed onto every device's assigned
+    /// effect via <see cref="EffectRegistry.CreateWithOverlay"/> (see docs/specs/11-led-effects.md);
+    /// initialized from whatever was persisted on any one device's assignment, since today it is
+    /// applied to all of them together rather than per device.</summary>
+    [ObservableProperty]
+    private bool _updatesAlertOverlayEnabled;
+
     public LightingViewModel(
         IComponentCardViewModelFactory componentCardFactory,
         ILightingService lightingService,
         ILightingConflictDetector conflictDetector,
         IUrlLauncher urlLauncher,
         ISettingsStore settingsStore,
+        EffectEngine effectEngine,
         ILoggerFactory loggerFactory)
     {
         _lightingService = lightingService;
         _conflictDetector = conflictDetector;
         _urlLauncher = urlLauncher;
         _settingsStore = settingsStore;
+        _effectEngine = effectEngine;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<LightingViewModel>();
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
@@ -143,6 +160,10 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
     public ObservableCollection<LightingConflictWarning> Conflicts { get; } = [];
 
     public bool ShowConflicts => !_conflictsDismissed && Conflicts.Count > 0;
+
+    public string PauseEffectsButtonLabel => EffectsPaused ? "Resume effects" : "Pause effects";
+
+    partial void OnEffectsPausedChanged(bool value) => OnPropertyChanged(nameof(PauseEffectsButtonLabel));
 
     public override async Task OnNavigatedToAsync(CancellationToken cancellationToken)
     {
@@ -311,6 +332,58 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
                 names.Remove(device.Name);
             }
         });
+
+    /// <summary>Global "Pause effects" button: stops the engine (restoring every running device's
+    /// mode) without touching the persisted assignments, so resuming picks the same effects back up
+    /// - see docs/specs/11-led-effects.md.</summary>
+    [RelayCommand]
+    private void ToggleEffectsPaused()
+    {
+        EffectsPaused = !EffectsPaused;
+        if (EffectsPaused)
+        {
+            _effectEngine.Stop();
+        }
+        else
+        {
+            SyncEffectEngine(persist: false);
+        }
+    }
+
+    partial void OnUpdatesAlertOverlayEnabledChanged(bool value) => SyncEffectEngine(persist: true);
+
+    /// <summary>Called by a <see cref="DeviceRowViewModel"/> whenever its own effect picker/settings
+    /// change - persists the new set of assignments and restarts the engine so the change takes
+    /// effect immediately (<see cref="EffectEngine.SetAssignments"/> itself only applies on the next
+    /// <see cref="EffectEngine.Start"/>). Selecting "None" removes that device's assignment, which
+    /// stops it being rendered to and restores its previous mode the next time the engine (re)starts
+    /// with the updated list - see docs/specs/11-led-effects.md.</summary>
+    private void OnDeviceEffectChanged(DeviceRowViewModel device) => SyncEffectEngine(persist: true);
+
+    /// <summary>Rebuilds the engine's assignments from every device row's current effect selection,
+    /// optionally persists them, and restarts the engine (stopped, then started again only if
+    /// effects are not paused and at least one device has an effect assigned) so the change is
+    /// live immediately.</summary>
+    private void SyncEffectEngine(bool persist)
+    {
+        var assignments = Devices
+            .Select(d => d.ToEffectAssignment(UpdatesAlertOverlayEnabled))
+            .Where(a => a is not null)
+            .Select(a => a!)
+            .ToList();
+
+        if (persist)
+        {
+            _settingsStore.Update(s => s.Lighting.EffectAssignments = assignments);
+        }
+
+        _effectEngine.SetAssignments(assignments);
+        _effectEngine.Stop();
+        if (!EffectsPaused && assignments.Count > 0)
+        {
+            _effectEngine.Start();
+        }
+    }
 
     /// <summary>Applies a color picked from the "All devices" <c>ColorWheelPicker</c> while it is
     /// being dragged (throttled - <paramref name="isFinal"/> false) or once dragging ends
@@ -489,18 +562,36 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
             }
 
             var excludedDeviceNames = _settingsStore.Current.Lighting.ExcludedDeviceNames;
+            var effectAssignments = _settingsStore.Current.Lighting.EffectAssignments;
             var devices = await _lightingService.GetDevicesAsync(cancellationToken).ConfigureAwait(true);
             Devices.Clear();
             foreach (var device in devices)
             {
-                Devices.Add(new DeviceRowViewModel(
+                var row = new DeviceRowViewModel(
                     device,
                     _lightingService,
                     GetSelectedColorForDevices,
                     _loggerFactory.CreateLogger<DeviceRowViewModel>(),
                     isExcluded: excludedDeviceNames.Contains(device.Name),
-                    onExclusionChanged: OnDeviceExclusionChanged));
+                    onExclusionChanged: OnDeviceExclusionChanged,
+                    onEffectChanged: OnDeviceEffectChanged);
+
+                var assignment = effectAssignments.FirstOrDefault(
+                    a => string.Equals(a.DeviceKey, device.Name, StringComparison.OrdinalIgnoreCase));
+                row.LoadEffectAssignment(assignment);
+                Devices.Add(row);
             }
+
+            if (effectAssignments.Count > 0)
+            {
+                // Setting the property (rather than the backing field) re-syncs the engine via
+                // OnUpdatesAlertOverlayEnabledChanged, which is redundant with the explicit
+                // SyncEffectEngine call just below but harmless - it only re-sends the same,
+                // just-loaded assignments.
+                UpdatesAlertOverlayEnabled = effectAssignments.Any(a => a.ShowUpdatesAlert);
+            }
+
+            SyncEffectEngine(persist: false);
 
             var profiles = await _lightingService.GetProfilesAsync(cancellationToken).ConfigureAwait(true);
             Profiles.Clear();

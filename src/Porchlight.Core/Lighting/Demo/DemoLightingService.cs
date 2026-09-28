@@ -27,6 +27,17 @@ internal sealed class DemoLightingService : ILightingService
             "Direct",
             16,
             [new RgbZone("Main", 16)]),
+        // A matrix-zone device (like the real Logitech G915) so a documentation screenshot of the
+        // LED effects picker can show matrix-only effects (e.g. Pac-Man) being offered.
+        new RgbDevice(
+            1,
+            "Demo Keyboard",
+            RgbDeviceType.Keyboard,
+            "Demo Vendor",
+            FakeModes,
+            "Direct",
+            117,
+            [new RgbZone("Keyboard", 117, IsMatrix: true)]),
     ];
 
     public bool IsConnected => true;
