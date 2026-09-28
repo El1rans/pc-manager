@@ -77,6 +77,27 @@ internal sealed class FakeOpenRgbTcpServer : IDisposable
         }
     }
 
+    /// <summary>Reads (and never answers) requests until the client's RequestProtocolVersion has
+    /// arrived - i.e. until <c>OpenRgbClient.Connect()</c> has provably finished its TCP connect and
+    /// sent its handshake, and is now (or is just about to be) blocked waiting for a reply that
+    /// never comes. An explicit signal for tests to synchronize on instead of sleeping and hoping
+    /// the client got that far. Throws if the client disconnects first.</summary>
+    public async Task ReadUntilHandshakeRequestAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            var header = await ReadHeaderAsync(cancellationToken).ConfigureAwait(false)
+                ?? throw new IOException("The client disconnected before sending its handshake request.");
+
+            await ReadExactAsync((int)header.DataLength, cancellationToken).ConfigureAwait(false);
+
+            if (header.Command == CommandRequestProtocolVersion)
+            {
+                return;
+            }
+        }
+    }
+
     /// <summary>Stops answering and closes the accepted socket in an orderly way (shutdown, then
     /// close) - simulates the user closing OpenRGB or stopping its SDK server.</summary>
     public void CloseClientConnectionGracefully()
