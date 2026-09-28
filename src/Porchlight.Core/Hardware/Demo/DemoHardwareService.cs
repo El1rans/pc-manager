@@ -20,7 +20,7 @@ internal sealed class DemoHardwareService : IHardwareService
 {
     private readonly DemoFanController _cpuFan = new("demo-cpu-fan", "CPU fan", 42, "demo-cpu-fan-rpm");
     private readonly DemoFanController _caseFan1 = new("demo-case-fan-1", "Case fan 1", 55, "demo-case-fan-1-rpm");
-    private readonly DemoFanController _gpuFan = new("demo-gpu-fan", "GPU fan 1", 38, "demo-gpu-fan-rpm");
+    private readonly DemoFanController _gpuFan = new("demo-gpu-fan", "GPU fan 1", 38, "demo-gpu-fan-rpm", HardwareNodeType.Gpu);
 
     public event EventHandler<HardwareSnapshot>? SnapshotUpdated;
 
