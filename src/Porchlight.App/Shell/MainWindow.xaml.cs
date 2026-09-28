@@ -10,6 +10,10 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = viewModel;
 
+        // See WhiteFlashGuard: without this, the freshly shown window can paint solid white until
+        // the user clicks it.
+        WhiteFlashGuard.Attach(this);
+
         // First navigation happens once the window has loaded, not during DI construction.
         Loaded += async (_, _) => await viewModel.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
         Closing += OnClosing;
