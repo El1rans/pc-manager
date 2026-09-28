@@ -24,6 +24,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   fans on exit or via "Restore BIOS control", a user changing a fan's mode or target duty, a
   detected conflict) are now logged at Information level; previously only failures were logged.
 
+- Lighting: an HSV color wheel picker (`Porchlight.App.Controls.ColorWheelPicker`) replaces the
+  plain hex box for both "Apply to all" and per-device color (a popup next to each device row) -
+  drag or click the hue/saturation wheel, a value (brightness-of-the-hue) slider, a live preview
+  swatch, and a hex/RGB box kept in sync both ways. The wheel is rendered once per pixel size into
+  a cached `WriteableBitmap`, not per-pixel UI elements. Keyboard accessible (arrow keys adjust
+  hue/saturation, visible focus ring, `AutomationProperties` names). Dragging pushes color to
+  OpenRGB throttled to ~20/s (`Porchlight.Core.Lighting.ColorApplyRateLimiter`), always sending the
+  final value on release. Favorite colors (up to 8, persisted) still work unchanged. Color math
+  (HSV<->RGB, wheel-point<->hue/saturation) lives in testable `HsvColor`/`ColorWheelMath`.
+  (`docs/specs/05-lighting.md` addendum.)
+- Lighting: a dismissible (per app session) warning panel on the Lighting page detects other
+  software that can also claim an RGB device's lighting - Windows Dynamic Lighting (with a specific
+  message when its brightness is 0%) and vendor RGB apps (Logitech G HUB, Razer Synapse, Corsair
+  iCUE, SteelSeries GG, ASUS Armoury Crate/Aura, MSI Mystic Light/Center, Gigabyte RGB Fusion,
+  SignalRGB, NZXT CAM, HyperX NGenuity) - with plain-words advice and, for Windows Dynamic Lighting,
+  a button that opens `ms-settings:personalization-lighting`. Purely informational: nothing is
+  changed or stopped. New `ILightingConflictDetector`/`LightingConflictDetector` in Core.
+  (`docs/specs/05-lighting.md` addendum.)
+- Lighting: a per-device "Don't control this device" toggle (persisted) excludes a device from
+  "Apply to all"/"Turn off all" - e.g. to leave a keyboard to its vendor's own software - without
+  affecting devices that aren't excluded (a fast-path bulk call is still used when nothing is
+  excluded). (`docs/specs/05-lighting.md` addendum.)
+- Lighting: the page now auto-reconnects to OpenRGB (retrying every 10s) after a disconnect,
+  instead of requiring the user to click Retry once OpenRGB is reachable again.
+  (`docs/specs/05-lighting.md` addendum.)
 - Hardware: redesigned the Sensors tab for readability (`docs/specs/10-readable-sensors.md`) - an
   "At a glance" summary strip (CPU/GPU temperature, CPU package power, hottest fan) above one card
   per device (CPU, GPU, motherboard, memory, storage, network; CPU/GPU expanded by default), each
@@ -73,6 +98,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     installed alongside an already-current machine-wide one), so it's now remembered as "already
     updated" and hidden (still visible via "Show ignored") until a newer version appears. The Notes
     column for any unknown-version row now warns "updating may install a second copy".
+- Lighting: fixed OpenRGB reliably exiting 5-10 seconds after Porchlight auto-started it
+  (`--server --startminimized`), even though the identical command run manually from a shell
+  stayed up indefinitely. `ProcessRunner.StartDetached` now launches through the shell
+  (`UseShellExecute = true`, no stdio redirection, the returned `Process` never disposed/killed)
+  instead of as Porchlight's own direct child - the standard fix for a "must outlive the launcher"
+  detached process start on Windows. (`docs/specs/05-lighting.md` addendum, "OpenRGB auto-start
+  reliability".)
 
 ### Verified
 

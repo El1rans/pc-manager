@@ -36,6 +36,41 @@
                        Margin="0,0,0,12"
                        Visibility="{Binding LastActionMessage, Converter={StaticResource StringToVis}}"/>
 
+            <!-- Lighting conflict warning: other software that can also claim a device's RGB -
+                 shown regardless of OpenRGB's own connection state (see docs/specs/05-lighting.md
+                 addendum). Dismissible for this app session only. -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,16"
+                    BorderBrush="{DynamicResource SystemFillColorCautionBrush}"
+                    Visibility="{Binding ShowConflicts, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" Style="{StaticResource Icon}" FontSize="18"
+                                   Foreground="{DynamicResource SystemFillColorCautionBrush}" Margin="0,0,10,0" VerticalAlignment="Top"/>
+                        <TextBlock DockPanel.Dock="Right" Text="Dismiss" Style="{StaticResource Secondary}"
+                                   Cursor="Hand" VerticalAlignment="Top">
+                            <TextBlock.InputBindings>
+                                <MouseBinding MouseAction="LeftClick" Command="{Binding DismissConflictsCommand}"/>
+                            </TextBlock.InputBindings>
+                        </TextBlock>
+                        <TextBlock Text="Other software may also control this lighting" Style="{StaticResource CardTitle}" Margin="0"/>
+                    </DockPanel>
+
+                    <ItemsControl ItemsSource="{Binding Conflicts}" Margin="0,8,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="0,6,0,6">
+                                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap"/>
+                                    <Button Content="{Binding ActionLabel}" HorizontalAlignment="Left" Margin="0,6,0,0"
+                                            Command="{Binding DataContext.OpenConflictActionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}"
+                                            Visibility="{Binding ActionUri, Converter={StaticResource StringToVis}}"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
             <!-- Setup card: shown until the openrgb component is installed and running. -->
             <StackPanel Visibility="{Binding ShowSetup, Converter={StaticResource BoolToVis}}">
                 <controls:ComponentCard DataContext="{Binding OpenRgbCard}" Margin="0,0,0,16"/>
@@ -74,18 +109,8 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <Grid Margin="0,8,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Border Grid.Column="0" Width="32" Height="32" Margin="0,0,10,0"
-                                    Background="{Binding SelectedColorHex, Converter={StaticResource HexToBrush}}"
-                                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"/>
-                            <TextBox Grid.Column="1" Text="{Binding SelectedColorHex, UpdateSourceTrigger=PropertyChanged}"
-                                     VerticalAlignment="Center" MaxLength="7"
-                                     AutomationProperties.Name="Color (hex)"/>
-                        </Grid>
+                        <controls:ColorWheelPicker x:Name="AllDevicesColorPicker" Margin="0,8,0,0"
+                                                    SelectedColorHex="{Binding SelectedColorHex, Mode=TwoWay}"/>
 
                         <DockPanel Margin="0,10,0,0">
                             <TextBlock DockPanel.Dock="Left" Text="Brightness" Style="{StaticResource Secondary}" Margin="0,0,10,0" VerticalAlignment="Center"/>
@@ -147,16 +172,28 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="160"/>
                                             <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="{Binding Glyph}" Style="{StaticResource Icon}"
                                                    FontSize="18" Margin="0,0,10,0"/>
                                         <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
-                                                   TextTrimming="CharacterEllipsis"/>
+                                                   TextTrimming="CharacterEllipsis">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsExcluded}" Value="True">
+                                                            <Setter Property="Opacity" Value="0.5"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                         <ComboBox Grid.Column="2" ItemsSource="{Binding Modes}"
                                                   SelectedItem="{Binding SelectedMode, Mode=TwoWay}"
-                                                  Margin="8,0"
+                                                  Margin="8,0" IsEnabled="{Binding IsExcluded, Converter={StaticResource InverseBool}}"
                                                   AutomationProperties.Name="{Binding Name, StringFormat='Mode for {0}'}"/>
-                                        <Button Grid.Column="3" Width="26" Height="26" Padding="0"
+                                        <Button Grid.Column="3" Width="26" Height="26" Padding="0" Margin="0,0,6,0"
                                                 Command="{Binding SetColorCommand}"
                                                 ToolTip="Set this device to the color above"
                                                 AutomationProperties.Name="{Binding Name, StringFormat='Set {0} to selected color'}"
@@ -164,6 +201,32 @@
                                                     RelativeSource={RelativeSource AncestorType=lighting:LightingView},
                                                     Converter={StaticResource HexToBrush}}"
                                                 BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"/>
+
+                                        <ToggleButton Grid.Column="4" Content="&#xE790;" Width="26" Height="26" Padding="0"
+                                                      FontFamily="{StaticResource IconFont}"
+                                                      IsChecked="{Binding IsPickerOpen, Mode=TwoWay}"
+                                                      ToolTip="Choose a color for this device"
+                                                      AutomationProperties.Name="{Binding Name, StringFormat='Choose a color for {0}'}"
+                                                      Margin="0,0,6,0"/>
+
+                                        <Popup PlacementTarget="{Binding RelativeSource={RelativeSource Self}}"
+                                               IsOpen="{Binding IsPickerOpen, Mode=TwoWay}" StaysOpen="False"
+                                               Placement="Bottom" AllowsTransparency="True">
+                                            <Border Style="{StaticResource Card}" Margin="4">
+                                                <StackPanel>
+                                                    <controls:ColorWheelPicker Loaded="DeviceColorPicker_Loaded"
+                                                                                SelectedColorHex="{Binding PickerColorHex, Mode=TwoWay}"/>
+                                                    <Button Content="Close" HorizontalAlignment="Right" Margin="0,10,0,0"
+                                                            Command="{Binding TogglePickerCommand}"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </Popup>
+
+                                        <CheckBox Grid.Column="5" Content="Don't control"
+                                                  IsChecked="{Binding IsExcluded, Mode=TwoWay}"
+                                                  VerticalAlignment="Center" Margin="6,0,0,0"
+                                                  ToolTip="Leave this device to its own vendor software (e.g. G HUB) instead of Porchlight/OpenRGB"
+                                                  AutomationProperties.Name="{Binding Name, StringFormat='Do not control {0} from Porchlight'}"/>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

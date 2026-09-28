@@ -129,6 +129,37 @@ public sealed class ProcessRunnerTests
             TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public void BuildDetachedStartInfo_UsesShellExecuteAndNoRedirection()
+    {
+        // Regression for a real bug: an earlier version used UseShellExecute=false plus
+        // `using var process = Process.Start(...)`, and OpenRGB (started with
+        // "--server --startminimized" - see ComponentCatalog) reliably exited 5-10 seconds after
+        // launch, while running the identical command manually from a shell stayed up
+        // indefinitely. Launching through the shell removes Porchlight as the child's direct
+        // process creator/owner (it is never added to any job Porchlight belongs to, and there are
+        // no stdio pipes to it that could be closed out from under it) - see docs/specs/05-lighting
+        // .md addendum, "OpenRGB auto-start reliability".
+        var startInfo = ProcessRunner.BuildDetachedStartInfo("openrgb.exe", ["--server", "--startminimized"]);
+
+        Assert.True(startInfo.UseShellExecute);
+        Assert.False(startInfo.RedirectStandardOutput);
+        Assert.False(startInfo.RedirectStandardError);
+        Assert.False(startInfo.RedirectStandardInput);
+        Assert.Equal(["--server", "--startminimized"], startInfo.ArgumentList);
+        Assert.Equal("openrgb.exe", startInfo.FileName);
+    }
+
+    // Deliberately no live-process end-to-end test for StartDetached here (e.g. "spawn cmd.exe and
+    // check it's still alive after N seconds"): many CI/build-agent runners (and this repo's own
+    // sandboxed dev environment) wrap the whole `dotnet test` process tree in a job object that
+    // kills descendants when the job closes - the exact class of bug BuildDetachedStartInfo_*
+    // above guards against for OpenRGB, but *environment-imposed* rather than something
+    // ProcessRunner does. UseShellExecute=true reliably escapes a normal desktop session's job
+    // (verified manually - see docs/specs/05-lighting.md addendum, "OpenRGB auto-start
+    // reliability"), but not a test host that never had a desktop shell to hand off to, so such a
+    // test would be flaky here and in CI for reasons unrelated to whether the fix is correct.
+
     private const string PidsPrefix = "PIDS ";
 
     // Generous: PowerShell can take several seconds to start on a heavily loaded machine. These

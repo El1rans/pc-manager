@@ -96,10 +96,43 @@ public sealed partial class ProcessRunner : IProcessRunner
         ArgumentException.ThrowIfNullOrEmpty(fileName);
         ArgumentNullException.ThrowIfNull(arguments);
 
+        var startInfo = BuildDetachedStartInfo(fileName, arguments);
+
+        // Deliberately not disposed and not captured in a `using`: this is a fire-and-forget
+        // launch of a process meant to keep running long after this call returns (e.g. OpenRGB's
+        // SDK server - see IProcessRunner.StartDetached's doc comment). Process.Dispose() itself
+        // does not kill the child on .NET, but there is no reason to hold or release a handle to a
+        // process this class has no further business with - see the regression this guards
+        // against: docs/specs/05-lighting.md addendum, "OpenRGB auto-start reliability".
+        Process.Start(startInfo);
+    }
+
+    /// <summary>
+    /// Builds the <see cref="ProcessStartInfo"/> for a truly detached, independent launch:
+    /// <see cref="ProcessStartInfo.UseShellExecute"/> true (so the OS shell, not Porchlight, is the
+    /// process' creator - it is never added to any job object Porchlight's own process belongs to,
+    /// so it cannot be torn down if that job is ever closed) and no stdio redirection at all (a
+    /// redirected pipe closing - e.g. if a wrapper ever disposed the returned <see cref="Process"/>
+    /// - can itself make some apps exit; see the regression this fixes below). Internal so a test
+    /// can assert these without actually spawning a process.
+    /// </summary>
+    /// <remarks>
+    /// Regression: an earlier version used <c>UseShellExecute = false</c> with
+    /// <c>using var process = Process.Start(startInfo);</c>. On the maintainer's PC, OpenRGB
+    /// (started this way with <c>--server --startminimized</c>) reliably exited 5-10 seconds after
+    /// launch, while the identical command run manually from a shell stayed up indefinitely -
+    /// i.e. something about *how* Porchlight launched it, not the command itself, ended it early.
+    /// Launching through the shell instead removes Porchlight as the direct process creator/owner
+    /// entirely, which is the standard fix for "fire-and-forget, must outlive the launcher" process
+    /// starts on Windows.
+    /// </remarks>
+    internal static ProcessStartInfo BuildDetachedStartInfo(string fileName, IReadOnlyList<string> arguments)
+    {
         var startInfo = new ProcessStartInfo(fileName)
         {
-            UseShellExecute = false,
+            UseShellExecute = true,
             CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Minimized,
         };
 
         foreach (var argument in arguments)
@@ -107,7 +140,7 @@ public sealed partial class ProcessRunner : IProcessRunner
             startInfo.ArgumentList.Add(argument);
         }
 
-        using var process = Process.Start(startInfo);
+        return startInfo;
     }
 
     /// <summary>Reads a stream to completion, feeding every chunk to <paramref name="reader"/>

@@ -11,4 +11,6 @@ internal sealed class FakeRegistryReader : IRegistryReader
     public bool ServiceExists(string serviceName) => false;
 
     public IReadOnlyList<string> GetInstallerHandledComponentIds() => InstallerHandledComponentIds;
+
+    public int? GetCurrentUserDwordValue(string subKey, string valueName) => null;
 }

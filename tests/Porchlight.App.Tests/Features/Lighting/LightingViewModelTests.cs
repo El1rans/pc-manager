@@ -1,13 +1,22 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Porchlight.App.Controls;
+using Porchlight.App.Tests.Features.RemoteSupport;
 using Porchlight.App.Tests.Features.Setup;
+using Porchlight.Core.Components;
+using Porchlight.Core.Lighting;
 using Xunit;
 
 namespace Porchlight.App.Tests.Features.Lighting;
 
 public sealed class LightingViewModelTests
 {
-    private static (Porchlight.App.Features.Lighting.LightingViewModel ViewModel, FakeSettingsStore Settings) CreateViewModel(
+    private static (
+        Porchlight.App.Features.Lighting.LightingViewModel ViewModel,
+        FakeSettingsStore Settings,
+        FakeLightingService LightingService,
+        FakeLightingConflictDetector ConflictDetector,
+        FakeUrlLauncher UrlLauncher,
+        FakeComponentService ComponentService) CreateViewModelWithDependencies(
         IEnumerable<string>? seedFavorites = null)
     {
         var settings = new FakeSettingsStore();
@@ -19,10 +28,19 @@ public sealed class LightingViewModelTests
         var componentService = new FakeComponentService();
         var factory = new ComponentCardViewModelFactory(componentService, NullLoggerFactory.Instance);
         var lightingService = new FakeLightingService();
+        var conflictDetector = new FakeLightingConflictDetector();
+        var urlLauncher = new FakeUrlLauncher();
 
         var viewModel = new Porchlight.App.Features.Lighting.LightingViewModel(
-            factory, lightingService, settings, NullLoggerFactory.Instance);
+            factory, lightingService, conflictDetector, urlLauncher, settings, NullLoggerFactory.Instance);
 
+        return (viewModel, settings, lightingService, conflictDetector, urlLauncher, componentService);
+    }
+
+    private static (Porchlight.App.Features.Lighting.LightingViewModel ViewModel, FakeSettingsStore Settings) CreateViewModel(
+        IEnumerable<string>? seedFavorites = null)
+    {
+        var (viewModel, settings, _, _, _, _) = CreateViewModelWithDependencies(seedFavorites);
         return (viewModel, settings);
     }
 
@@ -125,5 +143,101 @@ public sealed class LightingViewModelTests
         var exception = Record.Exception(viewModel.Dispose);
 
         Assert.Null(exception);
+    }
+
+    [Fact]
+    public async Task OnNavigatedToAsync_ConflictsDetected_PopulatesConflictsAndShowsPanel()
+    {
+        var (viewModel, _, _, conflictDetector, _, _) = CreateViewModelWithDependencies();
+        conflictDetector.Warnings = [new LightingConflictWarning("windows-dynamic-lighting", "Windows Dynamic Lighting", "message")];
+
+        await viewModel.OnNavigatedToAsync(TestContext.Current.CancellationToken);
+
+        Assert.Single(viewModel.Conflicts);
+        Assert.True(viewModel.ShowConflicts);
+    }
+
+    [Fact]
+    public async Task OnNavigatedToAsync_NoConflicts_PanelHidden()
+    {
+        var (viewModel, _, _, _, _, _) = CreateViewModelWithDependencies();
+
+        await viewModel.OnNavigatedToAsync(TestContext.Current.CancellationToken);
+
+        Assert.Empty(viewModel.Conflicts);
+        Assert.False(viewModel.ShowConflicts);
+    }
+
+    [Fact]
+    public async Task DismissConflicts_HidesPanelWithoutClearingTheList()
+    {
+        var (viewModel, _, _, conflictDetector, _, _) = CreateViewModelWithDependencies();
+        conflictDetector.Warnings = [new LightingConflictWarning("vendor-lghub", "Logitech G HUB", "message")];
+        await viewModel.OnNavigatedToAsync(TestContext.Current.CancellationToken);
+
+        viewModel.DismissConflictsCommand.Execute(null);
+
+        Assert.False(viewModel.ShowConflicts);
+        Assert.Single(viewModel.Conflicts);
+    }
+
+    [Fact]
+    public void OpenConflictAction_WarningHasActionUri_OpensItThroughUrlLauncher()
+    {
+        var (viewModel, _, _, _, urlLauncher, _) = CreateViewModelWithDependencies();
+        var warning = new LightingConflictWarning(
+            "windows-dynamic-lighting", "Windows Dynamic Lighting", "message", "ms-settings:personalization-lighting");
+
+        viewModel.OpenConflictActionCommand.Execute(warning);
+
+        Assert.Equal(["ms-settings:personalization-lighting"], urlLauncher.OpenedUrls);
+    }
+
+    [Fact]
+    public void OpenConflictAction_WarningHasNoActionUri_DoesNotThrowOrOpenAnything()
+    {
+        var (viewModel, _, _, _, urlLauncher, _) = CreateViewModelWithDependencies();
+        var warning = new LightingConflictWarning("vendor-icue", "Corsair iCUE", "message");
+
+        var exception = Record.Exception(() => viewModel.OpenConflictActionCommand.Execute(warning));
+
+        Assert.Null(exception);
+        Assert.Empty(urlLauncher.OpenedUrls);
+    }
+
+    [Fact]
+    public async Task RefreshAfterConnect_DeviceExcludedFromSettings_DeviceRowStartsExcluded()
+    {
+        var (viewModel, settings, lightingService, _, _, componentService) = CreateViewModelWithDependencies();
+        settings.Current.Lighting.ExcludedDeviceNames = ["Keyboard"];
+        componentService.SetStatus(ComponentIds.OpenRgb, new ComponentStatus(ComponentState.Running));
+        lightingService.ConnectResult = true;
+        lightingService.Devices = [new RgbDevice(0, "Keyboard", RgbDeviceType.Keyboard, "Vendor", [], "Direct", 1, [])];
+
+        await viewModel.OnNavigatedToAsync(TestContext.Current.CancellationToken);
+
+        var device = Assert.Single(viewModel.Devices);
+        Assert.True(device.IsExcluded);
+    }
+
+    [Fact]
+    public async Task ToggleDeviceExclusion_PersistsToSettings()
+    {
+        var (viewModel, settings, lightingService, _, _, componentService) = CreateViewModelWithDependencies();
+        componentService.SetStatus(ComponentIds.OpenRgb, new ComponentStatus(ComponentState.Running));
+        lightingService.ConnectResult = true;
+        lightingService.Devices = [new RgbDevice(0, "Keyboard", RgbDeviceType.Keyboard, "Vendor", [], "Direct", 1, [])];
+        await viewModel.OnNavigatedToAsync(TestContext.Current.CancellationToken);
+        var device = Assert.Single(viewModel.Devices);
+        var updateCallsBefore = settings.UpdateCallCount;
+
+        device.IsExcluded = true;
+
+        Assert.Contains("Keyboard", settings.Current.Lighting.ExcludedDeviceNames);
+        Assert.True(settings.UpdateCallCount > updateCallsBefore);
+
+        device.IsExcluded = false;
+
+        Assert.DoesNotContain("Keyboard", settings.Current.Lighting.ExcludedDeviceNames);
     }
 }

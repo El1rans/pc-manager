@@ -15,6 +15,10 @@ internal sealed class FakeLightingService : ILightingService
 
     public IReadOnlyList<string> Profiles { get; set; } = [];
 
+    public int SetDeviceColorCallCount { get; private set; }
+
+    public int SetAllColorCallCount { get; private set; }
+
     public event EventHandler? Disconnected;
 
     public event EventHandler? DevicesChanged;
@@ -32,11 +36,17 @@ internal sealed class FakeLightingService : ILightingService
     public Task<IReadOnlyList<RgbDevice>> GetDevicesAsync(CancellationToken cancellationToken) =>
         Task.FromResult(Devices);
 
-    public Task<bool> SetDeviceColorAsync(int deviceIndex, RgbColor color, CancellationToken cancellationToken) =>
-        Task.FromResult(true);
+    public Task<bool> SetDeviceColorAsync(int deviceIndex, RgbColor color, CancellationToken cancellationToken)
+    {
+        SetDeviceColorCallCount++;
+        return Task.FromResult(true);
+    }
 
-    public Task<LightingApplyResult> SetAllColorAsync(RgbColor color, CancellationToken cancellationToken) =>
-        Task.FromResult(new LightingApplyResult(Devices.Count, 0));
+    public Task<LightingApplyResult> SetAllColorAsync(RgbColor color, CancellationToken cancellationToken)
+    {
+        SetAllColorCallCount++;
+        return Task.FromResult(new LightingApplyResult(Devices.Count, 0));
+    }
 
     public Task<bool> SetModeAsync(int deviceIndex, string modeName, CancellationToken cancellationToken) =>
         Task.FromResult(true);
