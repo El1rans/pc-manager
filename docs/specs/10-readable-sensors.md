@@ -39,3 +39,40 @@ Unit formatter for every SensorType; section ordering/grouping; "hide unused" ru
 - [ ] Columns align across every card; all values have correct units.
 - [ ] Unused sensors hidden by default, toggle to show them.
 - [ ] The 100 % current-load observation is verified (bug fixed or explained).
+
+## Addendum: collapsed-card stats (maintainer request, 2026-09-28)
+
+A collapsed device card (Motherboard, Memory, Storage, Network, and anything else collapsed by
+default) shows only the device name until expanded - the maintainer asked for a couple of live
+numbers next to the name so a glance at the collapsed list is useful without expanding every card.
+
+- When a card is **collapsed**, its header shows the device's 2 most useful live stats next to its
+  name, right-aligned before the expand chevron, e.g.
+  `AMD Ryzen 7 5800X3D      69.8 °C · 22 %`. Values are formatted with `SensorFormatter`, joined
+  with " · ", secondary foreground, single line (`TextTrimming="CharacterEllipsis"`, no wrap) so it
+  still works at 900x600.
+- When a card is **expanded**, the stats are hidden - the same values are visible in the sensor
+  rows below, so showing both would be redundant.
+- The pair is picked per hardware type by `HardwareCardStatsSelector` (`Porchlight.Core.Hardware`),
+  a pure function next to `HardwareSummarySelector`, reusing its CPU/GPU temperature pickers so the
+  summary strip and a collapsed CPU/GPU card never disagree about which sensor is "the"
+  temperature:
+  - **CPU**: main temperature (`HardwareSummarySelector.SelectCpuTemperature`) + "CPU Total" load.
+  - **GPU**: GPU core temperature (`SelectGpuTemperature`) + GPU core load.
+  - **Memory**: memory load % + "Memory Used" (Data, GB).
+  - **Storage**: temperature + "Used Space" (Load, %) - not the separate "Used Space" Data (GB)
+    sensor some storage devices also report.
+  - **Motherboard/SuperIO**: hottest valid temperature (never an inverted one) + fastest fan RPM
+    (ignoring 0 RPM unconnected headers, same rule as `SelectHottestFan`).
+  - **Network**: download + upload throughput, matched by sensor name where possible, falling back
+    to the first two distinct Throughput sensors.
+  - **Other/fallback**: first temperature + first load.
+  - If a type has fewer than 2 usable readings, the card shows what exists; with none, it shows
+    nothing (no empty separator, no placeholder).
+- Recomputed every snapshot tick alongside the rest of the card (`HardwareCardViewModel.UpdateFrom`),
+  so the stats update live like every other sensor value.
+- Accessible: `AutomationProperties.Name` on the header includes the stats while collapsed (e.g.
+  "AMD Ryzen 7 5800X3D, 69.8 °C, 22 %"), and falls back to just the device name once expanded or
+  when there is nothing to show. No status is conveyed by color alone here - the collapsed stats
+  are plain secondary text, not colored by severity (the summary strip above already owns
+  caution/critical coloring for the same readings).
