@@ -16,6 +16,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly ISetupLauncher _setupLauncher;
     private readonly ILogger<MainViewModel> _logger;
     private CancellationTokenSource _navigationCts = new();
+    private bool _disposed;
     private Task _currentNavigation = Task.CompletedTask;
 
     [ObservableProperty]
@@ -130,8 +131,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>Idempotent, so a second call never cancels an already-disposed
+    /// <see cref="CancellationTokenSource"/> (which throws).</summary>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _navigationCts.Cancel();
         _navigationCts.Dispose();
     }

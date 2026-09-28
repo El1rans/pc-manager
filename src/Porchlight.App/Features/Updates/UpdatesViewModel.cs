@@ -43,6 +43,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     private readonly Lock _initialCheckLock = new();
 
     private CancellationTokenSource _refreshCts = new();
+    private bool _disposed;
     private Task? _initialCheckTask;
 
     [ObservableProperty]
@@ -724,8 +725,17 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     [LoggerMessage(Level = LogLevel.Information, Message = "{Line}")]
     private partial void LogAppendedLine(string line);
 
+    /// <summary>Idempotent: page view models are disposed twice on host shutdown (see
+    /// <see cref="Shell.PageServiceCollectionExtensions.AddPage{TViewModel, TView}"/>), and a second
+    /// <see cref="CancellationTokenSource.Cancel()"/> on a disposed source would throw.</summary>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _logFlushTimer.Stop();
         Packages.CollectionChanged -= OnPackagesCollectionChanged;
         foreach (var row in Packages)

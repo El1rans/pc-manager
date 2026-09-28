@@ -22,6 +22,7 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
     private readonly ILogger<HardwareViewModel> _logger;
     private readonly Dispatcher _dispatcher;
     private bool _loadingToggle;
+    private bool _disposed;
 
     [ObservableProperty]
     private HardwareStatus _status = HardwareStatus.NotElevated;
@@ -369,10 +370,20 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
         }
     }
 
+    /// <summary>Idempotent: page view models are disposed twice on host shutdown (see
+    /// <see cref="Shell.PageServiceCollectionExtensions.AddPage{TViewModel, TView}"/>). Disposes
+    /// <see cref="PawnIoCard"/>, which this view model created and so owns.</summary>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _hardwareService.SnapshotUpdated -= OnSnapshotUpdated;
         _fanControlManager.StatusChanged -= OnFanControlStatusChanged;
         PawnIoCard.PropertyChanged -= OnPawnIoCardPropertyChanged;
+        PawnIoCard.Dispose();
     }
 }

@@ -111,6 +111,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Closing the app logged "Error while shutting down the host" (an `ObjectDisposedException`) on
+  every exit. Every page view model is registered with the DI container twice (as itself and,
+  through a forwarding factory, as `IPage`), so the container disposes it twice on shutdown; the
+  "Get help" page's second `Dispose` then disposed its AnyDesk `ComponentCardViewModel` again, which
+  cancelled an already-disposed `CancellationTokenSource`. `Dispose` on `ComponentCardViewModel`,
+  every page view model (Dashboard, Updates, Hardware, Lighting, Get help) and `MainViewModel` is
+  now idempotent, and the Hardware page now disposes the PawnIO card it creates (it previously never
+  did). Shutdown also no longer stops at the first failing page, so later pages are disposed too.
+
 - The main window (and the first-run "Choose what to set up" dialog) could paint its content area
   solid white for a moment after appearing, until the user clicked it - a known WPF Fluent-theme
   rendering gap: Desktop Window Manager (DWM) starts compositing a window's surface as soon as it

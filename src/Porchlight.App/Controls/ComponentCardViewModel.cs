@@ -19,6 +19,7 @@ public sealed partial class ComponentCardViewModel : ObservableObject, IDisposab
     private readonly ILogger<ComponentCardViewModel> _logger;
     private readonly Dispatcher _dispatcher;
     private CancellationTokenSource _operationCts = new();
+    private bool _disposed;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PrimaryActionCommand))]
@@ -199,8 +200,18 @@ public sealed partial class ComponentCardViewModel : ObservableObject, IDisposab
         OnPropertyChanged(nameof(StatusText));
     }
 
+    /// <summary>Idempotent: whoever created this card via <see cref="IComponentCardViewModelFactory"/>
+    /// owns disposing it, but a second call (e.g. the owning page view model itself being disposed
+    /// twice) must be a no-op rather than cancelling an already-disposed
+    /// <see cref="CancellationTokenSource"/>, which throws.</summary>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _componentService.StatusChanged -= OnComponentServiceStatusChanged;
         _operationCts.Cancel();
         _operationCts.Dispose();

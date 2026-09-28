@@ -296,4 +296,15 @@ public sealed class UpdatesViewModelTests : IDisposable
         Assert.False(viewModel.IsBusyWithWork);
         Assert.False(string.IsNullOrEmpty(viewModel.BusyMessage));
     }
+
+    [Fact]
+    public void Dispose_Twice_DoesNotThrow()
+    {
+        var viewModel = CreateViewModel();
+
+        viewModel.Dispose();
+        var exception = Record.Exception(viewModel.Dispose);
+
+        Assert.Null(exception);
+    }
 }

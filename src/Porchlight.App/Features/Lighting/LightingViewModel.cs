@@ -41,6 +41,7 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
     private readonly ILogger<LightingViewModel> _logger;
     private readonly Dispatcher _dispatcher;
     private CancellationTokenSource _cts = new();
+    private bool _disposed;
 
     /// <summary>Tracks whether <see cref="OpenRgbCard"/> was already ready before the most recent
     /// <see cref="OnNavigatedToAsync"/> call, so that call and the false-&gt;true edge handled by
@@ -396,8 +397,17 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
             }
         });
 
+    /// <summary>Idempotent: page view models are disposed twice on host shutdown (see
+    /// <see cref="Shell.PageServiceCollectionExtensions.AddPage{TViewModel, TView}"/>), and a second
+    /// <see cref="CancellationTokenSource.Cancel()"/> on a disposed source would throw.</summary>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         OpenRgbCard.PropertyChanged -= OnOpenRgbCardPropertyChanged;
         OpenRgbCard.Dispose();
         _lightingService.Disconnected -= OnLightingServiceDisconnected;

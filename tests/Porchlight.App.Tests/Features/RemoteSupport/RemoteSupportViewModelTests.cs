@@ -458,4 +458,19 @@ public sealed class RemoteSupportViewModelTests : IDisposable
         public Task<AnyDeskState> LaunchAsync(CancellationToken cancellationToken) =>
             throw new InvalidOperationException("boom");
     }
+
+    /// <summary>Regression: the host disposes page view models twice on shutdown (see
+    /// <c>AddPage</c>), and the second call used to throw ObjectDisposedException from the
+    /// AnyDesk card's already-disposed CancellationTokenSource.</summary>
+    [Fact]
+    public void Dispose_Twice_DoesNotThrow()
+    {
+        var viewModel = CreateViewModel();
+
+        viewModel.Dispose();
+        var exception = Record.Exception(viewModel.Dispose);
+
+        Assert.Null(exception);
+        Assert.Equal(0, _componentService.StatusChangedSubscriberCount);
+    }
 }

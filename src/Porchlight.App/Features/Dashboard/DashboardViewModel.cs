@@ -39,6 +39,7 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
     private readonly IRestartDetector _restartDetector;
     private readonly ILogger<DashboardViewModel> _logger;
     private readonly CancellationTokenSource _cts = new();
+    private bool _disposed;
     private readonly Dictionary<string, DateTime> _lastTickFailureLoggedAtUtc = [];
 
     private Task? _loopTask;
@@ -104,8 +105,17 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
 
     public ObservableCollection<SystemInfoRowViewModel> SystemInfoRows { get; } = [];
 
+    /// <summary>Idempotent: page view models are disposed twice on host shutdown (see
+    /// <see cref="Shell.PageServiceCollectionExtensions.AddPage{TViewModel, TView}"/>), and a second
+    /// <see cref="CancellationTokenSource.Cancel()"/> on a disposed source would throw.</summary>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _cts.Cancel();
 
         try

@@ -115,4 +115,15 @@ public sealed class LightingViewModelTests
         Assert.True(settings.Current.Lighting.AutoStartOpenRgb);
         Assert.Equal(1, settings.UpdateCallCount);
     }
+
+    [Fact]
+    public void Dispose_Twice_DoesNotThrow()
+    {
+        var (viewModel, _) = CreateViewModel();
+
+        viewModel.Dispose();
+        var exception = Record.Exception(viewModel.Dispose);
+
+        Assert.Null(exception);
+    }
 }
