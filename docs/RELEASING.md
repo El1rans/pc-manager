@@ -1,7 +1,7 @@
-# Releasing PC Manager
+# Releasing Porchlight
 
 Every push to a PR or `main` already builds and compiles the installer (see `.github/workflows/ci.yml`,
-job `build-installer`) and uploads `PCManager-Setup-<version>.exe` as a workflow artifact, so you can
+job `build-installer`) and uploads `Porchlight-Setup-<version>.exe` as a workflow artifact, so you can
 sanity-check the installer before ever cutting a release. A real release is only produced by pushing a
 `vX.Y.Z` tag.
 
@@ -63,16 +63,16 @@ sanity-check the installer before ever cutting a release. A real release is only
 
    `publish` (needs `build-sign`; permissions: `contents: write` - the only job that can create a
    release; does not touch SignPath credentials at all):
-   - Downloads that artifact and creates a GitHub Release named `PC Manager <version>` with the
+   - Downloads that artifact and creates a GitHub Release named `Porchlight <version>` with the
      setup exe, its `.sha256` file, and the prepared release notes.
 
 5. **Verify the release** on GitHub: download the setup exe, confirm its SHA-256 matches the
    published `.sha256` file, and (ideally, on a real or virtual Windows PC - never the machine
-   used to develop PC Manager) run it through a fresh install and uninstall.
+   used to develop Porchlight) run it through a fresh install and uninstall.
 
 ## Code signing (SignPath)
 
-PC Manager signs releases through the [SignPath Foundation](https://signpath.org/) program for
+Porchlight signs releases through the [SignPath Foundation](https://signpath.org/) program for
 open source projects, once the application below is approved. Until then, `release.yml` publishes
 unsigned installers automatically (see "Notes" below) - nothing here blocks a release.
 
@@ -105,7 +105,7 @@ in this repository's Settings -> Environments:
 2. Enable multi-factor authentication on both the GitHub account used for this repository and the
    SignPath account - SignPath requires MFA before it will trust a GitHub Actions build.
 3. Once SignPath approves the application:
-   - Create a SignPath project named `pc-manager` (or set the `SIGNPATH_PROJECT_SLUG` repository
+   - Create a SignPath project named `porchlight` (or set the `SIGNPATH_PROJECT_SLUG` repository
      variable to whatever slug is chosen).
    - Link the GitHub repository as this project's trusted build system (GitHub Actions), scoped to
      `.github/workflows/release.yml` so only tag-triggered release runs can submit signing
@@ -116,12 +116,12 @@ in this repository's Settings -> Environments:
      SignPath will accept as a "trusted" build for this project, beyond what the workflow-path
      scoping above already restricts.
    - Add two artifact configurations, pasting the XML from this repo:
-     - `app`, using `docs/signing/app.xml` (signs `PCManager.exe` inside the zip the workflow
+     - `app`, using `docs/signing/app.xml` (signs `Porchlight.exe` inside the zip the workflow
        uploads).
      - `installer`, using `docs/signing/installer.xml` (signs the compiled
-       `PCManager-Setup-<version>.exe` inside the zip the workflow uploads).
+       `Porchlight-Setup-<version>.exe` inside the zip the workflow uploads).
      Both configurations declare a required `version` parameter (SignPath Foundation requires
-     artifact metadata restrictions) and set `product-name="PC Manager"` /
+     artifact metadata restrictions) and set `product-name="Porchlight"` /
      `product-version="${version}"` on their `<pe-file>` - the workflow passes this parameter on
      every signing request from `Directory.Build.props`'s `<Version>`.
    - Create a signing policy named `release-signing` (or set `SIGNPATH_SIGNING_POLICY_SLUG`) with
@@ -135,7 +135,7 @@ in this repository's Settings -> Environments:
    aren't secret), add:
    - Repository **variable** `SIGNPATH_ORGANIZATION_ID` - the organization id SignPath shows in
      its project settings.
-   - Optionally, variables `SIGNPATH_PROJECT_SLUG` (defaults to `pc-manager` if unset),
+   - Optionally, variables `SIGNPATH_PROJECT_SLUG` (defaults to `porchlight` if unset),
      `SIGNPATH_SIGNING_POLICY_SLUG` (defaults to `release-signing` if unset), and
      `SIGNPATH_REQUIRED` (set to `true` to make `build-sign` **fail** a release outright if signing
      isn't configured, instead of the default of silently publishing unsigned - flip this on once
@@ -144,10 +144,10 @@ in this repository's Settings -> Environments:
 ### Per release
 
 Signing adds one manual step to the process in "Steps" above: after pushing the tag, `build-sign`
-submits both the published `PCManager.exe` and the compiled installer to SignPath and waits for
+submits both the published `Porchlight.exe` and the compiled installer to SignPath and waits for
 them to be signed. **Someone with Approver access must open SignPath and approve each signing
 request** (there are two per release: `app`, then `installer`) or the job will eventually time out
-waiting. Once approved, the job downloads the signed files, verifies both PCManager.exe's and the
+waiting. Once approved, the job downloads the signed files, verifies both Porchlight.exe's and the
 installer's Authenticode signatures itself (including that each carries a trusted timestamp, so the
 signature keeps validating after the signing certificate itself expires), computes the SHA-256
 checksum from the *signed* installer, and hands the signed installer, checksum and release notes to
@@ -157,7 +157,7 @@ the `publish` job, which creates the release as before.
 
 The installer's embedded uninstaller (`unins000.exe`) cannot be signed through this flow - see
 "Uninstaller signing limitation" in `docs/CODE_SIGNING_POLICY.md` for why. It stays unsigned even
-after `PCManager.exe` and the installer itself are signed.
+after `Porchlight.exe` and the installer itself are signed.
 
 ## Notes
 

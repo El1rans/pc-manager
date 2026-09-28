@@ -4,7 +4,7 @@
 
 Goal: port `prototype/WingetUpdater.ps1` into the app as the Updates page, with the same behaviour and better structure. Read the prototype first; its parsing and output-handling logic is proven against real winget output.
 
-## Core (`PCManager.Core/Winget`)
+## Core (`Porchlight.Core/Winget`)
 
 - `WingetOutputReader`: incremental char-stream splitter. `\n` (or `\r\n`) ends a line; a lone `\r` means winget is redrawing, so the pending text is a progress update. Spinner-only frames (`-`, `\`, `|`, `/`) and whitespace are dropped. Handles `\r\n` split across two `Feed` calls.
 - `WingetTableParser.Parse(IReadOnlyList<string> lines)`: finds each table by the dashed separator line, takes column start positions from the header line above it, slices each row by those positions. Rows stop at a blank line or a line too short to reach the 4th column (summary lines like "10 upgrades available."). The first table = normal upgrades; any later table (e.g. "require explicit targeting") sets `RequiresExplicit = true`. Returns `WingetPackage(Name, Id, InstalledVersion, AvailableVersion, Source, RequiresExplicit)`.
@@ -16,14 +16,14 @@ Goal: port `prototype/WingetUpdater.ps1` into the app as the Updates page, with 
   - Cancellation between packages only; never kill a running installer.
 - `WingetExitCodes`: named constants and `Describe(int code)` -> `(PackageOutcome, string message)`. Known: `0` success; `0x8A15002B` no applicable upgrade (Skipped); `0x8A150101` app is running, close it (Failed). Unknown -> "Failed (0xXXXXXXXX)". Success whose output mentions a restart -> "Updated - restart needed".
 
-## App (`PCManager.App/Features/Updates`)
+## App (`Porchlight.App/Features/Updates`)
 
 Page layout (top to bottom): title + summary line ("10 updates available (1 ignored) - last checked 14:32"), toolbar (Refresh, Select all, Select none, filter box, "Show ignored" toggle on the right), DataGrid, action row (Silent install, Include apps with unknown version, "Stop after current" while running, accent "Update selected (N)"), progress row (indeterminate bar + current step + latest winget progress line), collapsible Log panel (monospace, auto-scroll, capped at 200k chars, "Open log folder", "Clear").
 
 DataGrid columns: checkbox, Name, ID, Installed, Available, Notes ("Ignored" / "Pinned / explicit only" / "Current version unknown"), Status (colored by state + text: Queued, Updating..., Updated, Failed, Skipped). Sortable. Double-click toggles the checkbox. Right-click menu on selected rows: Ignore, Stop ignoring, Copy ID, Show package info (runs `ShowAsync` into the log).
 
 Behaviour:
-- Check runs automatically when the app starts (in the background, unless "Check for updates when PC Manager starts" is turned off) and on Refresh. Nav badge shows the count of non-ignored updates (hidden when 0).
+- Check runs automatically when the app starts (in the background, unless "Check for updates when Porchlight starts" is turned off) and on Refresh. Nav badge shows the count of non-ignored updates (hidden when 0).
 - Default selection: all non-ignored, non-explicit packages are ticked.
 - Update runs selected packages one by one, updates each row's status live, then re-checks quietly; rows that still exist keep their last status, successfully updated rows disappear. A final summary line: "Finished: 5 updated, 1 failed, 0 skipped". Play `SystemSounds.Asterisk`.
 - Ignore list, Silent, Include-unknown, Check-on-startup persist in the `Updates` settings section.

@@ -1,10 +1,12 @@
 # 00 - Engineering standards
 
+> **Renamed to Porchlight.** This product was originally built and specced as "PC Manager"; milestone 08 (`docs/specs/08-rebrand-porchlight.md`) renamed it to Porchlight. Specs 01-07 below were written before the rename and still describe the app as "PC Manager" in places - read `PCManager`/`PC Manager` there as `Porchlight`/the current product name, except where a spec is specifically documenting pre-rebrand or legacy-migration behavior (e.g. the installer's legacy registry key, the app's legacy mutex name).
+
 Every milestone spec in this folder builds on this document. If a milestone spec and this file disagree, the milestone spec wins for that milestone only.
 
 ## Product
 
-PC Manager is a Windows 10/11 desktop app for monitoring and maintaining a single PC: live stats, app updates (winget), hardware sensors and fan control, and RGB lighting.
+Porchlight is a Windows 10/11 desktop app for monitoring and maintaining a single PC: live stats, app updates (winget), hardware sensors and fan control, and RGB lighting.
 
 ## Tech stack
 
@@ -14,35 +16,35 @@ PC Manager is a Windows 10/11 desktop app for monitoring and maintaining a singl
 | UI | WPF with the built-in Fluent theme (`Application.ThemeMode = ThemeMode.System`, follows Windows light/dark) |
 | MVVM | CommunityToolkit.Mvvm 8.4.x (`ObservableObject`, `[ObservableProperty]`, `[RelayCommand]`) |
 | Composition | Microsoft.Extensions.Hosting generic host + DI; `App` builds the host and resolves `MainWindow` |
-| Logging | Microsoft.Extensions.Logging with Serilog file sink at `%APPDATA%\PCManager\logs\pcmanager-.log` (daily roll, 14 files kept) |
-| Settings | JSON at `%APPDATA%\PCManager\settings.json` via the singleton `ISettingsStore`; one shared `Current` instance. Features change settings ONLY through `Update(s => ...)` (mutates + saves under a lock); never mutate `Current` directly |
+| Logging | Microsoft.Extensions.Logging with Serilog file sink at `%APPDATA%\Porchlight\logs\porchlight-.log` (daily roll, 14 files kept) |
+| Settings | JSON at `%APPDATA%\Porchlight\settings.json` via the singleton `ISettingsStore`; one shared `Current` instance. Features change settings ONLY through `Update(s => ...)` (mutates + saves under a lock); never mutate `Current` directly |
 | Tests | xUnit v3 on Microsoft.Testing.Platform (`dotnet test` via the `test.runner` setting in `global.json`); no UI automation tests |
 | Packages | Central Package Management (`Directory.Packages.props`), exact versions, no floating versions, no prerelease unless a spec says so |
 
 ## Solution layout
 
 ```
-PCManager.slnx
+Porchlight.slnx
 global.json
 Directory.Build.props        # shared compiler/analyzer settings
 Directory.Packages.props     # central package versions
 .editorconfig
 src/
-  PCManager.Core/            # net10.0-windows class library. NO WPF references.
+  Porchlight.Core/            # net10.0-windows class library. NO WPF references.
     <Feature>/               # e.g. Winget/, Monitoring/, Hardware/, Lighting/
-  PCManager.App/             # WPF exe. Views, ViewModels, controls, DI wiring.
+  Porchlight.App/             # WPF exe. Views, ViewModels, controls, DI wiring.
     Features/<Feature>/      # <Feature>View.xaml, <Feature>ViewModel.cs, feature-only controls
     Shell/                   # MainWindow, navigation
     Controls/, Themes/
 tests/
-  PCManager.Core.Tests/
+  Porchlight.Core.Tests/
 prototype/                   # original PowerShell prototype, kept for reference, not built
 docs/specs/
 ```
 
 Rules:
-- All logic that can be tested without a window lives in `PCManager.Core` behind an interface. ViewModels depend on interfaces, never on `Process`, WMI, registry, or hardware libraries directly.
-- One public type per file; file name = type name. Namespaces follow folders (`PCManager.Core.Winget`).
+- All logic that can be tested without a window lives in `Porchlight.Core` behind an interface. ViewModels depend on interfaces, never on `Process`, WMI, registry, or hardware libraries directly.
+- One public type per file; file name = type name. Namespaces follow folders (`Porchlight.Core.Winget`).
 - A feature adds itself to the app by: its own folder in Core and App, and one DI registration extension method (`services.Add<Feature>Feature()`) that calls `services.AddPage<TViewModel, TView>()` and registers its services. It does not edit other features' files.
 - Third-party tools a feature needs (AnyDesk, OpenRGB, PawnIO) are detected, installed and started only through `IComponentService` (milestone 01b), and a missing tool is shown with the shared `ComponentCard` control.
 - Processes (winget, AnyDesk CLI, etc.) are started only through the shared `IProcessRunner` from 01b.

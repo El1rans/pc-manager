@@ -2,12 +2,12 @@
 
 ## OpenRGB.NET
 
-PC Manager's Lighting feature vendors a copy of [OpenRGB.NET](https://github.com/diogotr7/OpenRGB.NET)
+Porchlight's Lighting feature vendors a copy of [OpenRGB.NET](https://github.com/diogotr7/OpenRGB.NET)
 3.1.1 at `src/ThirdParty/OpenRGB.NET/`, instead of referencing it as a NuGet package, because the
 released version has a bug with no released fix at time of writing: it does not detect a graceful
 remote close (OpenRGB being closed, or its SDK server being stopped) - see
 `docs/upstream/openrgb-net.md` for the root cause and the two small, targeted patches applied,
-each marked with a `// PC Manager patch:` comment in the vendored source.
+each marked with a `// Porchlight patch:` comment in the vendored source.
 
 OpenRGB.NET is used under the MIT License:
 

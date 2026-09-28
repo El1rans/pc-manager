@@ -4,9 +4,9 @@
 
 Goal: a "Get help" page a non-technical user (e.g. a parent) can open to get remote support in two clicks. The helper (family member) connects with AnyDesk using the address shown on the page.
 
-AnyDesk is proprietary and cannot be embedded. PC Manager installs it through winget, reads its address, and launches it. It never changes AnyDesk security settings on its own.
+AnyDesk is proprietary and cannot be embedded. Porchlight installs it through winget, reads its address, and launches it. It never changes AnyDesk security settings on its own.
 
-## Core (`PCManager.Core/RemoteSupport`)
+## Core (`Porchlight.Core/RemoteSupport`)
 
 - `IAnyDeskService`:
   - `GetStateAsync(ct)` -> `AnyDeskState(IsInstalled, ExePath?, Version?, Id?, Alias?, IsRunning, ServiceStatus)`.
@@ -17,7 +17,7 @@ AnyDesk is proprietary and cannot be embedded. PC Manager installs it through wi
 - `AnyDeskIdFormatter`: formats numeric IDs in groups of three ("123 456 789", "1 234 567 890"); leaves aliases (contain `@` or letters) unchanged. Unit tested.
 - Config file parser is a pure function over file text. Unit tested with samples (id present, missing, alias only, Windows line endings, extra spaces).
 
-## App (`PCManager.App/Features/RemoteSupport`)
+## App (`Porchlight.App/Features/RemoteSupport`)
 
 Nav item "Get help" (icon: people/headset), placed LAST in the nav, visually distinct.
 
@@ -35,7 +35,7 @@ Settings (`RemoteSupport` section): optional "Helper name" shown on the page ("Y
 
 ## Explicitly out of scope (security)
 
-- Setting an unattended-access password, enabling unattended access, or changing AnyDesk permissions from PC Manager. These make the PC reachable without the user present; the helper configures them inside AnyDesk if the family wants it.
+- Setting an unattended-access password, enabling unattended access, or changing AnyDesk permissions from Porchlight. These make the PC reachable without the user present; the helper configures them inside AnyDesk if the family wants it.
 - Uploading or sending the ID anywhere automatically.
 
 ## Tests
@@ -44,7 +44,7 @@ ID formatter; config parser; exe locator with a fake file system/registry abstra
 
 ## Acceptance criteria
 
-- [ ] On a PC without AnyDesk: Install works end to end and the address appears without restarting PC Manager.
+- [ ] On a PC without AnyDesk: Install works end to end and the address appears without restarting Porchlight.
 - [ ] On a PC with AnyDesk: address shown within 2 s of opening the page; Copy puts the digits-only ID on the clipboard.
 - [ ] Start AnyDesk button launches it; status updates within a few seconds.
-- [ ] No AnyDesk security setting is changed by PC Manager.
+- [ ] No AnyDesk security setting is changed by Porchlight.

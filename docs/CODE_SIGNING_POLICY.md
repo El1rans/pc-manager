@@ -3,7 +3,7 @@
 Free code signing provided by [SignPath.io](https://signpath.io), certificate by
 [SignPath Foundation](https://signpath.org).
 
-PC Manager applies for code signing through the [SignPath Foundation](https://signpath.org/)
+Porchlight applies for code signing through the [SignPath Foundation](https://signpath.org/)
 program for open source projects. This document is the "code signing policy" SignPath's
 application process asks an applicant project to publish: who can commit, review and approve
 changes, and what the software does and does not send over the network.
@@ -15,12 +15,12 @@ every tagged release (see `.github/workflows/release.yml`), but the SignPath pro
 policy and API token do not exist yet - until SignPath approves the application and the maintainer
 completes the one-time setup in `docs/RELEASING.md`, the signing step is skipped automatically and
 releases are published unsigned, same as before. Once approved, released installers and the signed
-`PCManager.exe` inside them will carry a certificate issued to SignPath Foundation, and this section
+`Porchlight.exe` inside them will carry a certificate issued to SignPath Foundation, and this section
 will be updated to say so.
 
 ## Team roles
 
-PC Manager currently has one maintainer and no separate review team. For SignPath's roles:
+Porchlight currently has one maintainer and no separate review team. For SignPath's roles:
 
 | Role | Who |
 |---|---|
@@ -40,50 +40,50 @@ on both GitHub and SignPath - see `docs/RELEASING.md`'s "Code signing (SignPath)
 > This program will not transfer any information to other networked systems unless specifically
 > requested by the user or the person installing or operating it.
 
-To make that concrete, here is precisely what PC Manager and its installer contact, and when. This
+To make that concrete, here is precisely what Porchlight and its installer contact, and when. This
 was verified by searching the source tree for every place the app starts a process or opens a
 network connection (`Process.Start`/`ProcessStartInfo`, `Socket`/`TcpClient`, and any
 `HttpClient`/`WebClient` usage) as of this document's last update:
 
-- **The installer, and PC Manager's own "Set up optional features" page**, run `winget install`
+- **The installer, and Porchlight's own "Set up optional features" page**, run `winget install`
   for each optional component the user explicitly ticks (AnyDesk, OpenRGB, the PawnIO driver).
   `winget` is Microsoft's own package manager; it downloads installers from Microsoft's/the
-  package publisher's sources over the internet. PC Manager does not contact any server itself for
+  package publisher's sources over the internet. Porchlight does not contact any server itself for
   this - it only launches `winget.exe` as a child process (see
-  `src/PCManager.Core/Components/ComponentService.cs`,
-  `src/PCManager.Core/Processes/ProcessRunner.cs`, and the `[Code]` section of
-  `installer/PCManager.iss`).
+  `src/Porchlight.Core/Components/ComponentService.cs`,
+  `src/Porchlight.Core/Processes/ProcessRunner.cs`, and the `[Code]` section of
+  `installer/Porchlight.iss`).
 - **Checking for and installing app updates** (the Updates page) also runs `winget upgrade` /
   `winget install` per selected app - again Microsoft's own winget, started as a child process,
-  never contacted directly by PC Manager's own code.
-- **On every app start** (unless the user turns off "Check for updates when PC Manager starts" on
-  the Updates page - on by default), PC Manager runs `winget upgrade --accept-source-agreements` in
+  never contacted directly by Porchlight's own code.
+- **On every app start** (unless the user turns off "Check for updates when Porchlight starts" on
+  the Updates page - on by default), Porchlight runs `winget upgrade --accept-source-agreements` in
   the background to list available app updates (see `UpdatesAutoCheckHostedService`, registered in
-  `UpdatesFeature.cs`). This is the same `winget` child process described above - PC Manager itself
+  `UpdatesFeature.cs`). This is the same `winget` child process described above - Porchlight itself
   makes no network call - but `winget` contacts the winget package sources operated by Microsoft
   to list what is available, without further action from the user. See Microsoft's own
   [privacy statement](https://privacy.microsoft.com/privacystatement) for what Microsoft's winget
   service receives. This can be turned off entirely via the toggle above.
-- **"Get help" (remote support)**: PC Manager starts the locally installed AnyDesk process
-  (`Process.Start`) to read its assigned address and to launch it. PC Manager never sends that
+- **"Get help" (remote support)**: Porchlight starts the locally installed AnyDesk process
+  (`Process.Start`) to read its assigned address and to launch it. Porchlight never sends that
   AnyDesk address, or any other data, to any server of its own or of ours - the address is only
   shown on screen and copied to the clipboard at the user's request, for the user to share
   themselves (e.g. by reading it aloud or messaging it). The one exception is the "Download
   AnyDesk manually" link on that page, which opens `https://anydesk.com/download` in the user's
   default browser only when the user clicks it (`UrlLauncher.Open`, used from
   `RemoteSupportViewModel.DownloadAnyDeskManually`). Whenever AnyDesk itself is running (whether
-  started by PC Manager or independently), AnyDesk connects to AnyDesk's own network to provide
-  remote-support relaying - that traffic is AnyDesk's, not PC Manager's; see
+  started by Porchlight or independently), AnyDesk connects to AnyDesk's own network to provide
+  remote-support relaying - that traffic is AnyDesk's, not Porchlight's; see
   [AnyDesk's privacy policy](https://anydesk.com/en/privacy).
-- **Lighting (RGB control)**: PC Manager talks to a locally installed and running OpenRGB SDK
+- **Lighting (RGB control)**: Porchlight talks to a locally installed and running OpenRGB SDK
   server over a plain TCP socket, by default to `127.0.0.1` (loopback - the default `OpenRgbHost` in
   `LightingSettings.cs`, implemented in the vendored `src/ThirdParty/OpenRGB.NET/`, MIT licensed).
   This host is configurable in `settings.json` (`Lighting.OpenRgbHost`); as long as it is left at
   its default it never leaves the local machine.
-- **No telemetry, crash reporting, or analytics.** PC Manager does not call home to any
-  PC-Manager-operated server, and runs no background network call other than the startup/Updates-page
+- **No telemetry, crash reporting, or analytics.** Porchlight does not call home to any
+  Porchlight-operated server, and runs no background network call other than the startup/Updates-page
   winget check described above (both toggleable/user-initiated). Logs stay on disk under
-  `%APPDATA%\PCManager\logs` and are never uploaded anywhere by the app.
+  `%APPDATA%\Porchlight\logs` and are never uploaded anywhere by the app.
 
 If a future change adds a new network call, this section must be updated in the same pull request
 that adds it - this file is expected to stay accurate, not aspirational.
@@ -99,7 +99,7 @@ cloud/CI-triggered signing flow does not provide, since the certificate's privat
 SignPath's infrastructure.
 
 Practical effect: the installed uninstaller, launched from "Apps & features" or
-`{group}\Uninstall PC Manager`, is unsigned even once the installer and `PCManager.exe` itself are
+`{group}\Uninstall Porchlight`, is unsigned even once the installer and `Porchlight.exe` itself are
 signed. This is a known, accepted limitation - see also `docs/RELEASING.md`. It has limited impact
 in practice: the uninstaller has no Mark-of-the-Web (it was never downloaded directly - it was
 extracted to disk by the already-approved, signed installer), so it does not trigger a SmartScreen

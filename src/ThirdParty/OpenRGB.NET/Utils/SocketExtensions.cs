@@ -27,7 +27,7 @@ internal static class SocketExtensions
         {
             var received = await socket.ReceiveAsync(buffer[recv..], SocketFlags.None, cancellationToken);
 
-            // PC Manager patch: a 0-byte read means the remote end performed an orderly shutdown
+            // Porchlight patch: a 0-byte read means the remote end performed an orderly shutdown
             // (OpenRGB closed, or its SDK server was stopped). The original code silently `break`s
             // here, leaving the caller's buffer only partially filled - or, for the read loop's
             // reused header buffer, entirely untouched/stale - which looks exactly like a valid

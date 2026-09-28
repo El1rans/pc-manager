@@ -25,7 +25,7 @@ internal sealed class OpenRgbConnection : IDisposable
 
     public EventHandler<EventArgs>? DeviceListUpdated { get; set; }
 
-    // PC Manager patch: no longer takes a constructor callback. OpenRgbClient used to pass its own
+    // Porchlight patch: no longer takes a constructor callback. OpenRgbClient used to pass its own
     // (field-backed) DeviceListUpdated event here by value - since a C# event is just a plain
     // delegate field, that captured whatever was subscribed at construction time (always null,
     // since nobody has subscribed yet) rather than a live reference, so DeviceListUpdated never
@@ -94,7 +94,7 @@ internal sealed class OpenRgbConnection : IDisposable
                 {
                     //ignore
                 }
-                // PC Manager patch: ReceiveAllAsync (see SocketExtensions.cs) now throws IOException
+                // Porchlight patch: ReceiveAllAsync (see SocketExtensions.cs) now throws IOException
                 // on a graceful remote close instead of silently returning with a stale/partial
                 // buffer, which used to make this loop re-parse the previous header forever - a
                 // CPU-pinning spin that kept enqueueing phantom replies while Socket.Connected
@@ -108,7 +108,7 @@ internal sealed class OpenRgbConnection : IDisposable
         }
         finally
         {
-            // PC Manager patch: mark every pending request queue complete so a caller currently
+            // Porchlight patch: mark every pending request queue complete so a caller currently
             // blocked in Receive()'s BlockingCollection.Take() fails fast (InvalidOperationException)
             // instead of hanging forever once this loop can no longer deliver a reply - whether it
             // exited via cancellation (Dispose()) or the IOException above (remote close).

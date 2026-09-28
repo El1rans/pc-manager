@@ -7,15 +7,15 @@ GitHub and fill these in).
 
 ---
 
-**Project name:** PC Manager
+**Project name:** Porchlight
 
-**Repository URL:** https://github.com/El1rans/pc-manager
+**Repository URL:** https://github.com/El1rans/porchlight
 
 **License:** MIT (see `LICENSE`) - OSI-approved, no dual/commercial licensing.
 
 **Project description:**
 
-> PC Manager is a Windows 10/11 desktop app (WPF, .NET 10) for monitoring and maintaining a single
+> Porchlight is a Windows 10/11 desktop app (WPF, .NET 10) for monitoring and maintaining a single
 > family PC. It shows live system stats (CPU/memory/GPU/disk/network usage, temperatures, top
 > processes), lists and installs app updates via Windows' own `winget` package manager, reads
 > hardware sensors and can control fan speed, controls RGB lighting on supported devices via
@@ -29,8 +29,8 @@ GitHub and fill these in).
   third-party tools via `winget`, **only with the user's explicit, per-component consent**
   (unticked by default except AnyDesk in the installer's default selection): AnyDesk (remote
   support), OpenRGB (RGB lighting control), and the PawnIO driver (namazso.PawnIO - a
-  community-signed kernel driver PC Manager uses for low-level sensor/fan access). None of these
-  are bundled inside PC Manager's own installer payload; they are always fetched via `winget` from
+  community-signed kernel driver Porchlight uses for low-level sensor/fan access). None of these
+  are bundled inside Porchlight's own installer payload; they are always fetched via `winget` from
   their own publishers at install time, over the network, with the user's consent.
 - The app can control fan speed in software (a "Fixed" or custom "Curve" mode per fan). This is
   off by default, requires a one-time explicit risk acknowledgement in the UI, only runs while a
@@ -44,17 +44,17 @@ GitHub and fill these in).
   banner rather than silently failing when unelevated.
 - Network activity is limited to: `winget` (Microsoft's own package manager, invoked as a child
   process) - for ticked/selected components, for updates the user selects, **and automatically in
-  the background on every app start** to list available updates (a "Check for updates when PC
-  Manager starts" toggle, on by default, controls this; see Microsoft's
+  the background on every app start** to list available updates (a "Check for updates when
+  Porchlight starts" toggle, on by default, controls this; see Microsoft's
   [privacy statement](https://privacy.microsoft.com/privacystatement) for what winget's own
   network calls send); a local-only (`127.0.0.1` by default, configurable) TCP connection to a locally running
   OpenRGB SDK server; AnyDesk's own network traffic whenever the locally installed AnyDesk process
   is running (see [AnyDesk's privacy policy](https://anydesk.com/en/privacy)); and the user's
   default browser opening a documented external URL (`https://anydesk.com/download`) only when the
-  user clicks "Download AnyDesk manually". There is no telemetry, analytics, or PC-Manager-operated
+  user clicks "Download AnyDesk manually". There is no telemetry, analytics, or Porchlight-operated
   call-home server. Full detail: `docs/CODE_SIGNING_POLICY.md`'s privacy statement section.
 - The installer includes a documented, working uninstaller ("Apps & features" or the Start Menu
-  shortcut) that removes PC Manager and, on request, its per-user settings/logs. It intentionally
+  shortcut) that removes Porchlight and, on request, its per-user settings/logs. It intentionally
   does not remove the separately-installed third-party tools (AnyDesk/OpenRGB/PawnIO), since those
   are independent applications the user may still want - this is disclosed on the uninstall finish
   page.
@@ -66,7 +66,7 @@ GitHub and fill these in).
 | `src/ThirdParty/OpenRGB.NET` (vendored, by Diogo Trindade) | MIT | RGB lighting control (OpenRGB SDK client) |
 | `LibreHardwareMonitorLib` | MPL-2.0 | Hardware sensor reading (temperatures, fans, voltages) |
 | `CommunityToolkit.Mvvm` | MIT | MVVM source generators (`[ObservableProperty]`, etc.) |
-| `Serilog`, `Serilog.Extensions.Hosting`, `Serilog.Sinks.File` | Apache-2.0 | Local file logging under `%APPDATA%\PCManager\logs` |
+| `Serilog`, `Serilog.Extensions.Hosting`, `Serilog.Sinks.File` | Apache-2.0 | Local file logging under `%APPDATA%\Porchlight\logs` |
 | `Microsoft.Extensions.Hosting`, `Microsoft.Extensions.Logging.Abstractions` | MIT | .NET generic host / DI / logging abstractions |
 | `System.Management`, `System.Diagnostics.PerformanceCounter` | MIT | WMI and performance-counter based system info |
 | `xunit.v3` (Apache-2.0), `Microsoft.Extensions.TimeProvider.Testing` (MIT) | test-only, not shipped | Test framework and fake-clock testing helper |
@@ -86,7 +86,7 @@ self-approval exists). All team members (currently just the maintainer) use MFA 
 SignPath.
 
 **Uninstall:** Standard Windows uninstall via "Apps & features", built from the Inno Setup script
-(`installer/PCManager.iss`); also available from the Start Menu group.
+(`installer/Porchlight.iss`); also available from the Start Menu group.
 
 **Data transfer disclosure:** see the privacy statement and its supporting detail in
 `docs/CODE_SIGNING_POLICY.md`.

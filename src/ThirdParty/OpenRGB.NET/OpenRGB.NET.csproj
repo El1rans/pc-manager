@@ -4,7 +4,7 @@
     Vendored copy of OpenRGB.NET 3.1.1 (MIT license, see LICENSE in this folder), with a small,
     targeted patch applied - see THIRD-PARTY-NOTICES.md at the repo root and
     docs/upstream/openrgb-net.md for why, and every changed line is marked with a
-    "// PC Manager patch:" comment. Vendored instead of referenced as a NuGet package because the
+    "// Porchlight patch:" comment. Vendored instead of referenced as a NuGet package because the
     upstream release has a bug (a graceful remote close is never detected - see
     docs/upstream/openrgb-net.md) with no released fix at time of writing.
   -->
@@ -22,7 +22,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="PCManager.Core.Tests" />
+    <InternalsVisibleTo Include="Porchlight.Core.Tests" />
   </ItemGroup>
 
 </Project>

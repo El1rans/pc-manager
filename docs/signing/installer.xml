@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   SignPath artifact configuration for the "installer" artifact: a zip file containing the compiled
-  Inno Setup PCManager-Setup-<version>.exe. Paste this into SignPath's project as the artifact
+  Inno Setup Porchlight-Setup-<version>.exe. Paste this into SignPath's project as the artifact
   configuration for the "installer" artifact configuration slug - see docs/RELEASING.md for the
   one-time SignPath project setup and .github/workflows/release.yml for how the workflow uploads
-  dist/PCManager-Setup-<version>.exe (actions/upload-artifact always zips the uploaded path itself,
+  dist/Porchlight-Setup-<version>.exe (actions/upload-artifact always zips the uploaded path itself,
   so no local zip step is needed for this to line up with the <zip-file> below).
 
   The exact file name inside the zip varies by release version, so the path below is built from the
@@ -23,7 +23,7 @@
   </parameters>
   <zip-file>
     <artifacts>
-      <pe-file path="PCManager-Setup-${version}.exe" product-name="PC Manager" product-version="${version}">
+      <pe-file path="Porchlight-Setup-${version}.exe" product-name="Porchlight" product-version="${version}">
         <authenticode-sign />
       </pe-file>
     </artifacts>

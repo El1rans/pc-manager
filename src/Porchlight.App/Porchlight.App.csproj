@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Porchlight.App</RootNamespace>
+    <AssemblyName>Porchlight</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\assets\brand\porchlight.ico</ApplicationIcon>
+    <!-- WPF0001: the Fluent ThemeMode API (Application.ThemeMode) is still marked experimental. -->
+    <NoWarn>$(NoWarn);WPF0001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Extensions.Hosting" />
+    <!-- Used directly in App.xaml.cs to wrap the bootstrap Serilog logger as an ILogger for
+         AppDataMigrator, before the DI container (and its own Serilog->ILogger wiring, via
+         Serilog.Extensions.Hosting) exists. -->
+    <PackageReference Include="Serilog.Extensions.Logging" />
+    <PackageReference Include="Serilog.Sinks.File" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Window/taskbar icon (WPF's Window.Icon does not fall back to the exe's ApplicationIcon
+         resource above - it must be set explicitly, see MainWindow.xaml/SetupWindow.xaml). -->
+    <Resource Include="..\..\assets\brand\porchlight.ico" Link="Assets\porchlight.ico" />
+    <!-- Small icon shown next to the "Porchlight" wordmark in the sidebar header - see
+         MainWindow.xaml. -->
+    <Resource Include="..\..\assets\brand\porchlight-icon-64.png" Link="Assets\porchlight-icon.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Porchlight.Core\Porchlight.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -12,7 +12,7 @@ Goal: show temperatures, fan speeds, clocks, loads, voltages and power for all h
 - Most sensors and all fan control need the app to run as administrator and the driver to be available. Without them, show what is readable (e.g. GPU via vendor APIs, drives) plus the `AdminRequiredBanner`, and if the driver is missing, a card explaining how to install it (link to the official source; if a winget package exists for it, show the exact `winget install` command). Do not install drivers automatically.
 - All library calls happen on one dedicated background thread/owner (`HardwareService` singleton); `Computer.Open()` once, `Update()` every 1s via a visitor, `Close()` on shutdown. The UI receives immutable snapshots.
 
-## Core (`PCManager.Core/Hardware`)
+## Core (`Porchlight.Core/Hardware`)
 
 - `IHardwareService`: `Start()`, `Stop()`, `IObservable`-or-event of `HardwareSnapshot` (list of `HardwareNode(Id, Name, Type, Sensors[], Children[])`, `SensorReading(Id, Name, SensorType, Value?, Min?, Max?)`), `Status` (NotElevated, DriverMissing, Ready, Error + message), and `IReadOnlyList<IFanController> Controllers`.
 - `IFanController`: `Id`, `Name`, `CurrentPercent`, `CanControl`, `SetPercent(double)`, `RestoreDefault()`. The LHM implementation maps to `ISensor.Control` (`SetSoftware`, `SetDefault`).
@@ -26,7 +26,7 @@ Goal: show temperatures, fan speeds, clocks, loads, voltages and power for all h
 - Fan control is OFF by default. Turning it on requires: admin, driver ready, and a one-time confirmation dialog explaining the risks. The "enabled" flag is persisted but software control only resumes on next launch after the page shows it is active (no silent control at startup without the page having loaded the profile successfully).
 - Fan profiles persist in the `Hardware` settings section: per fan: mode (`Default` = BIOS, `Fixed` percent, `Curve` with source sensor id + points).
 
-## App (`PCManager.App/Features/Hardware`)
+## App (`Porchlight.App/Features/Hardware`)
 
 - **Sensors tab**: tree grouped by hardware (CPU, GPU, Motherboard, Memory, Storage, Network), each sensor with current / min / max and unit (C, RPM, %, MHz, V, W). Filter box. "Reset min/max".
 - **Fans tab**: one card per fan with current RPM and %, mode selector (Default / Fixed / Curve), fixed slider (floor enforced), curve editor (a small chart with draggable points; points snap to 1 C and 1%), source sensor picker (temperature sensors only). Global: master "Software fan control" toggle, failsafe temperature, minimum percent, big "Restore BIOS control for all fans" button.
