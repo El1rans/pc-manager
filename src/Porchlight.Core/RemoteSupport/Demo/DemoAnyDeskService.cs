@@ -1,3 +1,4 @@
+#if DEBUG
 using Porchlight.Core.Components;
 
 namespace Porchlight.Core.RemoteSupport.Demo;
@@ -28,3 +29,4 @@ internal sealed class DemoAnyDeskService : IAnyDeskService
 
     public Task<AnyDeskState> LaunchAsync(CancellationToken cancellationToken) => Task.FromResult(FakeState);
 }
+#endif

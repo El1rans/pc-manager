@@ -124,7 +124,7 @@
                     <StackPanel>
                         <TextBlock Text="How it works" Style="{StaticResource CardTitle}"/>
                         <TextBlock Text="{Binding Step1Text}" FontSize="16" TextWrapping="Wrap" Margin="0,0,0,6"/>
-                        <TextBlock Text="2. Read them the number above." FontSize="16" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                        <TextBlock Text="2. Read them the address above." FontSize="16" TextWrapping="Wrap" Margin="0,0,0,6"/>
                         <TextBlock FontSize="16" TextWrapping="Wrap"
                                    Text="3. When AnyDesk asks, click Accept only if you are talking to them right now."/>
                     </StackPanel>

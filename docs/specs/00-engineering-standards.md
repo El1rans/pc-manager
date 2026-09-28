@@ -1,5 +1,7 @@
 # 00 - Engineering standards
 
+> **Renamed to Porchlight.** This product was originally built and specced as "PC Manager"; milestone 08 (`docs/specs/08-rebrand-porchlight.md`) renamed it to Porchlight. Specs 01-07 below were written before the rename and still describe the app as "PC Manager" in places - read `PCManager`/`PC Manager` there as `Porchlight`/the current product name, except where a spec is specifically documenting pre-rebrand or legacy-migration behavior (e.g. the installer's legacy registry key, the app's legacy mutex name).
+
 Every milestone spec in this folder builds on this document. If a milestone spec and this file disagree, the milestone spec wins for that milestone only.
 
 ## Product

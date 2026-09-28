@@ -1,3 +1,4 @@
+#if DEBUG
 namespace Porchlight.Core.Lighting.Demo;
 
 /// <summary>
@@ -56,3 +57,4 @@ internal sealed class DemoLightingService : ILightingService
     public Task<LightingApplyResult> TurnOffAllAsync(CancellationToken cancellationToken) =>
         Task.FromResult(new LightingApplyResult(FakeDevices.Length, 0));
 }
+#endif

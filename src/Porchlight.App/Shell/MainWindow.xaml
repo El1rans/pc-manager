@@ -48,7 +48,16 @@
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,4,0,0">
                     <Border BorderThickness="0,1,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                             Margin="12,4,12,4"/>
-                    <ListBox ItemsSource="{Binding PinnedPages}" SelectedItem="{Binding SelectedPage}"
+                    <!-- SelectedItem is deliberately OneWay (Source->Target only, see
+                         MainWindow.xaml.cs): the actual user-click -> SelectedPage direction, and
+                         clearing MainNavList's selection when this list gets one, are both handled
+                         explicitly in code-behind instead. A TwoWay binding here would let clearing
+                         the OTHER list's selection (setting its SelectedIndex to -1) round-trip
+                         back through the shared SelectedPage property and clobber it to null -
+                         since both lists are bound to that one property, that silently blanked the
+                         content area right after picking "Get help". -->
+                    <ListBox x:Name="PinnedNavList" ItemsSource="{Binding PinnedPages}"
+                             SelectedItem="{Binding SelectedPage, Mode=OneWay}"
                              BorderThickness="0" Background="Transparent"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemTemplate>
@@ -58,19 +67,27 @@
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
+                                    <!-- Accent-colored icon only - the label uses the same, normal
+                                         (theme-default) text brush as the main nav list just below,
+                                         so this pinned item still reads as clickable rather than
+                                         disabled; only IsSelected/IsMouseOver (handled identically
+                                         to the main list, via the same default ListBoxItem style -
+                                         no ItemContainerStyle override here either) should change
+                                         its appearance. -->
                                     <TextBlock Grid.Column="0" Text="{Binding Glyph}" Style="{StaticResource Icon}"
                                                FontSize="16" Margin="4,0,12,0"
                                                Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"/>
                                     <TextBlock Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center"
-                                               FontWeight="SemiBold"
-                                               Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"/>
+                                               FontWeight="SemiBold"/>
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
                 </StackPanel>
 
-                <ListBox ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage}"
+                <!-- SelectedItem is OneWay here too - see PinnedNavList's comment above. -->
+                <ListBox x:Name="MainNavList" ItemsSource="{Binding Pages}"
+                          SelectedItem="{Binding SelectedPage, Mode=OneWay}"
                           BorderThickness="0" Background="Transparent"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemTemplate>

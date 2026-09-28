@@ -21,10 +21,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Screenshots: a DEBUG-only "demo data" mode (`PCMANAGER_DEMO_DATA=1`, see CONTRIBUTING.md) that
-  swaps the Dashboard's system-info, drive and process-list services for fake ones, so
-  documentation screenshots no longer need to show a real PC's computer name, hardware, drive
-  labels or installed apps. Does not exist in a Release build. Replaced every screenshot in
+- Screenshots: a DEBUG-only "demo data" mode (`PORCHLIGHT_DEMO_DATA=1`, see CONTRIBUTING.md;
+  renamed from `PCMANAGER_DEMO_DATA` as part of the Porchlight rename above) that swaps the
+  Dashboard's system-info, drive and process-list services for fake ones - and, as of the rename,
+  also `IWingetClient` (Updates), `IHardwareService` (Hardware), `ILightingService` (Lighting) and
+  `IAnyDeskService` (Get help) - so documentation screenshots no longer need to show a real PC's
+  computer name, hardware, drive labels, installed apps, sensors, RGB devices or AnyDesk address.
+  Does not exist in a Release build. Replaced every screenshot in
   `docs/screenshots/` that showed real machine-identifying data with a redacted version, cropped
   `first-run.png` down to just the app window (it previously captured the whole desktop), and
   removed two obsolete/unused screenshots (`after-skip.png`, `foundation.png`).

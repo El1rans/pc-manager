@@ -114,11 +114,18 @@ Name: "pawnio"; Description: "Fan control and temperature sensors (PawnIO driver
 
 ; Cleans up the pre-rebrand "PC Manager" install this upgrades in place (same AppId, but
 ; UsePreviousAppDir=no moves the files to a new folder - see docs/specs/08-rebrand-porchlight.md).
-; Inno copies the new files into {app} before this runs, so it is safe even though {olddata}\...
-; below and {app}\... can be the same string on a fresh (non-upgrade) install; DeleteFile/
-; DeleteDirOrFiles are no-ops when the path does not exist.
+; Inno Setup processes [InstallDelete] early, before [Files] copies anything - but that order
+; does not matter here either way, since the paths below are the fixed old "PC Manager" locations,
+; never {app} (which is always the new "Porchlight" directory/shortcuts, a different literal path
+; on every install, upgrade or fresh). Every entry is a no-op if its path does not exist, so a
+; fresh (non-upgrade) install - where none of this ever existed - is unaffected.
 [InstallDelete]
 Type: files; Name: "{autopf}\PC Manager\PCManager.exe"
+; The old build's own uninstaller (Inno Setup always names it unins000.exe/.dat) also has to go,
+; or it - not the app exe above - is the one file left in {autopf}\PC Manager, and the
+; dirifempty just below would then never fire (a non-empty directory is left behind forever).
+Type: files; Name: "{autopf}\PC Manager\unins000.exe"
+Type: files; Name: "{autopf}\PC Manager\unins000.dat"
 Type: dirifempty; Name: "{autopf}\PC Manager"
 ; {commonprograms}\PC Manager is the old DefaultGroupName's Start Menu folder (a literal path, not
 ; {group} - {group} may already have been rewritten to the new "Porchlight" group by the time this
@@ -158,6 +165,13 @@ const
   InstallerRegistryKey = 'Software\Porchlight\Installer';
   InstallerParentRegistryKey = 'Software\Porchlight';
   InstallerRegistryValue = 'Components';
+
+  { Pre-rebrand key (docs/specs/08-rebrand-porchlight.md) - this installer never writes here (see
+    MergeInstallerHandledComponents, which only reads it as a fallback so an upgrade that skipped
+    a repair install still gets the "already installer-handled" hint), but uninstall still cleans
+    it up if present, for the same reason it cleans up InstallerRegistryKey. }
+  LegacyInstallerRegistryKey = 'Software\PC Manager\Installer';
+  LegacyInstallerParentRegistryKey = 'Software\PC Manager';
 
 var
   ComponentProgressPage: TOutputProgressWizardPage;
@@ -338,6 +352,13 @@ begin
     if RegQueryStringValue(HKLM, InstallerRegistryKey, InstallerRegistryValue, Existing) then
       SplitCsvInto(Existing, MergedList);
 
+    { Also folds in the legacy key's value, if any (e.g. a repair install over a machine that was
+      never actually launched since upgrading from "PC Manager", so nothing ever wrote the new
+      key) - this installer only ever writes InstallerRegistryKey from here on, but preserves
+      whatever the old one already recorded rather than silently dropping it. }
+    if RegQueryStringValue(HKLM, LegacyInstallerRegistryKey, InstallerRegistryValue, Existing) then
+      SplitCsvInto(Existing, MergedList);
+
     for I := 0 to AttemptedIds.Count - 1 do
       AddUniqueToken(MergedList, AttemptedIds[I]);
 
@@ -390,7 +411,8 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  DataDir, LegacyDataDir: string;
+  DataDir, LegacyDataDir, Message: string;
+  HasData, HasLegacyData: Boolean;
 begin
   if CurUninstallStep <> usPostUninstall then
     Exit;
@@ -404,6 +426,14 @@ begin
   RegDeleteKeyIfEmpty(HKLM, InstallerRegistryKey);
   RegDeleteKeyIfEmpty(HKLM, InstallerParentRegistryKey);
 
+  { Same cleanup for the pre-rebrand key (docs/specs/08-rebrand-porchlight.md) - this installer
+    never writes it (see MergeInstallerHandledComponents), but an upgrade from "PC Manager" can
+    still leave it behind, so uninstall cleans it up here too rather than leaving stale
+    Software\PC Manager registry keys around forever. }
+  RegDeleteValue(HKLM, LegacyInstallerRegistryKey, InstallerRegistryValue);
+  RegDeleteKeyIfEmpty(HKLM, LegacyInstallerRegistryKey);
+  RegDeleteKeyIfEmpty(HKLM, LegacyInstallerParentRegistryKey);
+
   { Per-machine uninstall runs elevated as whichever account launched it - normally the same
     signed-in user (UAC keeps the same user token), but it does not have to be, e.g. a different
     administrator account. The userappdata constant below always resolves to the account
@@ -412,22 +442,32 @@ begin
     profile's files. }
   DataDir := ExpandConstant('{userappdata}') + '\Porchlight';
   LegacyDataDir := ExpandConstant('{userappdata}') + '\PCManager';
-  if DirExists(DataDir) or DirExists(LegacyDataDir) then
+  HasData := DirExists(DataDir);
+  HasLegacyData := DirExists(LegacyDataDir);
+
+  if HasData or HasLegacyData then
   begin
-    if SuppressibleMsgBox(
-      'Delete Porchlight settings and logs for the current Windows account?' + #13#10 +
-      DataDir + #13#10#13#10 +
+    { Lists whichever of the two folders actually exist, rather than always naming just DataDir:
+      the legacy folder (docs/specs/08-rebrand-porchlight.md) exists on every machine upgraded
+      from "PC Manager" that has since been launched - AppDataMigrator only ever copies from it,
+      never deletes it - so both paths are the common case, not an edge case. }
+    Message := 'Delete Porchlight settings and logs for the current Windows account?' + #13#10;
+    if HasData then
+      Message := Message + DataDir + #13#10;
+    if HasLegacyData then
+      Message := Message + LegacyDataDir + #13#10;
+    Message := Message + #13#10 +
       'This only affects the account you are using now - if another Windows ' +
-      'account on this PC used Porchlight, its data is left in place.',
-      mbConfirmation, MB_YESNO, IDNO) = IDYES then
+      'account on this PC used Porchlight, its data is left in place.';
+
+    if SuppressibleMsgBox(Message, mbConfirmation, MB_YESNO, IDNO) = IDYES then
     begin
-      if DirExists(DataDir) then
+      if HasData then
         DelTree(DataDir, True, True, True);
-      { Pre-rebrand "PC Manager" data (docs/specs/08-rebrand-porchlight.md) - only present if the
-        app was never actually launched after upgrading (so AppDataMigrator never ran), or the
-        account uninstalling never used the pre-rebrand build; deleting it here is covered by the
-        same single Yes/No prompt above, since it is the same "delete my Porchlight data" choice. }
-      if DirExists(LegacyDataDir) then
+      { Deleting the legacy folder here is covered by the same single Yes/No prompt above (which
+        now lists it explicitly when present), since it is the same "delete my Porchlight data"
+        choice - see the Message comment above for why this is the common case, not the rare one. }
+      if HasLegacyData then
         DelTree(LegacyDataDir, True, True, True);
     end;
   end;

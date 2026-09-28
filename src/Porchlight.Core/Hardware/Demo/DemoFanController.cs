@@ -1,3 +1,4 @@
+#if DEBUG
 namespace Porchlight.Core.Hardware.Demo;
 
 /// <summary>DEBUG-only fake <see cref="IFanController"/> for the "demo data" mode (see
@@ -27,3 +28,4 @@ internal sealed class DemoFanController(string id, string name, double currentPe
         IsUnderSoftwareControl = false;
     }
 }
+#endif

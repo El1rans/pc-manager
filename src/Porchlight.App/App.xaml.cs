@@ -82,6 +82,9 @@ public partial class App : System.Windows.Application, IDisposable
         // %APPDATA%\Porchlight location (including a hosted service constructed during
         // _host.StartAsync() below) - see AppDataMigrator. Uses the bootstrap Serilog logger,
         // wrapped as an ILogger, since the DI container (and its "real" logger) does not exist yet.
+        // WARNING: nothing above this point may log anything through the bootstrap logger. Its
+        // file sink creates %APPDATA%\Porchlight\logs itself on the first write - which would make
+        // AppDataMigrator.NewDirectory already exist and silently skip the migration below.
         using (var migrationLoggerFactory = new SerilogLoggerFactory(Serilog.Log.Logger, dispose: false))
         {
             AppDataMigrator.MigrateIfNeeded(migrationLoggerFactory.CreateLogger(nameof(AppDataMigrator)));

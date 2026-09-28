@@ -1,3 +1,4 @@
+#if DEBUG
 namespace Porchlight.Core.Hardware.Demo;
 
 /// <summary>
@@ -97,3 +98,4 @@ internal sealed class DemoHardwareService : IHardwareService
             now);
     }
 }
+#endif

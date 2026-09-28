@@ -40,9 +40,18 @@ Defined now (01b) so both sides can build against it without either one waiting 
   re-detects every component itself** via `IComponentService.GetStatusAsync` - the marker only
   affects which not-yet-detected-as-installed items default to ticked (an id in the list defaults
   to unticked, since the installer already attempted it), never a component's reported status.
-- The installer does not need to delete or update this value on uninstall; a stale entry only
-  means first-run setup defaults that item to unticked, which is harmless (the user can still tick
-  it).
+- **Legacy fallback (docs/specs/08-rebrand-porchlight.md)**: a pre-rebrand "PC Manager" installer
+  wrote this same marker to `HKLM\Software\PC Manager\Installer`, value `Components`. The current
+  installer only ever writes the new `HKLM\Software\Porchlight\Installer` key, but on a repair
+  install also folds the legacy key's value into it first (see `MergeInstallerHandledComponents`
+  in `installer/Porchlight.iss`) so nothing recorded there is silently dropped.
+  `IRegistryReader.GetInstallerHandledComponentIds()` reads the new key and, only if it is absent,
+  falls back to reading the legacy key directly (`Porchlight.Core.Components.RegistryReader`) - so
+  an install that upgraded from "PC Manager" without ever being repaired still gets the hint.
+- The installer does not need to delete or update this value on uninstall for the marker to stay
+  correct (a stale entry only means first-run setup defaults that item to unticked, which is
+  harmless - the user can still tick it) - but uninstall removes both the new and legacy registry
+  values anyway, purely to leave the registry clean for a future reinstall.
 
 ## Acceptance criteria
 

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Porchlight.Core.Settings;
 using Xunit;
@@ -104,24 +105,81 @@ public sealed class AppDataMigratorTests : IDisposable
     }
 
     [Fact]
-    public void Migrate_OneFileLockedByAnotherProcess_LogsAndStillMigratesTheOther()
+    public void Migrate_SettingsLockReleasedDuringRetry_SettingsAreMigrated()
     {
         Directory.CreateDirectory(_legacyDirectory);
         var settingsPath = Path.Combine(_legacyDirectory, "settings.json");
-        File.WriteAllText(settingsPath, "{}");
+        File.WriteAllText(settingsPath, """{"Setup":{"LaunchCount":7}}""");
         File.WriteAllText(Path.Combine(_legacyDirectory, "fancontrol.active"), "2024-01-01T00:00:00Z");
 
-        // Exclusively locks settings.json so File.Copy for it throws IOException, simulating
-        // another process transiently holding the file - the fan-control marker copy must still
-        // succeed, and MigrateIfNeeded itself must not throw.
+        // Exclusively locks settings.json so the first couple of copy attempts throw IOException,
+        // simulating another process (Defender, the indexer) transiently holding the file. The
+        // deterministic sleeper below releases the lock partway through the retry budget instead
+        // of racing a real timer, then MigrateIfNeeded's own retry picks the file up.
+        var lockStream = new FileStream(settingsPath, FileMode.Open, FileAccess.Read, FileShare.None);
+        try
+        {
+            var sleepCalls = 0;
+            AppDataMigrator.MigrateIfNeeded(NullLogger.Instance, _newDirectory, _legacyDirectory, _ =>
+            {
+                sleepCalls++;
+                if (sleepCalls == 2)
+                {
+                    lockStream.Dispose();
+                }
+            });
+
+            Assert.Equal(2, sleepCalls);
+        }
+        finally
+        {
+            lockStream.Dispose();
+        }
+
+        var newSettingsPath = Path.Combine(_newDirectory, "settings.json");
+        Assert.True(File.Exists(newSettingsPath));
+        Assert.Equal("""{"Setup":{"LaunchCount":7}}""", File.ReadAllText(newSettingsPath));
+        Assert.True(File.Exists(Path.Combine(_newDirectory, "fancontrol.active")));
+    }
+
+    [Fact]
+    public void Migrate_SettingsPermanentlyLocked_LogsErrorAndLeavesLegacyUntouched()
+    {
+        Directory.CreateDirectory(_legacyDirectory);
+        var settingsPath = Path.Combine(_legacyDirectory, "settings.json");
+        File.WriteAllText(settingsPath, """{"Setup":{"LaunchCount":7}}""");
+
+        var logger = new CapturingLogger();
+
         using (new FileStream(settingsPath, FileMode.Open, FileAccess.Read, FileShare.None))
         {
             var exception = Record.Exception(() =>
-                AppDataMigrator.MigrateIfNeeded(NullLogger.Instance, _newDirectory, _legacyDirectory));
+                AppDataMigrator.MigrateIfNeeded(logger, _newDirectory, _legacyDirectory, _ => { }));
             Assert.Null(exception);
         }
 
         Assert.False(File.Exists(Path.Combine(_newDirectory, "settings.json")));
-        Assert.True(File.Exists(Path.Combine(_newDirectory, "fancontrol.active")));
+        // The legacy file is never touched, regardless of how the copy attempt failed.
+        Assert.Equal("""{"Setup":{"LaunchCount":7}}""", File.ReadAllText(settingsPath));
+        Assert.Contains(logger.Entries, e => e.Level == LogLevel.Error && e.Exception is not null);
+    }
+
+    /// <summary>Minimal <see cref="ILogger"/> that records every call, so a test can assert on the
+    /// level/exception of a log entry without depending on Serilog or a mocking library.</summary>
+    private sealed class CapturingLogger : ILogger
+    {
+        public List<(LogLevel Level, Exception? Exception)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            Entries.Add((logLevel, exception));
     }
 }

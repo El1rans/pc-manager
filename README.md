@@ -50,7 +50,7 @@ Download `Porchlight-Setup-<version>.exe` from the [Releases](../../releases) pa
   `/COMPONENTS=""` to install none of them).
 - **Upgrading from PC Manager?** Porchlight is the renamed version of the same app (same install,
   same data, nothing to redo). Installing over an existing PC Manager install moves it to
-  `Program Files\Porchlight`, and your settings and logs are migrated automatically from
+  `Program Files\Porchlight`, and your settings are migrated automatically from
   `%APPDATA%\PCManager` to `%APPDATA%\Porchlight` the first time Porchlight runs - the old folder
   is left in place, untouched.
 

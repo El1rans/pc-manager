@@ -1,3 +1,4 @@
+#if DEBUG
 namespace Porchlight.Core.Winget.Demo;
 
 /// <summary>
@@ -40,3 +41,4 @@ internal sealed class DemoWingetClient : IWingetClient
         return Task.FromResult(new WingetResult(0, [$"Id: {id}", "Demo mode - no real package details available."]));
     }
 }
+#endif
