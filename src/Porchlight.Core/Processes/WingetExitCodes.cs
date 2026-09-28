@@ -226,7 +226,22 @@ public static partial class WingetExitCodes
                 WingetSuggestedAction.Reinstall);
         }
 
-        if (exitCode is UpdateNotApplicable or NoApplicableInstaller)
+        if (exitCode == UpdateNotApplicable)
+        {
+            // Unlike a plain "no applicable installer" (below), winget is explicit here that a
+            // newer version does exist but doesn't apply to this install as-is - RARLab.WinRAR on
+            // the maintainer's PC (6.24 installed, 7.23 refused). Reinstalling (uninstall, then
+            // install the newest version fresh) can succeed where a plain upgrade can't, so this
+            // offers both Reinstall and Hide rather than Hide alone - see
+            // docs/specs/09-friendly-update-outcomes.md's addendum.
+            return Build(
+                WingetOutcomeKind.NoApplicableUpdate, "Not available for this PC",
+                "No update that fits this PC is available right now. This isn't something you need to fix. " +
+                "Reinstalling may still work, or you can hide this update.",
+                WingetSuggestedAction.Reinstall | WingetSuggestedAction.Hide);
+        }
+
+        if (exitCode == NoApplicableInstaller)
         {
             return Build(
                 WingetOutcomeKind.NoApplicableUpdate, "Not available for this PC",
@@ -358,5 +373,27 @@ public static partial class WingetExitCodes
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// True if a single line of winget's <em>live</em> output says the installer is about to raise
+    /// a UAC admin prompt - e.g. "The installer will request to run as administrator. Expect a
+    /// prompt." Matched robustly on the "request to run as administrator" substring rather than
+    /// the whole sentence, since winget's exact wording around it is not guaranteed.
+    /// </summary>
+    /// <remarks>
+    /// Used to explain an otherwise-silent wait: winget runs as a background process, so a UAC
+    /// prompt it (or the installer it launched) raises often appears only as a flashing taskbar
+    /// icon, never brought to the foreground - observed on the maintainer's PC for
+    /// Google.CloudSDK, which sat with no further output for several minutes waiting on exactly
+    /// this. See <c>UpdatesViewModel</c>'s per-line log handling and
+    /// <c>docs/specs/09-friendly-update-outcomes.md</c>'s addendum. If Porchlight itself is already
+    /// running elevated, this line is never printed (there is nothing left to elevate), so no
+    /// special-casing for that is needed here.
+    /// </remarks>
+    public static bool MentionsAdminPromptRequest(string line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        return line.Contains("request to run as administrator", StringComparison.OrdinalIgnoreCase);
     }
 }

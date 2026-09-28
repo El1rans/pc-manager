@@ -105,7 +105,6 @@ public sealed class WingetExitCodesTests
     }
 
     [Theory]
-    [InlineData(0x8A15002B)] // APPINSTALLER_CLI_ERROR_UPDATE_NOT_APPLICABLE - RARLab.WinRAR on the maintainer's PC.
     [InlineData(0x8A150010)] // APPINSTALLER_CLI_ERROR_NO_APPLICABLE_INSTALLER
     [InlineData(0x8A150068)] // APPINSTALLER_CLI_ERROR_PACKAGE_IS_PINNED
     public void DescribeOutcome_NoApplicableCodes_IsNoApplicableUpdateWithHide(long hexCode)
@@ -115,6 +114,22 @@ public sealed class WingetExitCodesTests
         Assert.Equal(WingetOutcomeKind.NoApplicableUpdate, outcome.Kind);
         Assert.Equal("Not available for this PC", outcome.Title);
         Assert.Equal(WingetSuggestedAction.Hide, outcome.SuggestedAction);
+    }
+
+    [Fact]
+    public void DescribeOutcome_UpdateNotApplicable_IsNoApplicableUpdateWithReinstallAndHide()
+    {
+        // RARLab.WinRAR on the maintainer's PC: 6.24 installed, winget refuses the upgrade to
+        // 7.23 with APPINSTALLER_CLI_ERROR_UPDATE_NOT_APPLICABLE. Unlike the other "no applicable"
+        // codes, this one specifically means a newer version exists but doesn't apply as an
+        // upgrade - reinstalling can still work, so both Reinstall and Hide are offered. See
+        // docs/specs/09-friendly-update-outcomes.md's addendum.
+        var outcome = WingetExitCodes.DescribeOutcome(unchecked((int)0x8A15002B), outputLines: null);
+
+        Assert.Equal(WingetOutcomeKind.NoApplicableUpdate, outcome.Kind);
+        Assert.Equal("Not available for this PC", outcome.Title);
+        Assert.Equal(WingetSuggestedAction.Reinstall | WingetSuggestedAction.Hide, outcome.SuggestedAction);
+        Assert.Contains("reinstall", outcome.Explanation, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -281,5 +296,31 @@ public sealed class WingetExitCodesTests
     public void MentionsRestart_NoLines_ReturnsFalse()
     {
         Assert.False(WingetExitCodes.MentionsRestart([]));
+    }
+
+    [Fact]
+    public void MentionsAdminPromptRequest_ExactObservedLine_ReturnsTrue()
+    {
+        // Google.CloudSDK on the maintainer's PC - see docs/specs/09-friendly-update-outcomes.md's addendum.
+        Assert.True(WingetExitCodes.MentionsAdminPromptRequest(
+            "The installer will request to run as administrator. Expect a prompt."));
+    }
+
+    [Fact]
+    public void MentionsAdminPromptRequest_MatchesSubstringRobustly()
+    {
+        Assert.True(WingetExitCodes.MentionsAdminPromptRequest("Some other wording: request to run as administrator here"));
+    }
+
+    [Fact]
+    public void MentionsAdminPromptRequest_CaseInsensitive_ReturnsTrue()
+    {
+        Assert.True(WingetExitCodes.MentionsAdminPromptRequest("REQUEST TO RUN AS ADMINISTRATOR"));
+    }
+
+    [Fact]
+    public void MentionsAdminPromptRequest_UnrelatedLine_ReturnsFalse()
+    {
+        Assert.False(WingetExitCodes.MentionsAdminPromptRequest("Downloading https://example.com/installer.exe"));
     }
 }

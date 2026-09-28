@@ -30,6 +30,11 @@ internal sealed class FakeWingetClient : IWingetClient
     /// lets a test simulate the user clicking "Stop after current" while a package is mid-update.</summary>
     public Action<string>? OnUpgrading { get; set; }
 
+    /// <summary>Lines <see cref="UpgradeAsync"/> reports to its <c>log</c> progress, in order,
+    /// before awaiting <see cref="Gate"/> - lets a test simulate winget's live output (e.g. the
+    /// "will request to run as administrator" line) arriving while a package is mid-update.</summary>
+    public List<string> UpgradeLogLines { get; } = [];
+
     public List<string> UpgradeCalls { get; } = [];
 
     public List<bool> UpgradeSilentFlags { get; } = [];
@@ -60,6 +65,11 @@ internal sealed class FakeWingetClient : IWingetClient
         UpgradeCalls.Add(id);
         UpgradeSilentFlags.Add(silent);
         OnUpgrading?.Invoke(id);
+
+        foreach (var line in UpgradeLogLines)
+        {
+            log?.Report(line);
+        }
 
         if (Gate is not null)
         {

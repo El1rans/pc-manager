@@ -106,7 +106,12 @@ milestone specs.
   installs the selected apps one at a time with a live log and progress, "Silent install",
   "Include apps with unknown version" and "Check for updates when Porchlight starts" options, and
   "Stop after current" to cancel the rest of a run. The nav badge shows how many updates are
-  available; a check runs automatically at startup (unless turned off) and on Refresh.
+  available; a check runs automatically at startup (unless turned off) and on Refresh. Every
+  outcome is a plain-language status with a matching action - Reinstall... (uninstall then install
+  the newest version), Hide this update, or Try again - that's remembered across app restarts; an
+  "app in use" failure names the actual programs holding the app's files open when it isn't the app
+  itself; and a long silent wait explains itself the moment winget says it's about to raise a
+  Windows permission prompt.
 - Get help: a plain-language remote-support page for a non-technical user, pinned in its own group
   at the bottom of the nav rail. Installs AnyDesk, shows its address in large, selectable,
   grouped-digit text with a one-click "Copy address" (put the bare digits on the clipboard), a
