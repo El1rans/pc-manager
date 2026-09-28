@@ -27,6 +27,11 @@ public sealed class HardwareSettings
     /// <summary>Per-fan profile, keyed by <see cref="IFanController.Id"/>. A fan with no entry here
     /// is treated as <see cref="FanMode.Default"/>.</summary>
     public Dictionary<string, FanProfileSettings> FanProfiles { get; set; } = [];
+
+    /// <summary>Sensors tab (spec 10): whether sensors that have never reported a real (non-zero,
+    /// non-null) value - unconnected fan headers, unpopulated voltage rails - are hidden. Defaults
+    /// to on, since most boards expose more headers than are physically connected.</summary>
+    public bool HideUnusedSensors { get; set; } = true;
 }
 
 /// <summary>Persisted form of a fan's profile - <see cref="FanCurvePoint"/> is reused directly since

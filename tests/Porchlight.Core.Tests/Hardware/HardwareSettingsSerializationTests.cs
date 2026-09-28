@@ -27,6 +27,7 @@ public sealed class HardwareSettingsSerializationTests
             FanControlWarningConfirmed = true,
             MinFanPercent = 35,
             FailsafeTemperatureC = 88,
+            HideUnusedSensors = false,
             FanProfiles = new Dictionary<string, FanProfileSettings>
             {
                 ["fan-default"] = new() { Mode = FanMode.Default },
@@ -48,6 +49,7 @@ public sealed class HardwareSettingsSerializationTests
         Assert.True(restored.FanControlWarningConfirmed);
         Assert.Equal(35, restored.MinFanPercent);
         Assert.Equal(88, restored.FailsafeTemperatureC);
+        Assert.False(restored.HideUnusedSensors);
         Assert.Equal(3, restored.FanProfiles.Count);
 
         Assert.Equal(FanMode.Default, restored.FanProfiles["fan-default"].Mode);
@@ -72,6 +74,7 @@ public sealed class HardwareSettingsSerializationTests
         Assert.Equal(FanControlOptions.DefaultMinPercent, settings.MinFanPercent);
         Assert.Equal(FanControlOptions.DefaultFailsafeTemperatureC, settings.FailsafeTemperatureC);
         Assert.Empty(settings.FanProfiles);
+        Assert.True(settings.HideUnusedSensors);
     }
 
     [Fact]

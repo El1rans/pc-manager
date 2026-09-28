@@ -9,40 +9,118 @@
     <UserControl.Resources>
         <local:FanModeVisibilityConverter x:Key="FanModeToVisibility"/>
 
-        <HierarchicalDataTemplate DataType="{x:Type local:SensorTreeNodeViewModel}" ItemsSource="{Binding Children}">
-            <StackPanel Margin="0,4,0,4" Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
-                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
-                <Grid Margin="16,4,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="220"/>
-                        <ColumnDefinition Width="90"/>
-                        <ColumnDefinition Width="90"/>
-                        <ColumnDefinition Width="90"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="1" Text="Current" Style="{StaticResource Secondary}" FontSize="11"/>
-                    <TextBlock Grid.Column="2" Text="Min" Style="{StaticResource Secondary}" FontSize="11"/>
-                    <TextBlock Grid.Column="3" Text="Max" Style="{StaticResource Secondary}" FontSize="11"/>
-                </Grid>
-                <ItemsControl ItemsSource="{Binding Sensors}" Margin="16,2,0,0">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type local:SensorRowViewModel}">
-                            <Grid Margin="0,1" Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="220"/>
-                                    <ColumnDefinition Width="90"/>
-                                    <ColumnDefinition Width="90"/>
-                                    <ColumnDefinition Width="90"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Grid.Column="1" Text="{Binding ValueText}"/>
-                                <TextBlock Grid.Column="2" Text="{Binding MinText}" Style="{StaticResource Secondary}"/>
-                                <TextBlock Grid.Column="3" Text="{Binding MaxText}" Style="{StaticResource Secondary}"/>
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+        <!-- S10: one fixed set of column widths shared by the header row and every sensor row, in
+             every card, so Name/Current/Min/Max line up across the whole page (spec 10: "Columns
+             align across every card"). -->
+        <GridLength x:Key="SensorNameColumnWidth">*</GridLength>
+        <GridLength x:Key="SensorValueColumnWidth">92</GridLength>
+
+        <!-- Current/Name are the primary, most prominent text on a sensor row; Min/Max use the
+             secondary brush. This is the fix for "Inverted emphasis" - nothing here inherits a
+             dimmed foreground from a TreeViewItem container the way the old tree-based layout did. -->
+        <Style x:Key="SensorColumnHeaderText" TargetType="TextBlock" BasedOn="{StaticResource Secondary}">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+        </Style>
+
+        <Style x:Key="SensorNameText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="SensorCurrentText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="SensorMinMaxText" TargetType="TextBlock" BasedOn="{StaticResource Secondary}">
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="SummaryWarningIcon" TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsCritical}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <DataTemplate DataType="{x:Type local:SensorRowViewModel}">
+            <Grid Margin="0,2" Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="{StaticResource SensorNameColumnWidth}"/>
+                    <ColumnDefinition Width="{StaticResource SensorValueColumnWidth}"/>
+                    <ColumnDefinition Width="{StaticResource SensorValueColumnWidth}"/>
+                    <ColumnDefinition Width="{StaticResource SensorValueColumnWidth}"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding Name}" Style="{StaticResource SensorNameText}"/>
+                <TextBlock Grid.Column="1" Text="{Binding ValueText}" Style="{StaticResource SensorCurrentText}"
+                           Typography.NumeralAlignment="Tabular"/>
+                <TextBlock Grid.Column="2" Text="{Binding MinText}" Style="{StaticResource SensorMinMaxText}"
+                           Typography.NumeralAlignment="Tabular"/>
+                <TextBlock Grid.Column="3" Text="{Binding MaxText}" Style="{StaticResource SensorMinMaxText}"
+                           Typography.NumeralAlignment="Tabular"/>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type local:SensorSectionViewModel}">
+            <StackPanel Margin="0,6,0,0" Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="{Binding Heading}" Style="{StaticResource Secondary}" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"/>
+                <ItemsControl ItemsSource="{Binding Sensors}"/>
             </StackPanel>
-        </HierarchicalDataTemplate>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type local:HardwareCardViewModel}">
+            <Border Style="{StaticResource Card}" Margin="0,0,0,12"
+                    Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
+                <Expander IsExpanded="{Binding IsExpanded, Mode=TwoWay}">
+                    <Expander.Header>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Icon}" Style="{StaticResource Icon}" FontSize="16" Margin="0,0,10,0"/>
+                            <TextBlock Text="{Binding Name}" Style="{StaticResource CardTitle}" Margin="0"/>
+                        </StackPanel>
+                    </Expander.Header>
+                    <StackPanel Margin="0,10,0,0">
+                        <!-- One column header row per card, not per section (spec 10). -->
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="{StaticResource SensorNameColumnWidth}"/>
+                                <ColumnDefinition Width="{StaticResource SensorValueColumnWidth}"/>
+                                <ColumnDefinition Width="{StaticResource SensorValueColumnWidth}"/>
+                                <ColumnDefinition Width="{StaticResource SensorValueColumnWidth}"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="1" Text="Current" Style="{StaticResource SensorColumnHeaderText}"/>
+                            <TextBlock Grid.Column="2" Text="Min" Style="{StaticResource SensorColumnHeaderText}"/>
+                            <TextBlock Grid.Column="3" Text="Max" Style="{StaticResource SensorColumnHeaderText}"/>
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding Sections}"/>
+                    </StackPanel>
+                </Expander>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type local:HardwareSummaryTileViewModel}">
+            <Border Style="{StaticResource Card}" Margin="0,0,12,12">
+                <StackPanel>
+                    <TextBlock Text="{Binding Title}" Style="{StaticResource CardTitle}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding ValueText}" FontSize="26" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding DetailText}" Style="{StaticResource Secondary}"
+                               FontSize="12" TextTrimming="CharacterEllipsis"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
+                                Visibility="{Binding IsWarning, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="{Binding WarningIcon}" Style="{StaticResource SummaryWarningIcon}" FontSize="13"
+                                   Margin="0,0,6,0"/>
+                        <TextBlock Text="{Binding WarningText}" FontSize="12"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
     </UserControl.Resources>
 
     <Grid>
@@ -79,22 +157,30 @@
         <TabControl Grid.Row="2" Margin="0,4,0,0">
             <TabItem Header="Sensors">
                 <DockPanel Margin="0,12,0,0">
-                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                    <!-- Summary strip: "At a glance" (spec 10) - up to 4 tiles, hidden entirely when
+                         nothing was found yet (e.g. still starting up, or not elevated). -->
+                    <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding SummaryTiles}"
+                                  Visibility="{Binding SummaryTiles.Count, Converter={StaticResource CountToVis}}"
+                                  Margin="0,0,0,4">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="4"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+
+                    <DockPanel DockPanel.Dock="Top" Margin="0,8,0,10">
                         <Button DockPanel.Dock="Right" Content="Reset min/max" Command="{Binding ResetMinMaxCommand}" Margin="10,0,0,0"/>
+                        <CheckBox DockPanel.Dock="Right" Content="Hide unused sensors" VerticalAlignment="Center"
+                                  Margin="16,0,0,0" IsChecked="{Binding HideUnusedSensors}"/>
                         <TextBlock DockPanel.Dock="Left" Text="Filter:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="Filter by hardware or sensor name"/>
                     </DockPanel>
-                    <!-- S10: no outer ScrollViewer - TreeView already scrolls itself, and nesting one
-                         around it fought the tree for mouse-wheel input and expand/collapse clicks. -->
-                    <TreeView ItemsSource="{Binding SensorNodes}" BorderThickness="0" Background="Transparent">
-                        <TreeView.ItemContainerStyle>
-                            <Style TargetType="TreeViewItem">
-                                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-                                <Setter Property="Visibility" Value="{Binding IsVisible, Converter={StaticResource BoolToVis}}"/>
-                            </Style>
-                        </TreeView.ItemContainerStyle>
-                    </TreeView>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Cards}"/>
+                    </ScrollViewer>
                 </DockPanel>
             </TabItem>
 
