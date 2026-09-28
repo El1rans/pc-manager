@@ -57,6 +57,7 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
     private CancellationTokenSource _visitCts = new();
 
     private readonly CancellationTokenSource _lifetimeCts = new();
+    private bool _disposed;
 
     /// <summary>The currently running poll loop, if any - see <see cref="StartPolling"/>.</summary>
     private CancellationTokenSource? _pollCts;
@@ -525,8 +526,17 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
     /// never saved or shown before the user confirms.</summary>
     public void SetHelperName(string name) => HelperName = name;
 
+    /// <summary>Idempotent: page view models are disposed twice on host shutdown (see
+    /// <see cref="Shell.PageServiceCollectionExtensions.AddPage{TViewModel, TView}"/>), and a second
+    /// <see cref="CancellationTokenSource.Cancel()"/> on a disposed source would throw.</summary>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _componentService.StatusChanged -= OnComponentServiceStatusChanged;
         Card.PropertyChanged -= OnCardPropertyChanged;
         Card.Dispose();

@@ -115,4 +115,15 @@ public sealed class MainViewModelTests
         Assert.Same(mainPage, viewModel.SelectedPage);
         Assert.NotSame(pinnedPage, viewModel.SelectedPage);
     }
+
+    [Fact]
+    public void Dispose_Twice_DoesNotThrow()
+    {
+        var viewModel = CreateViewModel(out _, out _);
+
+        viewModel.Dispose();
+        var exception = Record.Exception(viewModel.Dispose);
+
+        Assert.Null(exception);
+    }
 }

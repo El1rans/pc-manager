@@ -13,6 +13,10 @@ internal sealed class FakeComponentService : IComponentService
 
     public List<string> InstallCalls { get; } = [];
 
+    /// <summary>How many handlers are attached to <see cref="StatusChanged"/> - lets a test assert
+    /// that a disposed card really unsubscribed.</summary>
+    public int StatusChangedSubscriberCount => StatusChanged?.GetInvocationList().Length ?? 0;
+
     public void SetStatus(string id, ComponentStatus status) => _statuses[id] = status;
 
     /// <summary>Queues the status <see cref="InstallAsync"/> returns for <paramref name="id"/>,
