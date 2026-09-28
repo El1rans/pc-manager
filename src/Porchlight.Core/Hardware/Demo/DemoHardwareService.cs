@@ -12,9 +12,9 @@ namespace Porchlight.Core.Hardware.Demo;
 /// Spec 10: the device set here is deliberately realistic - a Ryzen CPU (Tctl/Tdie, per-core
 /// temperatures/clocks/loads with genuinely mixed values, package power, a Factor/multiplier
 /// sensor), an NVIDIA GPU (core + hot spot temperature, fans), a Nuvoton motherboard (several
-/// voltage rails, several fans including a couple of unconnected 0 RPM headers), and an NVMe drive
-/// - so the new card layout, summary strip, and "Hide unused sensors" toggle all have something
-/// real to show in a screenshot.
+/// voltage rails, several fans including a couple of unconnected 0 RPM headers), an NVMe drive, and
+/// a network adapter - so the new card layout, summary strip, "Hide unused sensors" toggle, and the
+/// collapsed-card stats (spec 10 addendum) all have something real to show in a screenshot.
 /// </remarks>
 internal sealed class DemoHardwareService : IHardwareService
 {
@@ -138,15 +138,31 @@ internal sealed class DemoHardwareService : IHardwareService
             [
                 Reading("demo-storage-temp", "Temperature", SensorType.Temperature, 41.0, 32.0, 58.0),
                 Reading("demo-storage-used", "Used Space", SensorType.Data, 412.0, 380.0, 412.0),
+                // LHM's Storage sensors also report used space as a percentage (Load), separately
+                // from the GB figure above - the collapsed-card stat picks this one (spec 10
+                // addendum: "Storage: temperature + used space % (Load 'Used Space')").
+                Reading("demo-storage-used-pct", "Used Space", SensorType.Load, 41.2, 38.0, 41.2),
                 Reading("demo-storage-read", "Read Rate", SensorType.Throughput, 2_400_000, 0, 118_000_000),
                 Reading("demo-storage-write", "Write Rate", SensorType.Throughput, 512_000, 0, 62_000_000),
+            ],
+            []);
+
+        var network = new HardwareNode(
+            "demo-network",
+            "Realtek Gaming 2.5GbE (Demo)",
+            HardwareNodeType.Network,
+            [
+                // Collapsed by default (spec 10) - the collapsed-card stat is this feature's only
+                // demo-mode coverage for a Network card, so give it real download/upload throughput.
+                Reading("demo-network-download", "Download Speed", SensorType.Throughput, 850_000, 0, 11_200_000),
+                Reading("demo-network-upload", "Upload Speed", SensorType.Throughput, 64_000, 0, 1_100_000),
             ],
             []);
 
         return new HardwareSnapshot(
             HardwareStatus.Ready,
             null,
-            [cpu, gpu, motherboard, memory, storage],
+            [cpu, gpu, motherboard, memory, storage, network],
             now);
     }
 }

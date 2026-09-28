@@ -21,6 +21,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   sensor whose value has been null or exactly zero for its entire observed history (unconnected fan
   headers, unpopulated voltage rails) while never hiding a temperature that has reported a real
   value.
+- Hardware: collapsed device cards on the Sensors tab now show the device's 2 most useful live
+  stats next to its name (e.g. `AMD Ryzen 7 5800X3D      69.8 °C · 22 %`), hidden once the card is
+  expanded since the same values are then visible below (`docs/specs/10-readable-sensors.md`
+  addendum). The pair is picked per hardware type by the new `HardwareCardStatsSelector`: CPU
+  temperature + CPU Total load, GPU core temperature + GPU core load, memory load % + memory used
+  GB, storage temperature + used space %, motherboard hottest temperature + fastest fan RPM,
+  network download + upload throughput. Values update live and are included in the header's
+  accessible name while collapsed.
 
 ### Fixed
 

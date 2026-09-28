@@ -14,14 +14,30 @@ namespace Porchlight.App.Features.Hardware;
 /// </summary>
 public sealed partial class HardwareCardViewModel : ObservableObject
 {
+    /// <summary>Joins the 2 collapsed-card stats for display, e.g. "69.8 °C · 22 %" (spec 10
+    /// addendum). Kept in one place so the header text and its accessible name never diverge.</summary>
+    private const string StatsSeparator = " · ";
+
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HeaderAutomationName))]
     private string _name = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HeaderAutomationName))]
+    [NotifyPropertyChangedFor(nameof(ShowCollapsedStats))]
     private bool _isExpanded;
 
     [ObservableProperty]
     private bool _isVisible = true;
+
+    /// <summary>Spec 10 addendum: the collapsed card's 2 most useful live stats, e.g.
+    /// "69.8 °C · 22 %" - hidden once the card is expanded, since the same values are then visible
+    /// in the sensor rows below. Recomputed every tick by <see cref="HardwareCardStatsSelector"/> so
+    /// it updates live with the rest of the sensors.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HeaderAutomationName))]
+    [NotifyPropertyChangedFor(nameof(ShowCollapsedStats))]
+    private string _collapsedStatsText = string.Empty;
 
     public HardwareCardViewModel(HardwareNode node, UnusedSensorTracker unusedTracker)
     {
@@ -48,9 +64,23 @@ public sealed partial class HardwareCardViewModel : ObservableObject
 
     public ObservableCollection<SensorSectionViewModel> Sections { get; } = [];
 
+    /// <summary>Whether <see cref="CollapsedStatsText"/> should be shown right now: only while the
+    /// card is collapsed (the details are visible once expanded, spec 10 addendum) and only when
+    /// there is anything to show (a device with no usable readings for its type shows nothing).</summary>
+    public bool ShowCollapsedStats => !IsExpanded && CollapsedStatsText.Length > 0;
+
+    /// <summary>Accessible name for the card's Expander header. Includes the collapsed stats when
+    /// they are shown, so a screen-reader user gets the same "name, value, value" a sighted user
+    /// reads visually (spec 10 addendum: "include the stats in the header's
+    /// AutomationProperties.Name when collapsed").</summary>
+    public string HeaderAutomationName => ShowCollapsedStats
+        ? $"{Name}, {CollapsedStatsText.Replace(StatsSeparator, ", ", StringComparison.Ordinal)}"
+        : Name;
+
     public void UpdateFrom(HardwareNode node, UnusedSensorTracker unusedTracker)
     {
         Name = node.Name;
+        CollapsedStatsText = string.Join(StatsSeparator, HardwareCardStatsSelector.Build(node));
 
         var existingRowsById = new Dictionary<string, SensorRowViewModel>();
         foreach (var section in Sections)
