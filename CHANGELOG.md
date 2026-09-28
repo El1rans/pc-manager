@@ -22,6 +22,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   headers, unpopulated voltage rails) while never hiding a temperature that has reported a real
   value.
 
+### Fixed
+
+- Updates: five fixes from manual testing of the friendly-outcomes/Reinstall work
+  (`docs/specs/09-friendly-update-outcomes.md`'s addendum):
+  - A row's last failed outcome (and its Reinstall.../Hide/Try again actions) now survives an app
+    restart instead of only showing for the session that produced it - persisted per package id +
+    the available version it was attempted against (`UpdatesSettings.LastOutcomes`,
+    `UpdateOutcomeMemory`), cleared on a successful update/reinstall or once a newer version
+    appears, and pruned to whatever winget currently lists.
+  - "Not available for this PC" (`APPINSTALLER_CLI_ERROR_UPDATE_NOT_APPLICABLE`, e.g. RARLab.WinRAR
+    refusing 6.24 -> 7.23) now offers **Reinstall...** alongside **Hide this update** -
+    `WingetSuggestedAction` became a `[Flags]` enum so a row can offer more than one action.
+  - "Close the app and try again" for an install-in-use failure now names the actual programs
+    holding the app's files open, via the Windows Restart Manager API, when they aren't the app
+    itself (observed for OBS Studio: not running, but Chrome and another app held its
+    virtual-camera DLL open) - falls back to the previous generic text if the lookup finds nothing.
+  - A silent, unusually long-running update now explains itself the moment winget's own output says
+    it's about to raise a UAC prompt ("Waiting for your permission - look for the Windows prompt on
+    the taskbar"), rather than only after two minutes of unexplained silence - a prompt raised from
+    winget's background process can appear only as a flashing taskbar icon (observed for
+    Google.CloudSDK).
+  - A package whose installed version is "Unknown" (`--include-unknown`) that reports a successful
+    update no longer reappears and gets updated again forever - Porchlight can't confirm the old
+    install was actually replaced (observed for Google.CloudSDK: a second, per-user copy was
+    installed alongside an already-current machine-wide one), so it's now remembered as "already
+    updated" and hidden (still visible via "Show ignored") until a newer version appears. The Notes
+    column for any unknown-version row now warns "updating may install a second copy".
+
 ### Verified
 
 - Hardware: investigated the maintainer's screenshot where every CPU core's Load sensor read

@@ -80,7 +80,10 @@
             <DataGrid.RowStyle>
                 <Style TargetType="DataGridRow">
                     <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsIgnored}" Value="True">
+                        <!-- Also dims a not-yet-confirmed "already updated" row for an unknown-version
+                             package (see UpdatePackageViewModel.IsHiddenByDefault) - it's hidden by
+                             the same "Show ignored" toggle as an explicitly ignored row. -->
+                        <DataTrigger Binding="{Binding IsHiddenByDefault}" Value="True">
                             <Setter Property="Opacity" Value="0.5"/>
                         </DataTrigger>
                     </Style.Triggers>

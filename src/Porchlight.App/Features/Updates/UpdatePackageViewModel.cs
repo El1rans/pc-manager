@@ -15,6 +15,7 @@ public sealed partial class UpdatePackageViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Notes))]
+    [NotifyPropertyChangedFor(nameof(IsHiddenByDefault))]
     private bool _isIgnored;
 
     [ObservableProperty]
@@ -44,6 +45,19 @@ public sealed partial class UpdatePackageViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(RetryButtonText))]
     private bool _isCriticalReinstallFailure;
 
+    /// <summary>True when winget reported this package updated successfully while its Installed
+    /// version was "Unknown" - Porchlight cannot tell whether that actually replaced the old
+    /// install or added a second copy alongside it (observed for Google.CloudSDK: a per-machine
+    /// 586.0.0 copy already present, then a second per-user copy installed). The row is hidden by
+    /// default (like an ignored row - see <see cref="IsHiddenByDefault"/>) but still discoverable
+    /// via "Show ignored", and reappears on its own once winget reports a newer available version -
+    /// see <c>UpdatesViewModel.PersistUpgradeOutcome</c> and
+    /// <c>docs/specs/09-friendly-update-outcomes.md</c>'s addendum.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Notes))]
+    [NotifyPropertyChangedFor(nameof(IsHiddenByDefault))]
+    private bool _isPendingVersionConfirmation;
+
     /// <summary>Set while this row's winget operation has been running longer than
     /// <c>UpdatesViewModel.WaitingHintThreshold</c> with no result yet - "Still working. The
     /// installer may be waiting for you..." or, when Silent install is on, "Still installing. Large
@@ -69,8 +83,10 @@ public sealed partial class UpdatePackageViewModel : ObservableObject
 
     public bool RequiresExplicit => Package.RequiresExplicit;
 
-    /// <summary>"Ignored" / "Pinned / explicit only" / "Current version unknown", in that priority
-    /// order - see <c>docs/specs/02-updates.md</c>.</summary>
+    /// <summary>"Ignored" / "Already updated (unconfirmed)" / "Pinned / explicit only" / "Current
+    /// version unknown - updating may install a second copy", in that priority order - see
+    /// <c>docs/specs/02-updates.md</c> and, for the second one,
+    /// <c>docs/specs/09-friendly-update-outcomes.md</c>'s addendum.</summary>
     public string Notes
     {
         get
@@ -80,6 +96,11 @@ public sealed partial class UpdatePackageViewModel : ObservableObject
                 return "Ignored";
             }
 
+            if (IsPendingVersionConfirmation)
+            {
+                return $"Already updated to {AvailableVersion} - shown here in case a second copy was installed";
+            }
+
             if (RequiresExplicit)
             {
                 return "Pinned / explicit only";
@@ -87,12 +108,20 @@ public sealed partial class UpdatePackageViewModel : ObservableObject
 
             if (InstalledVersion.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
             {
-                return "Current version unknown";
+                return "Current version unknown - updating may install a second copy";
             }
 
             return string.Empty;
         }
     }
+
+    /// <summary>True for a row that should be hidden unless "Show ignored" is on - either the user
+    /// explicitly ignored it (<see cref="IsIgnored"/>), or it is a not-yet-confirmed "already
+    /// updated" row for a package whose installed version is unknown
+    /// (<see cref="IsPendingVersionConfirmation"/>). Both are hidden the same way so the latter
+    /// stays discoverable without a second toggle - see
+    /// <c>docs/specs/09-friendly-update-outcomes.md</c>'s addendum.</summary>
+    public bool IsHiddenByDefault => IsIgnored || IsPendingVersionConfirmation;
 
     public string StatusGlyph => State switch
     {
@@ -104,15 +133,19 @@ public sealed partial class UpdatePackageViewModel : ObservableObject
         _ => string.Empty,
     };
 
-    /// <summary>"Reinstall..." row action - see <see cref="WingetSuggestedAction.Reinstall"/>.</summary>
-    public bool CanReinstall => SuggestedAction == WingetSuggestedAction.Reinstall;
+    /// <summary>"Reinstall..." row action - see <see cref="WingetSuggestedAction.Reinstall"/>.
+    /// <see cref="WingetSuggestedAction"/> is a <c>[Flags]</c> enum, so this and
+    /// <see cref="CanHide"/> can both be true at once (e.g. "no applicable update" offers both) -
+    /// see <c>docs/specs/09-friendly-update-outcomes.md</c>'s addendum.</summary>
+    public bool CanReinstall => SuggestedAction.HasFlag(WingetSuggestedAction.Reinstall);
 
     /// <summary>"Hide this update" row action - see <see cref="WingetSuggestedAction.Hide"/>.</summary>
-    public bool CanHide => SuggestedAction == WingetSuggestedAction.Hide;
+    public bool CanHide => SuggestedAction.HasFlag(WingetSuggestedAction.Hide);
 
     /// <summary>"Try again" / "Try install again" row action - see
     /// <see cref="WingetSuggestedAction.Retry"/> and <see cref="WingetSuggestedAction.CloseAppAndRetry"/>.</summary>
-    public bool CanRetry => SuggestedAction is WingetSuggestedAction.Retry or WingetSuggestedAction.CloseAppAndRetry;
+    public bool CanRetry =>
+        SuggestedAction.HasFlag(WingetSuggestedAction.Retry) || SuggestedAction.HasFlag(WingetSuggestedAction.CloseAppAndRetry);
 
     /// <summary>"Try again" normally, "Try install again" for <see cref="IsCriticalReinstallFailure"/>.</summary>
     public string RetryButtonText => IsCriticalReinstallFailure ? "Try install again" : "Try again";
@@ -146,6 +179,41 @@ public sealed partial class UpdatePackageViewModel : ObservableObject
         SuggestedAction = outcome.SuggestedAction;
         IsCriticalReinstallFailure = outcome.IsCritical;
         State = outcome.Kind == ReinstallOutcomeKind.Reinstalled ? UpdateRowState.Updated : UpdateRowState.Failed;
+    }
+
+    /// <summary>Applies a <see cref="PersistedUpdateOutcome"/> remembered from a previous session
+    /// (see <c>UpdatesViewModel.MergePackages</c>) - reconstructs the same row status/actions
+    /// <see cref="ApplyOutcome"/> would have left behind, without re-running anything. Only ever
+    /// called for a remembered failure (a success is never persisted - see
+    /// <see cref="Winget.UpdateOutcomeMemory"/>), so <see cref="State"/> is always
+    /// <see cref="UpdateRowState.Skipped"/> or <see cref="UpdateRowState.Failed"/>.</summary>
+    public void ApplyPersistedOutcome(PersistedUpdateOutcome outcome)
+    {
+        ArgumentNullException.ThrowIfNull(outcome);
+
+        StatusText = outcome.Title;
+        StatusTooltip = outcome.Explanation;
+        SuggestedAction = outcome.SuggestedAction;
+        IsCriticalReinstallFailure = outcome.IsCriticalReinstallFailure;
+        IsPendingVersionConfirmation = false;
+        State = outcome.Kind == WingetOutcomeKind.NoApplicableUpdate ? UpdateRowState.Skipped : UpdateRowState.Failed;
+    }
+
+    /// <summary>Applies a <see cref="PersistedUpdateOutcome"/> remembered for the "already updated,
+    /// but the installed version was unknown so Porchlight can't confirm it" case - see
+    /// <see cref="IsPendingVersionConfirmation"/>. Unlike <see cref="ApplyPersistedOutcome"/>, this
+    /// is a remembered success, not a failure: the row is shown as updated but hidden by default.</summary>
+    public void ApplyPersistedAlreadyUpdatedMarker(PersistedUpdateOutcome outcome)
+    {
+        ArgumentNullException.ThrowIfNull(outcome);
+
+        StatusText = outcome.Title;
+        StatusTooltip = outcome.Explanation;
+        SuggestedAction = WingetSuggestedAction.None;
+        IsCriticalReinstallFailure = false;
+        IsPendingVersionConfirmation = true;
+        IsSelected = false;
+        State = UpdateRowState.Updated;
     }
 
     /// <summary>Applies the result of an install-only retry (see

@@ -14,6 +14,7 @@ public sealed class UpdatesViewModelTests : IDisposable
     private readonly string _directory;
     private readonly SettingsStore _settingsStore;
     private readonly FakeWingetClient _wingetClient = new();
+    private readonly FakeAppInUseDiagnosticsService _appInUseDiagnostics = new();
 
     public UpdatesViewModelTests()
     {
@@ -31,14 +32,15 @@ public sealed class UpdatesViewModelTests : IDisposable
     }
 
     private UpdatesViewModel CreateViewModel() =>
-        new(_wingetClient, _settingsStore, NullLogger<UpdatesViewModel>.Instance);
+        new(_wingetClient, _settingsStore, _appInUseDiagnostics, NullLogger<UpdatesViewModel>.Instance);
 
     private UpdatesViewModel CreateViewModel(TimeProvider timeProvider) =>
-        new(_wingetClient, _settingsStore, NullLogger<UpdatesViewModel>.Instance, timeProvider);
+        new(_wingetClient, _settingsStore, _appInUseDiagnostics, NullLogger<UpdatesViewModel>.Instance, timeProvider);
 
-    private static WingetPackage Package(string id, bool requiresExplicit = false, string name = "") =>
-        new(Name: string.IsNullOrEmpty(name) ? id : name, Id: id, InstalledVersion: "1.0", AvailableVersion: "2.0",
-            Source: "winget", RequiresExplicit: requiresExplicit);
+    private static WingetPackage Package(
+        string id, bool requiresExplicit = false, string name = "", string installedVersion = "1.0", string availableVersion = "2.0") =>
+        new(Name: string.IsNullOrEmpty(name) ? id : name, Id: id, InstalledVersion: installedVersion,
+            AvailableVersion: availableVersion, Source: "winget", RequiresExplicit: requiresExplicit);
 
     [Fact]
     public async Task RefreshAsync_DefaultSelection_TicksNonIgnoredNonExplicitOnly()
@@ -210,7 +212,11 @@ public sealed class UpdatesViewModelTests : IDisposable
         var remaining = Assert.Single(viewModel.Packages);
         Assert.Equal(UpdateRowState.Skipped, remaining.State);
         Assert.Equal("Not available for this PC", remaining.StatusText);
-        Assert.Equal(WingetSuggestedAction.Hide, remaining.SuggestedAction);
+        // APPINSTALLER_CLI_ERROR_UPDATE_NOT_APPLICABLE offers both Reinstall and Hide - see
+        // docs/specs/09-friendly-update-outcomes.md's addendum (RARLab.WinRAR on the maintainer's PC).
+        Assert.Equal(WingetSuggestedAction.Reinstall | WingetSuggestedAction.Hide, remaining.SuggestedAction);
+        Assert.True(remaining.CanReinstall);
+        Assert.True(remaining.CanHide);
         Assert.Contains("Finished: 1 not available for this PC", viewModel.LogText);
     }
 
@@ -566,5 +572,207 @@ public sealed class UpdatesViewModelTests : IDisposable
         await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
 
         Assert.Null(row.WaitingHint);
+    }
+
+    // --- Fix 1: remember last outcome across restarts -------------------------------------------
+    // See docs/specs/09-friendly-update-outcomes.md's addendum.
+
+    [Fact]
+    public async Task RefreshAsync_AfterSimulatedRestart_RestoresRememberedOutcomeForSameIdAndVersion()
+    {
+        // JanDeDobbeleer.OhMyPosh on the maintainer's PC.
+        var package = Package("JanDeDobbeleer.OhMyPosh", availableVersion: "2.0");
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        _wingetClient.UpgradeListResults.Enqueue([package]); // still listed - the failed upgrade changed nothing
+        _wingetClient.UpgradeResultsById["JanDeDobbeleer.OhMyPosh"] = new WingetResult(unchecked((int)0x8A15008E), []);
+        var firstSession = CreateViewModel();
+        await firstSession.RefreshAsync(quiet: false);
+        firstSession.SelectAllCommand.Execute(null);
+        await firstSession.UpdateSelectedCommand.ExecuteAsync(null);
+        Assert.Equal("Needs a reinstall", firstSession.Packages.Single().StatusText);
+
+        // A brand-new view model over the same persisted settings, with no in-session state of its
+        // own - simulates the app being restarted.
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        var secondSession = CreateViewModel();
+        await secondSession.RefreshAsync(quiet: false);
+
+        var row = secondSession.Packages.Single();
+        Assert.Equal("Needs a reinstall", row.StatusText);
+        Assert.True(row.CanReinstall);
+        Assert.Equal(WingetSuggestedAction.Reinstall, row.SuggestedAction);
+        Assert.Single(_wingetClient.UpgradeCalls); // never re-ran the upgrade to find this out again
+    }
+
+    [Fact]
+    public async Task RefreshAsync_RememberedOutcomeForDifferentAvailableVersion_IsNotRestored()
+    {
+        var package = Package("Some.Id", availableVersion: "2.0");
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        _wingetClient.UpgradeResultsById["Some.Id"] = new WingetResult(unchecked((int)0x8A15008E), []);
+        var firstSession = CreateViewModel();
+        await firstSession.RefreshAsync(quiet: false);
+        firstSession.SelectAllCommand.Execute(null);
+        await firstSession.UpdateSelectedCommand.ExecuteAsync(null);
+
+        // A newer version is now available - the old remembered outcome no longer applies.
+        var newerPackage = Package("Some.Id", availableVersion: "3.0");
+        _wingetClient.UpgradeListResults.Enqueue([newerPackage]);
+        var secondSession = CreateViewModel();
+        await secondSession.RefreshAsync(quiet: false);
+
+        var row = secondSession.Packages.Single();
+        Assert.NotEqual("Needs a reinstall", row.StatusText);
+        Assert.False(row.CanReinstall);
+    }
+
+    [Fact]
+    public async Task RetryRowAsync_SucceedsAfterRememberedFailure_ClearsRememberedOutcome()
+    {
+        var package = Package("Some.Id");
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        _wingetClient.UpgradeResultsById["Some.Id"] = new WingetResult(unchecked((int)0x8A15008E), []);
+        var viewModel = CreateViewModel();
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+        var row = viewModel.Packages.Single();
+        Assert.Equal("Needs a reinstall", row.StatusText);
+
+        _wingetClient.UpgradeResultsById["Some.Id"] = new WingetResult(0, []);
+        _wingetClient.UpgradeListResults.Enqueue([]); // succeeded - no longer listed
+        await viewModel.RetryRowCommand.ExecuteAsync(row);
+
+        Assert.Null(UpdateOutcomeMemory.Find(_settingsStore.Current.Updates.LastOutcomes, "Some.Id", "2.0"));
+    }
+
+    // --- Fix 5: "Unknown" installed-version packages that update successfully -------------------
+    // See docs/specs/09-friendly-update-outcomes.md's addendum (Google.CloudSDK on the maintainer's
+    // PC: Unknown -> 586.0.0 reported success, but the row kept reappearing and a second per-user
+    // copy was installed alongside the existing machine-wide one).
+
+    [Fact]
+    public async Task UpdateSelectedAsync_UnknownVersionPackageUpdatesSuccessfully_HidesRowByDefault()
+    {
+        var package = Package("Google.CloudSDK", installedVersion: "Unknown", availableVersion: "586.0.0");
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        _wingetClient.UpgradeResultsById["Google.CloudSDK"] = new WingetResult(0, []);
+        var viewModel = CreateViewModel();
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+
+        // Winget still lists it in the automatic quiet re-check after the update run, with the same
+        // available version - it can't confirm the "Unknown" installed version actually changed.
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+
+        var row = viewModel.Packages.Single();
+        Assert.True(row.IsPendingVersionConfirmation);
+        Assert.True(row.IsHiddenByDefault);
+        Assert.False(row.IsSelected);
+
+        viewModel.ShowIgnored = false;
+        Assert.DoesNotContain(row, viewModel.PackagesView.Cast<UpdatePackageViewModel>());
+
+        viewModel.ShowIgnored = true;
+        Assert.Contains(row, viewModel.PackagesView.Cast<UpdatePackageViewModel>());
+        Assert.Contains("second copy", row.Notes, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_NewerVersionAppearsForHiddenUnknownVersionRow_ShowsItAgain()
+    {
+        var package = Package("Google.CloudSDK", installedVersion: "Unknown", availableVersion: "586.0.0");
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        _wingetClient.UpgradeResultsById["Google.CloudSDK"] = new WingetResult(0, []);
+        var viewModel = CreateViewModel();
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+        Assert.True(viewModel.Packages.Single().IsPendingVersionConfirmation);
+
+        var newerPackage = Package("Google.CloudSDK", installedVersion: "Unknown", availableVersion: "587.0.0");
+        _wingetClient.UpgradeListResults.Enqueue([newerPackage]);
+        await viewModel.RefreshAsync(quiet: false);
+
+        var row = viewModel.Packages.Single();
+        Assert.False(row.IsPendingVersionConfirmation);
+        Assert.False(row.IsHiddenByDefault);
+    }
+
+    [Fact]
+    public void Notes_UnknownInstalledVersion_WarnsAboutSecondCopy()
+    {
+        var row = new UpdatePackageViewModel(Package("Some.Id", installedVersion: "Unknown"));
+
+        Assert.Equal("Current version unknown - updating may install a second copy", row.Notes);
+    }
+
+    // --- Fix 4: hidden UAC-prompt waiting hint -------------------------------------------------
+    // See docs/specs/09-friendly-update-outcomes.md's addendum (Google.CloudSDK sat waiting on a
+    // hidden UAC prompt raised from winget's background process).
+
+    [Fact]
+    public async Task UpdateSelectedAsync_OutputMentionsAdminPrompt_ShowsWaitingHintImmediately()
+    {
+        var package = Package("Google.CloudSDK");
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        _wingetClient.UpgradeLogLines.Add("The installer will request to run as administrator. Expect a prompt.");
+        _wingetClient.Gate = new TaskCompletionSource();
+        var viewModel = CreateViewModel();
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+        var row = viewModel.Packages.Single();
+
+        var updateTask = viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+        await Task.Delay(20, TestContext.Current.CancellationToken); // let the reported line propagate
+
+        Assert.Equal(UpdatesViewModel.AdminPromptWaitingHintText, row.WaitingHint);
+
+        _wingetClient.UpgradeListResults.Enqueue([]);
+        _wingetClient.Gate.SetResult();
+        await updateTask;
+
+        Assert.Null(row.WaitingHint);
+    }
+
+    // --- Fix 3: naming the programs holding files when "app in use" ----------------------------
+
+    [Fact]
+    public async Task UpdateSelectedAsync_AppInUseByAnotherApplication_EnrichesExplanationWithLockingProcesses()
+    {
+        var package = Package("OBSProject.OBSStudio", name: "OBS Studio");
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        _wingetClient.UpgradeResultsById["OBSProject.OBSStudio"] = new WingetResult(unchecked((int)0x8A150111), []);
+        _appInUseDiagnostics.Result =
+            "These programs are using OBS Studio's files: Chrome, Claude. Close them, then try again.";
+        var viewModel = CreateViewModel();
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+
+        var row = viewModel.Packages.Single();
+        Assert.Contains("Chrome, Claude", row.StatusTooltip);
+        Assert.Equal(("OBSProject.OBSStudio", "OBS Studio"), Assert.Single(_appInUseDiagnostics.Calls));
+    }
+
+    [Fact]
+    public async Task UpdateSelectedAsync_AppInUseDiagnosticsFindsNothing_FallsBackToGenericText()
+    {
+        var package = Package("OBSProject.OBSStudio", name: "OBS Studio");
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        _wingetClient.UpgradeResultsById["OBSProject.OBSStudio"] = new WingetResult(unchecked((int)0x8A150111), []);
+        _appInUseDiagnostics.Result = null;
+        var viewModel = CreateViewModel();
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+
+        var row = viewModel.Packages.Single();
+        Assert.Equal("Close the app and try again", row.StatusText);
+        Assert.Contains("currently open", row.StatusTooltip);
     }
 }

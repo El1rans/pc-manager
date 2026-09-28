@@ -58,9 +58,19 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     /// simply took about 16 minutes and then succeeded.</summary>
     public const string WaitingHintTextSilent = "Still installing. Large apps can take several minutes.";
 
+    /// <summary>"Waiting for your permission..." - shown the moment winget's own output says it is
+    /// about to raise a UAC admin prompt (see <see cref="WingetExitCodes.MentionsAdminPromptRequest"/>),
+    /// rather than waiting for <see cref="WaitingHintThreshold"/> to elapse in silence. A UAC prompt
+    /// raised from winget's background process can appear only as a flashing taskbar icon, never
+    /// brought to the foreground - observed on the maintainer's PC for Google.CloudSDK. See
+    /// <c>docs/specs/09-friendly-update-outcomes.md</c>'s addendum.</summary>
+    public const string AdminPromptWaitingHintText =
+        "Waiting for your permission - look for the Windows prompt on the taskbar.";
+
     private readonly IWingetClient _wingetClient;
     private readonly ReinstallWorkflow _reinstallWorkflow;
     private readonly ISettingsStore _settingsStore;
+    private readonly IAppInUseDiagnosticsService _appInUseDiagnostics;
     private readonly ILogger<UpdatesViewModel> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly StringBuilder _log = new();
@@ -184,8 +194,10 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         "An update is still running. If you close Porchlight now, the current installer keeps " +
         "running but you won't see the result. Close anyway?";
 
-    public UpdatesViewModel(IWingetClient wingetClient, ISettingsStore settingsStore, ILogger<UpdatesViewModel> logger)
-        : this(wingetClient, settingsStore, logger, TimeProvider.System)
+    public UpdatesViewModel(
+        IWingetClient wingetClient, ISettingsStore settingsStore, IAppInUseDiagnosticsService appInUseDiagnostics,
+        ILogger<UpdatesViewModel> logger)
+        : this(wingetClient, settingsStore, appInUseDiagnostics, logger, TimeProvider.System)
     {
     }
 
@@ -193,11 +205,13 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     /// instead of a real clock/timer, so the "may be waiting for you" hint's timing
     /// (<see cref="WaitingHintThreshold"/>) never depends on wall-clock timing.</summary>
     public UpdatesViewModel(
-        IWingetClient wingetClient, ISettingsStore settingsStore, ILogger<UpdatesViewModel> logger, TimeProvider timeProvider)
+        IWingetClient wingetClient, ISettingsStore settingsStore, IAppInUseDiagnosticsService appInUseDiagnostics,
+        ILogger<UpdatesViewModel> logger, TimeProvider timeProvider)
     {
         _wingetClient = wingetClient;
         _reinstallWorkflow = new ReinstallWorkflow(wingetClient);
         _settingsStore = settingsStore;
+        _appInUseDiagnostics = appInUseDiagnostics;
         _logger = logger;
         _timeProvider = timeProvider;
 
@@ -319,6 +333,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     {
         var ignoredIds = new HashSet<string>(_settingsStore.Current.Updates.IgnoredIds, StringComparer.OrdinalIgnoreCase);
         var previous = Packages.ToDictionary(p => p.Id, StringComparer.OrdinalIgnoreCase);
+        var lastOutcomes = _settingsStore.Current.Updates.LastOutcomes;
 
         Packages.Clear();
         foreach (var package in packages)
@@ -340,6 +355,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
                     row.StatusTooltip = oldRow.StatusTooltip;
                     row.SuggestedAction = oldRow.SuggestedAction;
                     row.IsCriticalReinstallFailure = oldRow.IsCriticalReinstallFailure;
+                    row.IsPendingVersionConfirmation = oldRow.IsPendingVersionConfirmation;
                 }
             }
             else
@@ -347,8 +363,30 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
                 row.IsSelected = !isIgnored && !package.RequiresExplicit;
             }
 
+            // Whatever was remembered for this exact id + available version (see
+            // UpdateOutcomeMemory.Find) always wins over the in-session carryover above - not just
+            // "no previous row" (a brand-new view model after an app restart), but every refresh:
+            // e.g. right after PersistUpgradeOutcome remembers an "Unknown" installed-version
+            // package as "already updated", the very next (quiet) refresh must hide it immediately
+            // rather than only starting from the next app session. See
+            // docs/specs/09-friendly-update-outcomes.md's addendum.
+            var remembered = UpdateOutcomeMemory.Find(lastOutcomes, package.Id, package.AvailableVersion);
+            if (remembered is { Kind: WingetOutcomeKind.Updated or WingetOutcomeKind.UpdatedRestartNeeded })
+            {
+                row.ApplyPersistedAlreadyUpdatedMarker(remembered);
+            }
+            else if (remembered is not null)
+            {
+                row.ApplyPersistedOutcome(remembered);
+            }
+
             Packages.Add(row);
         }
+
+        // Bound the remembered-outcomes list to whatever winget currently lists, rather than
+        // letting it grow forever - see UpdateOutcomeMemory.Prune.
+        var currentIds = packages.Select(p => p.Id).ToList();
+        _settingsStore.Update(s => UpdateOutcomeMemory.Prune(s.Updates.LastOutcomes, currentIds));
 
         UpdateSummary();
         UpdateBadge();
@@ -356,8 +394,8 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
 
     private void UpdateSummary()
     {
-        var visible = Packages.Count(p => !p.IsIgnored);
-        var ignored = Packages.Count(p => p.IsIgnored);
+        var visible = Packages.Count(p => !p.IsHiddenByDefault);
+        var ignored = Packages.Count(p => p.IsHiddenByDefault);
 
         var text = visible == 1 ? "1 update available" : $"{visible} updates available";
         if (ignored > 0)
@@ -371,7 +409,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
 
     private void UpdateBadge()
     {
-        var count = Packages.Count(p => !p.IsIgnored);
+        var count = Packages.Count(p => !p.IsHiddenByDefault);
         Badge = count > 0 ? count.ToString(CultureInfo.InvariantCulture) : null;
     }
 
@@ -382,7 +420,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
             return false;
         }
 
-        if (row.IsIgnored && !ShowIgnored)
+        if (row.IsHiddenByDefault && !ShowIgnored)
         {
             return false;
         }
@@ -470,7 +508,6 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         var ignoredMidRun = 0;
         var completed = 0;
 
-        var logProgress = new Progress<string>(AppendLog);
         var stepProgress = new Progress<string>(text => ProgressLine = text);
 
         foreach (var row in selected)
@@ -499,6 +536,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
             row.StatusText = "Updating...";
             CurrentStep = $"[{completed}/{selected.Count}] Updating {row.Id}";
 
+            var logProgress = CreateLogProgress(row);
             try
             {
                 // Always CancellationToken.None: once winget has actually launched, killing it
@@ -511,7 +549,9 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
                 var result = await operationTask.ConfigureAwait(true);
 
                 var outcome = WingetExitCodes.DescribeOutcome(result.ExitCode, result.Lines);
+                outcome = await EnrichAppInUseOutcomeAsync(row, outcome).ConfigureAwait(true);
                 row.ApplyOutcome(outcome);
+                PersistUpgradeOutcome(row, outcome);
                 counts[outcome.Kind] = counts.GetValueOrDefault(outcome.Kind) + 1;
                 if (outcome.Kind == WingetOutcomeKind.UpdatedRestartNeeded)
                 {
@@ -746,7 +786,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         IsUpdating = true;
         CurrentStep = $"Reinstalling {row.Id}";
 
-        var logProgress = new Progress<string>(AppendLog);
+        var logProgress = CreateLogProgress(row);
         var stepProgress = new Progress<string>(text => ProgressLine = text);
         var succeeded = false;
 
@@ -757,6 +797,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
                 .ConfigureAwait(true);
 
             row.ApplyReinstallOutcome(outcome);
+            PersistReinstallOutcome(row, outcome);
             succeeded = outcome.Kind == ReinstallOutcomeKind.Reinstalled;
 
             var summary = succeeded
@@ -832,7 +873,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         row.State = UpdateRowState.Updating;
         row.StatusText = "Updating...";
 
-        var logProgress = new Progress<string>(AppendLog);
+        var logProgress = CreateLogProgress(row);
         var stepProgress = new Progress<string>(text => ProgressLine = text);
         var succeeded = false;
 
@@ -842,7 +883,9 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
             await WaitWithHintAsync(row, operationTask).ConfigureAwait(true);
             var result = await operationTask.ConfigureAwait(true);
             var outcome = WingetExitCodes.DescribeOutcome(result.ExitCode, result.Lines);
+            outcome = await EnrichAppInUseOutcomeAsync(row, outcome).ConfigureAwait(true);
             row.ApplyOutcome(outcome);
+            PersistUpgradeOutcome(row, outcome);
             succeeded = outcome.Kind is WingetOutcomeKind.Updated or WingetOutcomeKind.UpdatedRestartNeeded;
             CurrentStep = $"Finished: {row.Id} - {outcome.Title}";
             AppendLog($"<< {row.Id}: {outcome.Title} (exit {outcome.ExitCodeHex})");
@@ -880,7 +923,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         IsUpdating = true;
         CurrentStep = $"Installing {row.Id}";
 
-        var logProgress = new Progress<string>(AppendLog);
+        var logProgress = CreateLogProgress(row);
         var stepProgress = new Progress<string>(text => ProgressLine = text);
         var succeeded = false;
 
@@ -891,6 +934,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
             var result = await operationTask.ConfigureAwait(true);
             var outcome = WingetExitCodes.DescribeOutcome(result.ExitCode, result.Lines);
             row.ApplyInstallOnlyOutcome(outcome);
+            PersistInstallOnlyOutcome(row, outcome);
             succeeded = outcome.Kind is WingetOutcomeKind.Updated or WingetOutcomeKind.UpdatedRestartNeeded;
             CurrentStep = $"Finished: {row.Id} - {row.StatusText}";
             AppendLog($"<< {row.Id}: {outcome.Title} (exit {outcome.ExitCodeHex})");
@@ -918,6 +962,156 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         }
     }
 
+    /// <summary>Wraps <see cref="AppendLog"/> with live detection of winget's "will request to run
+    /// as administrator" line (<see cref="WingetExitCodes.MentionsAdminPromptRequest"/>) for
+    /// <paramref name="row"/> - sets <see cref="UpdatePackageViewModel.WaitingHint"/> to
+    /// <see cref="AdminPromptWaitingHintText"/> the moment it's seen (rather than waiting for
+    /// <see cref="WaitingHintThreshold"/> to elapse in silence - see <see cref="WaitWithHintAsync"/>),
+    /// and clears it again as soon as any further output line arrives - see
+    /// <c>docs/specs/09-friendly-update-outcomes.md</c>'s addendum: "Clear it when further output
+    /// arrives or the operation ends" (the latter is already handled by
+    /// <see cref="WaitWithHintAsync"/>'s <c>finally</c>).</summary>
+    private Progress<string> CreateLogProgress(UpdatePackageViewModel row)
+    {
+        var sawAdminPrompt = false;
+        return new Progress<string>(line =>
+        {
+            AppendLog(line);
+            if (WingetExitCodes.MentionsAdminPromptRequest(line))
+            {
+                sawAdminPrompt = true;
+                row.WaitingHint = AdminPromptWaitingHintText;
+            }
+            else if (sawAdminPrompt)
+            {
+                sawAdminPrompt = false;
+                row.WaitingHint = null;
+            }
+        });
+    }
+
+    /// <summary>For the "app in use" outcome specifically (see
+    /// <see cref="Porchlight.Core.Processes.WingetExitCodes.AppInUseByAnotherApplication"/>), tries
+    /// to replace the generic "close the app" explanation with one naming the actual programs
+    /// holding the app's files open (<see cref="IAppInUseDiagnosticsService"/>) - see
+    /// <c>docs/specs/09-friendly-update-outcomes.md</c>'s addendum: real case, OBS Studio blocked
+    /// by Chrome and another app while OBS itself was not running. Falls back to
+    /// <paramref name="outcome"/> unchanged if the lookup finds nothing or fails.</summary>
+    private async Task<WingetOutcome> EnrichAppInUseOutcomeAsync(UpdatePackageViewModel row, WingetOutcome outcome)
+    {
+        if (outcome.ExitCode != WingetExitCodes.AppInUseByAnotherApplication)
+        {
+            return outcome;
+        }
+
+        var enriched = await _appInUseDiagnostics
+            .TryDescribeLockingProcessesAsync(row.Id, row.Name)
+            .ConfigureAwait(true);
+        return enriched is null ? outcome : outcome with { Explanation = enriched };
+    }
+
+    /// <summary>Remembers/forgets the outcome of a plain upgrade for
+    /// <see cref="UpdateOutcomeMemory"/> - see <c>docs/specs/09-friendly-update-outcomes.md</c>'s
+    /// "Remember last outcome across restarts" addendum. A package whose <c>InstalledVersion</c> is
+    /// "Unknown" is a special case: winget reporting success there doesn't tell Porchlight whether
+    /// the old install was actually replaced or a second copy was installed alongside it (observed
+    /// for Google.CloudSDK), so that case is remembered as "already updated" rather than forgotten
+    /// outright - see <see cref="UpdatePackageViewModel.IsPendingVersionConfirmation"/>.</summary>
+    private void PersistUpgradeOutcome(UpdatePackageViewModel row, WingetOutcome outcome)
+    {
+        if (outcome.Kind is WingetOutcomeKind.Updated or WingetOutcomeKind.UpdatedRestartNeeded)
+        {
+            if (row.InstalledVersion.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+            {
+                RememberPersistedOutcome(new PersistedUpdateOutcome
+                {
+                    PackageId = row.Id,
+                    AvailableVersion = row.AvailableVersion,
+                    Kind = outcome.Kind,
+                    Title = outcome.Title,
+                    Explanation = $"Already updated to {row.AvailableVersion}. The previous installed version " +
+                        "couldn't be determined, so if this keeps reappearing after installing again, it may " +
+                        "have installed a second copy rather than replacing the old one.",
+                    ExitCode = outcome.ExitCode,
+                    SuggestedAction = WingetSuggestedAction.None,
+                    IsCriticalReinstallFailure = false,
+                });
+                return;
+            }
+
+            ForgetPersistedOutcome(row.Id);
+            return;
+        }
+
+        RememberPersistedOutcome(new PersistedUpdateOutcome
+        {
+            PackageId = row.Id,
+            AvailableVersion = row.AvailableVersion,
+            Kind = outcome.Kind,
+            Title = outcome.Title,
+            Explanation = outcome.TooltipText,
+            ExitCode = outcome.ExitCode,
+            SuggestedAction = outcome.SuggestedAction,
+            IsCriticalReinstallFailure = false,
+        });
+    }
+
+    /// <summary>Remembers/forgets a <see cref="ReinstallWorkflow"/> run's outcome - see
+    /// <see cref="PersistUpgradeOutcome"/>. Reinstall always uninstalls first, so the "Unknown"
+    /// second-copy risk that upgrade has does not apply here.</summary>
+    private void PersistReinstallOutcome(UpdatePackageViewModel row, ReinstallOutcome outcome)
+    {
+        if (outcome.Kind == ReinstallOutcomeKind.Reinstalled)
+        {
+            ForgetPersistedOutcome(row.Id);
+            return;
+        }
+
+        RememberPersistedOutcome(new PersistedUpdateOutcome
+        {
+            PackageId = row.Id,
+            AvailableVersion = row.AvailableVersion,
+            Kind = WingetOutcomeKind.Failed,
+            Title = outcome.Title,
+            Explanation = outcome.Explanation,
+            ExitCode = outcome.InstallOutcome?.ExitCode ?? outcome.UninstallOutcome.ExitCode,
+            SuggestedAction = outcome.SuggestedAction,
+            IsCriticalReinstallFailure = outcome.IsCritical,
+        });
+    }
+
+    /// <summary>Remembers/forgets an install-only retry's outcome (see
+    /// <see cref="UpdatePackageViewModel.IsCriticalReinstallFailure"/>) - see
+    /// <see cref="PersistUpgradeOutcome"/>. Delegates the success case to
+    /// <see cref="PersistUpgradeOutcome"/> since <see cref="UpdatePackageViewModel.ApplyInstallOnlyOutcome"/>
+    /// treats it identically to a plain successful upgrade.</summary>
+    private void PersistInstallOnlyOutcome(UpdatePackageViewModel row, WingetOutcome outcome)
+    {
+        if (outcome.Kind is WingetOutcomeKind.Updated or WingetOutcomeKind.UpdatedRestartNeeded)
+        {
+            PersistUpgradeOutcome(row, outcome);
+            return;
+        }
+
+        RememberPersistedOutcome(new PersistedUpdateOutcome
+        {
+            PackageId = row.Id,
+            AvailableVersion = row.AvailableVersion,
+            Kind = WingetOutcomeKind.Failed,
+            Title = "Not installed - the new version didn't install",
+            Explanation = $"The new version still couldn't be installed. {outcome.Explanation} (winget code {outcome.ExitCodeHex})",
+            ExitCode = outcome.ExitCode,
+            SuggestedAction = WingetSuggestedAction.Retry,
+            IsCriticalReinstallFailure = true,
+        });
+    }
+
+    private void RememberPersistedOutcome(PersistedUpdateOutcome outcome) =>
+        _settingsStore.Update(s => UpdateOutcomeMemory.Remember(s.Updates.LastOutcomes, outcome));
+
+    private void ForgetPersistedOutcome(string packageId) =>
+        _settingsStore.Update(s => UpdateOutcomeMemory.Forget(s.Updates.LastOutcomes, packageId));
+
     /// <summary>
     /// Waits for <paramref name="operationTask"/> (a winget upgrade/install already in flight for
     /// <paramref name="row"/>), and if it is still running after <see cref="WaitingHintThreshold"/>,
@@ -940,9 +1134,17 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
             var first = await Task.WhenAny(operationTask, delayTask).ConfigureAwait(true);
             if (ReferenceEquals(first, delayTask))
             {
-                var hintText = Silent ? WaitingHintTextSilent : WaitingHintTextInteractive;
-                row.WaitingHint = hintText;
-                ProgressLine = hintText;
+                // Don't stomp on a more specific hint already showing - see CreateLogProgress:
+                // winget's own output saying it's about to raise a UAC prompt is detected the
+                // moment it's seen, independent of this threshold, and is more useful than the
+                // generic text below.
+                if (row.WaitingHint is null)
+                {
+                    var hintText = Silent ? WaitingHintTextSilent : WaitingHintTextInteractive;
+                    row.WaitingHint = hintText;
+                    ProgressLine = hintText;
+                }
+
                 try
                 {
                     await operationTask.ConfigureAwait(true);
