@@ -19,7 +19,9 @@ using Porchlight.Core.Winget;
 namespace Porchlight.App.Features.Updates;
 
 /// <summary>View model for the Updates page: lists <c>winget upgrade</c> results, lets the user
-/// pick which to install, and runs them one at a time. See <c>docs/specs/02-updates.md</c>.</summary>
+/// pick which to install, and runs them one at a time. Every outcome shown is a plain-language
+/// <see cref="WingetOutcome"/> (see <c>docs/specs/09-friendly-update-outcomes.md</c>), never a bare
+/// hex code. See also <c>docs/specs/02-updates.md</c>.</summary>
 public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, IBusyGuard
 {
     /// <summary>Log panel cap - see <c>docs/specs/02-updates.md</c>.</summary>
@@ -34,9 +36,33 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     /// avoids rebuilding the whole (potentially large) log string on every single line.</summary>
     private static readonly TimeSpan LogFlushInterval = TimeSpan.FromMilliseconds(100);
 
+    /// <summary>
+    /// How long a single package's winget operation can run with no result before the Updates page
+    /// shows the "may be waiting for you" hint - see <see cref="WaitWithHintAsync"/>. Observed
+    /// on the maintainer's PC: Google.CloudSDK's installer opened its own interactive window and sat
+    /// there for several minutes with no winget output at all - see
+    /// <c>docs/specs/09-friendly-update-outcomes.md</c>.
+    /// </summary>
+    public static readonly TimeSpan WaitingHintThreshold = TimeSpan.FromMinutes(2);
+
+    /// <summary>Shown past <see cref="WaitingHintThreshold"/> when <see cref="Silent"/> is off - an
+    /// installer with no <c>--silent</c> flag can (and, per the maintainer's real
+    /// Google.CloudSDK/OhMyPosh runs, sometimes does) open its own interactive window that just sits
+    /// there until someone clicks through it.</summary>
+    public const string WaitingHintTextInteractive =
+        "Still working. The installer may be waiting for you - look for a setup window on your screen or taskbar.";
+
+    /// <summary>Shown past <see cref="WaitingHintThreshold"/> when <see cref="Silent"/> is on - there
+    /// is no window to wait on (a silent install can't prompt), so this stays calm rather than
+    /// suggesting the user go look for one. The maintainer's real Google.CloudSDK silent install
+    /// simply took about 16 minutes and then succeeded.</summary>
+    public const string WaitingHintTextSilent = "Still installing. Large apps can take several minutes.";
+
     private readonly IWingetClient _wingetClient;
+    private readonly ReinstallWorkflow _reinstallWorkflow;
     private readonly ISettingsStore _settingsStore;
     private readonly ILogger<UpdatesViewModel> _logger;
+    private readonly TimeProvider _timeProvider;
     private readonly StringBuilder _log = new();
     private readonly List<string> _pendingLogLines = [];
     private readonly DispatcherTimer _logFlushTimer;
@@ -49,6 +75,9 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RefreshCommand))]
     [NotifyCanExecuteChangedFor(nameof(UpdateSelectedCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RequestReinstallCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ConfirmReinstallCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RetryRowCommand))]
     private bool _isBusy;
 
     [ObservableProperty]
@@ -101,10 +130,51 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     [NotifyPropertyChangedFor(nameof(UpdateSelectedButtonText))]
     private int _selectedCount;
 
+    /// <summary>The DataGrid's currently selected row, for the details panel below it - see
+    /// <c>docs/specs/09-friendly-update-outcomes.md</c>'s row actions.</summary>
+    [ObservableProperty]
+    private UpdatePackageViewModel? _selectedRow;
+
+    /// <summary>The row a "Reinstall..." click is asking to confirm, or null when no confirmation
+    /// is pending - drives <see cref="IsReinstallConfirmationVisible"/> and
+    /// <see cref="ReinstallConfirmationMessage"/>. Kept separate from <see cref="SelectedRow"/> so
+    /// the confirmation survives the user clicking elsewhere in the grid.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsReinstallConfirmationVisible))]
+    [NotifyPropertyChangedFor(nameof(ReinstallConfirmationMessage))]
+    [NotifyCanExecuteChangedFor(nameof(ConfirmReinstallCommand))]
+    private UpdatePackageViewModel? _pendingReinstallRow;
+
+    /// <summary>Set after "Hide this update" - a one-line confirmation ("WinRAR won't be shown
+    /// again. You can bring it back with 'Show ignored'.") shown until dismissed or replaced.</summary>
+    [ObservableProperty]
+    private string? _hideConfirmationMessage;
+
     /// <summary>"Update selected (N)" - a plain computed property (rather than an inline XAML
     /// <c>StringFormat</c>) so the exact button text is simple to assert on directly.</summary>
     public string UpdateSelectedButtonText =>
         $"Update selected ({SelectedCount.ToString(CultureInfo.InvariantCulture)})";
+
+    /// <summary>True while a "Reinstall..." click is waiting for the user to confirm or cancel -
+    /// see <c>docs/specs/09-friendly-update-outcomes.md</c>: "Reinstall requires confirmation".</summary>
+    public bool IsReinstallConfirmationVisible => PendingReinstallRow is not null;
+
+    /// <summary>"Reinstall &lt;App&gt;? Porchlight will uninstall &lt;App&gt; and then install the
+    /// newest version. ..." - see <c>docs/specs/09-friendly-update-outcomes.md</c> for the exact wording.</summary>
+    public string ReinstallConfirmationMessage
+    {
+        get
+        {
+            if (PendingReinstallRow is not { } row)
+            {
+                return string.Empty;
+            }
+
+            return $"Reinstall {row.Name}? Porchlight will uninstall {row.Name} and then install the newest " +
+                $"version. Your settings for {row.Name} are usually kept, but this can't be guaranteed. " +
+                $"Close {row.Name} before continuing.";
+        }
+    }
 
     /// <inheritdoc/>
     public bool IsBusyWithWork => IsUpdating;
@@ -115,10 +185,21 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         "running but you won't see the result. Close anyway?";
 
     public UpdatesViewModel(IWingetClient wingetClient, ISettingsStore settingsStore, ILogger<UpdatesViewModel> logger)
+        : this(wingetClient, settingsStore, logger, TimeProvider.System)
+    {
+    }
+
+    /// <summary>Test seam: lets tests use a <see cref="Microsoft.Extensions.Time.Testing.FakeTimeProvider"/>
+    /// instead of a real clock/timer, so the "may be waiting for you" hint's timing
+    /// (<see cref="WaitingHintThreshold"/>) never depends on wall-clock timing.</summary>
+    public UpdatesViewModel(
+        IWingetClient wingetClient, ISettingsStore settingsStore, ILogger<UpdatesViewModel> logger, TimeProvider timeProvider)
     {
         _wingetClient = wingetClient;
+        _reinstallWorkflow = new ReinstallWorkflow(wingetClient);
         _settingsStore = settingsStore;
         _logger = logger;
+        _timeProvider = timeProvider;
 
         // Bypasses the On*Changed hooks below (direct field access, not the generated property
         // setter) - loading saved settings must not immediately persist them again or kick off an
@@ -256,6 +337,9 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
                 {
                     row.State = oldRow.State;
                     row.StatusText = oldRow.StatusText;
+                    row.StatusTooltip = oldRow.StatusTooltip;
+                    row.SuggestedAction = oldRow.SuggestedAction;
+                    row.IsCriticalReinstallFailure = oldRow.IsCriticalReinstallFailure;
                 }
             }
             else
@@ -377,10 +461,13 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         IsBusy = true;
         IsUpdating = true;
 
-        var updated = 0;
+        // One counter per WingetOutcomeKind bucket, reported in the plain-language summary below -
+        // see docs/specs/09-friendly-update-outcomes.md: "Finished: 1 updated, 1 needs a reinstall,
+        // 1 not available for this PC".
+        var counts = new Dictionary<WingetOutcomeKind, int>();
         var restartNeeded = 0;
-        var failed = 0;
-        var skipped = 0;
+        var cancelledByStop = 0;
+        var ignoredMidRun = 0;
         var completed = 0;
 
         var logProgress = new Progress<string>(AppendLog);
@@ -395,7 +482,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
             {
                 row.State = UpdateRowState.Skipped;
                 row.StatusText = "Ignored";
-                skipped++;
+                ignoredMidRun++;
                 continue;
             }
 
@@ -403,7 +490,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
             {
                 row.State = UpdateRowState.Skipped;
                 row.StatusText = "Cancelled";
-                skipped++;
+                cancelledByStop++;
                 continue;
             }
 
@@ -411,7 +498,6 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
             row.State = UpdateRowState.Updating;
             row.StatusText = "Updating...";
             CurrentStep = $"[{completed}/{selected.Count}] Updating {row.Id}";
-            AppendLog($"> winget upgrade --id {row.Id} --exact");
 
             try
             {
@@ -419,74 +505,44 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
                 // mid-install can leave the package half-installed. "Stop after current" is the
                 // IsStopRequested flag checked above, only honoured between packages - see
                 // IWingetClient.UpgradeAsync.
-                var result = await _wingetClient
-                    .UpgradeAsync(row.Id, Silent, logProgress, stepProgress, CancellationToken.None)
-                    .ConfigureAwait(true);
+                var operationTask = _wingetClient
+                    .UpgradeAsync(row.Id, Silent, logProgress, stepProgress, CancellationToken.None);
+                await WaitWithHintAsync(row, operationTask).ConfigureAwait(true);
+                var result = await operationTask.ConfigureAwait(true);
 
-                var (outcome, message) = WingetExitCodes.Describe(result.ExitCode);
-                if (outcome == PackageOutcome.Success && WingetExitCodes.MentionsRestart(result.Lines))
+                var outcome = WingetExitCodes.DescribeOutcome(result.ExitCode, result.Lines);
+                row.ApplyOutcome(outcome);
+                counts[outcome.Kind] = counts.GetValueOrDefault(outcome.Kind) + 1;
+                if (outcome.Kind == WingetOutcomeKind.UpdatedRestartNeeded)
                 {
-                    message = "Updated - restart needed";
+                    restartNeeded++;
                 }
 
-                row.StatusText = message;
-                row.State = outcome switch
-                {
-                    PackageOutcome.Success => UpdateRowState.Updated,
-                    PackageOutcome.Skipped => UpdateRowState.Skipped,
-                    _ => UpdateRowState.Failed,
-                };
-
-                switch (outcome)
-                {
-                    case PackageOutcome.Success:
-                        updated++;
-                        if (message.Contains("restart", StringComparison.OrdinalIgnoreCase))
-                        {
-                            restartNeeded++;
-                        }
-
-                        break;
-                    case PackageOutcome.Skipped:
-                        skipped++;
-                        break;
-                    default:
-                        failed++;
-                        break;
-                }
-
-                AppendLog($"<< {row.Id}: {message} (exit 0x{unchecked((uint)result.ExitCode):X8})");
+                AppendLog($"<< {row.Id}: {outcome.Title} (exit {outcome.ExitCodeHex})");
                 AppendLog(string.Empty);
             }
             catch (WingetNotFoundException ex)
             {
                 row.State = UpdateRowState.Failed;
-                row.StatusText = "Failed";
-                failed++;
+                row.StatusText = "Something went wrong";
+                counts[WingetOutcomeKind.Failed] = counts.GetValueOrDefault(WingetOutcomeKind.Failed) + 1;
                 AppendLog("ERROR: " + ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected failure updating {PackageId}.", row.Id);
                 row.State = UpdateRowState.Failed;
-                row.StatusText = "Failed";
-                failed++;
+                row.StatusText = "Something went wrong";
+                counts[WingetOutcomeKind.Failed] = counts.GetValueOrDefault(WingetOutcomeKind.Failed) + 1;
                 AppendLog("ERROR: " + ex.Message);
             }
-
             // Flushed after every package (rather than left to the ~100ms timer alone) so the log
             // never looks stale for longer than one package's worth of output, and so tests never
             // need to wait on the real timer to see a completed package's log lines.
             FlushLog();
         }
 
-        var restartSuffix = restartNeeded switch
-        {
-            0 => string.Empty,
-            1 => " (1 needs a restart)",
-            _ => $" ({restartNeeded.ToString(CultureInfo.InvariantCulture)} need a restart)",
-        };
-        var summary = $"Finished: {updated} updated{restartSuffix}, {failed} failed, {skipped} skipped";
+        var summary = BuildFinishedSummary(counts, restartNeeded, cancelledByStop, ignoredMidRun);
         CurrentStep = summary;
         ProgressLine = null;
         AppendLog(summary);
@@ -498,6 +554,66 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
 
         await RefreshAsync(quiet: true).ConfigureAwait(true);
     }
+
+    /// <summary>Builds "Finished: 1 updated (1 needs a restart), 1 needs a reinstall, 1 not
+    /// available for this PC, ..." - one clause per non-zero outcome bucket, in a fixed, readable
+    /// order, plus "N cancelled" for rows skipped by "Stop after current" - see
+    /// <c>docs/specs/09-friendly-update-outcomes.md</c>.</summary>
+    private static string BuildFinishedSummary(
+        IReadOnlyDictionary<WingetOutcomeKind, int> counts, int restartNeeded, int cancelledByStop, int ignoredMidRun)
+    {
+        var updated = counts.GetValueOrDefault(WingetOutcomeKind.Updated) +
+            counts.GetValueOrDefault(WingetOutcomeKind.UpdatedRestartNeeded);
+
+        List<string> clauses = [];
+        if (updated > 0)
+        {
+            var restartSuffix = restartNeeded switch
+            {
+                0 => string.Empty,
+                1 => " (1 needs a restart)",
+                _ => $" ({restartNeeded.ToString(CultureInfo.InvariantCulture)} need a restart)",
+            };
+            clauses.Add(Pluralize(updated, "updated", "updated") + restartSuffix);
+        }
+
+        AddClause(clauses, counts, WingetOutcomeKind.ReinstallRequired, "needs a reinstall", "need a reinstall");
+        AddClause(clauses, counts, WingetOutcomeKind.NoApplicableUpdate, "not available for this PC", "not available for this PC");
+        AddClause(clauses, counts, WingetOutcomeKind.AppRunning, "needs the app closed", "need the app closed");
+        AddClause(clauses, counts, WingetOutcomeKind.Cancelled, "cancelled", "cancelled");
+        AddClause(clauses, counts, WingetOutcomeKind.NeedsAdmin, "needs administrator approval", "need administrator approval");
+        AddClause(clauses, counts, WingetOutcomeKind.Blocked, "blocked by policy", "blocked by policy");
+        AddClause(clauses, counts, WingetOutcomeKind.NetworkProblem, "couldn't download", "couldn't download");
+        AddClause(clauses, counts, WingetOutcomeKind.Failed, "failed", "failed");
+
+        if (cancelledByStop > 0)
+        {
+            clauses.Add(Pluralize(cancelledByStop, "stopped before it started", "stopped before they started"));
+        }
+
+        if (ignoredMidRun > 0)
+        {
+            clauses.Add(Pluralize(ignoredMidRun, "ignored", "ignored"));
+        }
+
+        return clauses.Count == 0 ? "Finished: nothing to update" : "Finished: " + string.Join(", ", clauses);
+    }
+
+    private static void AddClause(
+        List<string> clauses, IReadOnlyDictionary<WingetOutcomeKind, int> counts, WingetOutcomeKind kind,
+        string singular, string plural)
+    {
+        var count = counts.GetValueOrDefault(kind);
+        if (count > 0)
+        {
+            clauses.Add(Pluralize(count, singular, plural));
+        }
+    }
+
+    private static string Pluralize(int count, string singularSuffix, string pluralSuffix) =>
+        count == 1
+            ? $"{count.ToString(CultureInfo.InvariantCulture)} {singularSuffix}"
+            : $"{count.ToString(CultureInfo.InvariantCulture)} {pluralSuffix}";
 
     private bool CanUpdateSelected() => !IsBusy && SelectedCount > 0;
 
@@ -567,6 +683,282 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         UpdateBadge();
     }
 
+    /// <summary>"Hide this update" row action - ignores the single row and shows a one-line
+    /// confirmation. See <c>docs/specs/09-friendly-update-outcomes.md</c>: "'WinRAR won't be shown
+    /// again. You can bring it back with 'Show ignored'.'"</summary>
+    [RelayCommand(CanExecute = nameof(CanHideRow))]
+    private void HideUpdate(UpdatePackageViewModel? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        var name = row.Name;
+        Ignore([row]);
+        HideConfirmationMessage = $"{name} won't be shown again. You can bring it back with \"Show ignored\".";
+    }
+
+    private static bool CanHideRow(UpdatePackageViewModel? row) => row is not null;
+
+    [RelayCommand]
+    private void DismissHideConfirmation() => HideConfirmationMessage = null;
+
+    /// <summary>Starts the "Reinstall..." confirmation for <paramref name="row"/> - see
+    /// <see cref="IsReinstallConfirmationVisible"/>. Does nothing yet; the actual uninstall/install
+    /// only happens from <see cref="ConfirmReinstallAsync"/>.</summary>
+    [RelayCommand(CanExecute = nameof(CanRequestReinstall))]
+    private void RequestReinstall(UpdatePackageViewModel? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        PendingReinstallRow = row;
+    }
+
+    private bool CanRequestReinstall(UpdatePackageViewModel? row) => row is not null && !IsBusy;
+
+    [RelayCommand]
+    private void CancelReinstall() => PendingReinstallRow = null;
+
+    /// <summary>Confirms the pending "Reinstall..." request and actually runs
+    /// <see cref="ReinstallWorkflow"/> for it.</summary>
+    [RelayCommand(CanExecute = nameof(CanConfirmReinstall))]
+    private async Task ConfirmReinstallAsync()
+    {
+        var row = PendingReinstallRow;
+        PendingReinstallRow = null;
+        if (row is null)
+        {
+            return;
+        }
+
+        await RunReinstallAsync(row).ConfigureAwait(true);
+    }
+
+    private bool CanConfirmReinstall() => PendingReinstallRow is not null && !IsBusy;
+
+    private async Task RunReinstallAsync(UpdatePackageViewModel row)
+    {
+        IsBusy = true;
+        IsUpdating = true;
+        CurrentStep = $"Reinstalling {row.Id}";
+
+        var logProgress = new Progress<string>(AppendLog);
+        var stepProgress = new Progress<string>(text => ProgressLine = text);
+        var succeeded = false;
+
+        try
+        {
+            var outcome = await _reinstallWorkflow
+                .RunAsync(row.Id, Silent, logProgress, stepProgress, CancellationToken.None)
+                .ConfigureAwait(true);
+
+            row.ApplyReinstallOutcome(outcome);
+            succeeded = outcome.Kind == ReinstallOutcomeKind.Reinstalled;
+
+            var summary = succeeded
+                ? $"Finished: {row.Id} reinstalled"
+                : $"Finished: {row.Id} - {outcome.Title}";
+            CurrentStep = summary;
+            AppendLog($"<< {row.Id}: {outcome.Title}");
+            AppendLog(summary);
+        }
+        catch (WingetNotFoundException ex)
+        {
+            row.State = UpdateRowState.Failed;
+            row.StatusText = "Something went wrong";
+            AppendLog("ERROR: " + ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected failure reinstalling {PackageId}.", row.Id);
+            row.State = UpdateRowState.Failed;
+            row.StatusText = "Something went wrong";
+            AppendLog("ERROR: " + ex.Message);
+        }
+        finally
+        {
+            FlushLog();
+            ProgressLine = null;
+            IsUpdating = false;
+            IsBusy = false;
+        }
+
+        PlayFinishedSound();
+
+        // Only a fully successful reinstall re-checks: the package is expected to drop off the
+        // winget upgrade listing once it succeeds. A failed reinstall (especially the critical
+        // "uninstalled but the new install failed" state) must not be silently refreshed away just
+        // because winget upgrade would no longer list an uninstalled package - the row's critical
+        // status has to stay visible until the user retries or manually refreshes.
+        if (succeeded)
+        {
+            await RefreshAsync(quiet: true).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>"Try again" / "Try install again" row action - re-runs a plain upgrade for
+    /// <see cref="WingetSuggestedAction.Retry"/> / <see cref="WingetSuggestedAction.CloseAppAndRetry"/>,
+    /// or an install-only retry when <see cref="UpdatePackageViewModel.IsCriticalReinstallFailure"/>
+    /// is set (never re-runs the uninstall step).</summary>
+    [RelayCommand(CanExecute = nameof(CanRetryRow))]
+    private async Task RetryRowAsync(UpdatePackageViewModel? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        if (row.IsCriticalReinstallFailure)
+        {
+            await RunInstallOnlyRetryAsync(row).ConfigureAwait(true);
+        }
+        else
+        {
+            await RunSingleUpgradeAsync(row).ConfigureAwait(true);
+        }
+    }
+
+    private bool CanRetryRow(UpdatePackageViewModel? row) => row is not null && !IsBusy;
+
+    private async Task RunSingleUpgradeAsync(UpdatePackageViewModel row)
+    {
+        IsBusy = true;
+        IsUpdating = true;
+        CurrentStep = $"Updating {row.Id}";
+        row.State = UpdateRowState.Updating;
+        row.StatusText = "Updating...";
+
+        var logProgress = new Progress<string>(AppendLog);
+        var stepProgress = new Progress<string>(text => ProgressLine = text);
+        var succeeded = false;
+
+        try
+        {
+            var operationTask = _wingetClient.UpgradeAsync(row.Id, Silent, logProgress, stepProgress, CancellationToken.None);
+            await WaitWithHintAsync(row, operationTask).ConfigureAwait(true);
+            var result = await operationTask.ConfigureAwait(true);
+            var outcome = WingetExitCodes.DescribeOutcome(result.ExitCode, result.Lines);
+            row.ApplyOutcome(outcome);
+            succeeded = outcome.Kind is WingetOutcomeKind.Updated or WingetOutcomeKind.UpdatedRestartNeeded;
+            CurrentStep = $"Finished: {row.Id} - {outcome.Title}";
+            AppendLog($"<< {row.Id}: {outcome.Title} (exit {outcome.ExitCodeHex})");
+        }
+        catch (WingetNotFoundException ex)
+        {
+            row.State = UpdateRowState.Failed;
+            row.StatusText = "Something went wrong";
+            AppendLog("ERROR: " + ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected failure retrying {PackageId}.", row.Id);
+            row.State = UpdateRowState.Failed;
+            row.StatusText = "Something went wrong";
+            AppendLog("ERROR: " + ex.Message);
+        }
+        finally
+        {
+            FlushLog();
+            ProgressLine = null;
+            IsUpdating = false;
+            IsBusy = false;
+        }
+
+        if (succeeded)
+        {
+            await RefreshAsync(quiet: true).ConfigureAwait(true);
+        }
+    }
+
+    private async Task RunInstallOnlyRetryAsync(UpdatePackageViewModel row)
+    {
+        IsBusy = true;
+        IsUpdating = true;
+        CurrentStep = $"Installing {row.Id}";
+
+        var logProgress = new Progress<string>(AppendLog);
+        var stepProgress = new Progress<string>(text => ProgressLine = text);
+        var succeeded = false;
+
+        try
+        {
+            var operationTask = _wingetClient.InstallAsync(row.Id, Silent, logProgress, stepProgress, CancellationToken.None);
+            await WaitWithHintAsync(row, operationTask).ConfigureAwait(true);
+            var result = await operationTask.ConfigureAwait(true);
+            var outcome = WingetExitCodes.DescribeOutcome(result.ExitCode, result.Lines);
+            row.ApplyInstallOnlyOutcome(outcome);
+            succeeded = outcome.Kind is WingetOutcomeKind.Updated or WingetOutcomeKind.UpdatedRestartNeeded;
+            CurrentStep = $"Finished: {row.Id} - {row.StatusText}";
+            AppendLog($"<< {row.Id}: {outcome.Title} (exit {outcome.ExitCodeHex})");
+        }
+        catch (WingetNotFoundException ex)
+        {
+            AppendLog("ERROR: " + ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected failure installing {PackageId}.", row.Id);
+            AppendLog("ERROR: " + ex.Message);
+        }
+        finally
+        {
+            FlushLog();
+            ProgressLine = null;
+            IsUpdating = false;
+            IsBusy = false;
+        }
+
+        if (succeeded)
+        {
+            await RefreshAsync(quiet: true).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Waits for <paramref name="operationTask"/> (a winget upgrade/install already in flight for
+    /// <paramref name="row"/>), and if it is still running after <see cref="WaitingHintThreshold"/>,
+    /// sets <see cref="UpdatePackageViewModel.WaitingHint"/> (and mirrors it into
+    /// <see cref="ProgressLine"/>) - <see cref="WaitingHintTextInteractive"/> normally, or
+    /// <see cref="WaitingHintTextSilent"/> when <see cref="Silent"/> is on (a silent install has no
+    /// window to wait on). Cleared again once the operation finishes. Uses
+    /// <see cref="Task.Delay(TimeSpan, TimeProvider, CancellationToken)"/> against
+    /// <see cref="_timeProvider"/> (same pattern as <c>RemoteSupportViewModel</c>'s polling) rather
+    /// than a raw timer, so it resumes on the captured UI thread automatically and a test can drive
+    /// it deterministically with a <see cref="Microsoft.Extensions.Time.Testing.FakeTimeProvider"/>.
+    /// Never throws <paramref name="operationTask"/>'s own exception - the caller always awaits that
+    /// task itself right after this method returns and handles success/failure there.
+    /// </summary>
+    private async Task WaitWithHintAsync(UpdatePackageViewModel row, Task operationTask)
+    {
+        var delayTask = Task.Delay(WaitingHintThreshold, _timeProvider, CancellationToken.None);
+        try
+        {
+            var first = await Task.WhenAny(operationTask, delayTask).ConfigureAwait(true);
+            if (ReferenceEquals(first, delayTask))
+            {
+                var hintText = Silent ? WaitingHintTextSilent : WaitingHintTextInteractive;
+                row.WaitingHint = hintText;
+                ProgressLine = hintText;
+                try
+                {
+                    await operationTask.ConfigureAwait(true);
+                }
+                catch
+                {
+                    // Ignored - see this method's remarks; the caller re-awaits operationTask.
+                }
+            }
+        }
+        finally
+        {
+            row.WaitingHint = null;
+        }
+    }
+
     /// <summary>Runs <c>winget show</c> for one package into the Log panel (expanding it first) -
     /// the "Show package info" context menu item. Disabled in the view while an update is running
     /// (<see cref="IsUpdating"/>) so it never interleaves with a running upgrade's own log lines.</summary>
@@ -575,7 +967,6 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         ArgumentNullException.ThrowIfNull(row);
 
         IsLogExpanded = true;
-        AppendLog($"> winget show --id {row.Id} --exact");
 
         try
         {

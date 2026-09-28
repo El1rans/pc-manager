@@ -37,4 +37,27 @@ public interface IWingetClient
     /// <summary>Runs <c>winget show --id &lt;id&gt; --exact</c>, streaming its output to
     /// <paramref name="log"/> (used by the Updates page's "Show package info" context menu item).</summary>
     Task<WingetResult> ShowAsync(string id, IProgress<string>? log, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Runs <c>winget uninstall --id &lt;id&gt; --exact --disable-interactivity</c> (plus
+    /// <c>--silent</c> when requested). Used by <see cref="ReinstallWorkflow"/>'s first step.
+    /// </summary>
+    /// <param name="cancellationToken">Same rule as <see cref="InstallAsync"/> and
+    /// <see cref="UpgradeAsync"/>: once winget has actually started, never kill it - pass
+    /// <see cref="CancellationToken.None"/> for the call itself.</param>
+    Task<WingetResult> UninstallAsync(string id, bool silent, IProgress<string>? log, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Runs <c>winget install --id &lt;id&gt; --exact --source winget --accept-package-agreements
+    /// --accept-source-agreements --disable-interactivity</c> (plus <c>--silent</c> when
+    /// requested). Used by <see cref="ReinstallWorkflow"/>'s second step.
+    /// </summary>
+    /// <param name="cancellationToken">
+    /// Passed straight through to <see cref="Processes.IProcessRunner.RunAsync"/>, which kills the
+    /// whole process tree on cancellation. Once winget has started installing, killing it can leave
+    /// the package half-installed - the Updates page always passes
+    /// <see cref="CancellationToken.None"/> here for the duration of the install.
+    /// </param>
+    Task<WingetResult> InstallAsync(
+        string id, bool silent, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken);
 }

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Linq;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Porchlight.App.Features.Updates;
 using Porchlight.Core.Settings;
 using Porchlight.Core.Winget;
@@ -31,6 +32,9 @@ public sealed class UpdatesViewModelTests : IDisposable
 
     private UpdatesViewModel CreateViewModel() =>
         new(_wingetClient, _settingsStore, NullLogger<UpdatesViewModel>.Instance);
+
+    private UpdatesViewModel CreateViewModel(TimeProvider timeProvider) =>
+        new(_wingetClient, _settingsStore, NullLogger<UpdatesViewModel>.Instance, timeProvider);
 
     private static WingetPackage Package(string id, bool requiresExplicit = false, string name = "") =>
         new(Name: string.IsNullOrEmpty(name) ? id : name, Id: id, InstalledVersion: "1.0", AvailableVersion: "2.0",
@@ -167,7 +171,8 @@ public sealed class UpdatesViewModelTests : IDisposable
         var remaining = Assert.Single(viewModel.Packages);
         Assert.Equal("Fails", remaining.Id);
         Assert.Equal(UpdateRowState.Failed, remaining.State);
-        Assert.Equal("Failed (0x87654321)", remaining.StatusText);
+        Assert.Equal("Something went wrong", remaining.StatusText);
+        Assert.Contains("0x87654321", remaining.StatusTooltip);
     }
 
     [Fact]
@@ -186,7 +191,7 @@ public sealed class UpdatesViewModelTests : IDisposable
 
         // The row disappeared (it succeeded), but the message is asserted via the log instead,
         // since a successful row is not kept around after the quiet recheck.
-        Assert.Contains("Finished: 1 updated (1 needs a restart), 0 failed, 0 skipped", viewModel.LogText);
+        Assert.Contains("Finished: 1 updated (1 needs a restart)", viewModel.LogText);
     }
 
     [Fact]
@@ -204,8 +209,9 @@ public sealed class UpdatesViewModelTests : IDisposable
 
         var remaining = Assert.Single(viewModel.Packages);
         Assert.Equal(UpdateRowState.Skipped, remaining.State);
-        Assert.Equal("No applicable update", remaining.StatusText);
-        Assert.Contains("Finished: 0 updated, 0 failed, 1 skipped", viewModel.LogText);
+        Assert.Equal("Not available for this PC", remaining.StatusText);
+        Assert.Equal(WingetSuggestedAction.Hide, remaining.SuggestedAction);
+        Assert.Contains("Finished: 1 not available for this PC", viewModel.LogText);
     }
 
     [Fact]
@@ -306,5 +312,259 @@ public sealed class UpdatesViewModelTests : IDisposable
         var exception = Record.Exception(viewModel.Dispose);
 
         Assert.Null(exception);
+    }
+
+    [Fact]
+    public async Task UpdateSelectedAsync_InstallTechnologyMismatch_ReportsReinstallRequired()
+    {
+        var package = Package("NeedsReinstall");
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        _wingetClient.UpgradeListResults.Enqueue([package]); // still listed - the plain upgrade never applied
+        _wingetClient.UpgradeResultsById["NeedsReinstall"] = new WingetResult(unchecked((int)0x8A15008E), []);
+        var viewModel = CreateViewModel();
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+
+        var remaining = Assert.Single(viewModel.Packages);
+        Assert.Equal("Needs a reinstall", remaining.StatusText);
+        Assert.Equal(WingetSuggestedAction.Reinstall, remaining.SuggestedAction);
+        Assert.True(remaining.CanReinstall);
+        Assert.Contains("Finished: 1 needs a reinstall", viewModel.LogText);
+    }
+
+    [Fact]
+    public void RequestReinstall_ShowsConfirmationWithoutCallingWingetYet()
+    {
+        var row = new UpdatePackageViewModel(Package("Some.Id"));
+        var viewModel = CreateViewModel();
+
+        viewModel.RequestReinstallCommand.Execute(row);
+
+        Assert.True(viewModel.IsReinstallConfirmationVisible);
+        Assert.Contains("Reinstall Some.Id?", viewModel.ReinstallConfirmationMessage);
+        Assert.Contains("uninstall Some.Id and then install the newest version", viewModel.ReinstallConfirmationMessage);
+        Assert.Empty(_wingetClient.UninstallCalls);
+        Assert.Empty(_wingetClient.InstallCalls);
+    }
+
+    [Fact]
+    public void CancelReinstall_HidesConfirmationWithoutCallingWinget()
+    {
+        var row = new UpdatePackageViewModel(Package("Some.Id"));
+        var viewModel = CreateViewModel();
+        viewModel.RequestReinstallCommand.Execute(row);
+
+        viewModel.CancelReinstallCommand.Execute(null);
+
+        Assert.False(viewModel.IsReinstallConfirmationVisible);
+        Assert.Empty(_wingetClient.UninstallCalls);
+    }
+
+    [Fact]
+    public async Task ConfirmReinstallAsync_RunsUninstallThenInstallAndAppliesOutcome()
+    {
+        var row = new UpdatePackageViewModel(Package("Some.Id"));
+        _wingetClient.UninstallResult = new WingetResult(0, []);
+        _wingetClient.InstallResult = new WingetResult(0, []);
+        _wingetClient.UpgradeListResults.Enqueue([]); // quiet re-check after a successful reinstall
+        var viewModel = CreateViewModel();
+        viewModel.RequestReinstallCommand.Execute(row);
+
+        await viewModel.ConfirmReinstallCommand.ExecuteAsync(null);
+
+        Assert.False(viewModel.IsReinstallConfirmationVisible);
+        Assert.Equal(["Some.Id"], _wingetClient.UninstallCalls);
+        Assert.Equal(["Some.Id"], _wingetClient.InstallCalls);
+        Assert.Equal("Reinstalled", row.StatusText);
+        Assert.Equal(UpdateRowState.Updated, row.State);
+    }
+
+    [Fact]
+    public async Task ConfirmReinstallAsync_InstallFailsAfterUninstall_ReportsCriticalStateAndSkipsRefresh()
+    {
+        var row = new UpdatePackageViewModel(Package("Some.Id"));
+        _wingetClient.UninstallResult = new WingetResult(0, []);
+        _wingetClient.InstallResult = new WingetResult(unchecked((int)0x8A150107), []); // InstallNoNetwork
+        var viewModel = CreateViewModel();
+        viewModel.RequestReinstallCommand.Execute(row);
+
+        await viewModel.ConfirmReinstallCommand.ExecuteAsync(null);
+
+        Assert.Equal("Not installed - the new version didn't install", row.StatusText);
+        Assert.True(row.IsCriticalReinstallFailure);
+        Assert.Equal("Try install again", row.RetryButtonText);
+        Assert.Equal(UpdateRowState.Failed, row.State);
+        // A quiet refresh would silently drop this critical row (winget upgrade would no longer
+        // list an uninstalled package) - GetUpgradesAsync must not have been called again.
+        Assert.Equal(0, _wingetClient.GetUpgradesCallCount);
+    }
+
+    [Fact]
+    public async Task RequestReinstall_DisabledWhileBusy()
+    {
+        var packageA = Package("First");
+        _wingetClient.UpgradeListResults.Enqueue([packageA]);
+        _wingetClient.Gate = new TaskCompletionSource();
+        var viewModel = CreateViewModel();
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+        var row = viewModel.Packages.Single();
+
+        var updateTask = viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+        await Task.Delay(20, TestContext.Current.CancellationToken);
+
+        Assert.False(viewModel.RequestReinstallCommand.CanExecute(row));
+
+        _wingetClient.Gate.SetResult();
+        await updateTask;
+
+        Assert.True(viewModel.RequestReinstallCommand.CanExecute(row));
+    }
+
+    [Fact]
+    public void HideUpdate_IgnoresRowAndShowsConfirmationMessage()
+    {
+        var row = new UpdatePackageViewModel(Package("RARLab.WinRAR", name: "WinRAR"));
+        var viewModel = CreateViewModel();
+
+        viewModel.HideUpdateCommand.Execute(row);
+
+        Assert.True(row.IsIgnored);
+        Assert.Contains("RARLab.WinRAR", _settingsStore.Current.Updates.IgnoredIds);
+        Assert.Equal(
+            "WinRAR won't be shown again. You can bring it back with \"Show ignored\".",
+            viewModel.HideConfirmationMessage);
+    }
+
+    [Fact]
+    public void DismissHideConfirmation_ClearsMessage()
+    {
+        var row = new UpdatePackageViewModel(Package("Some.Id"));
+        var viewModel = CreateViewModel();
+        viewModel.HideUpdateCommand.Execute(row);
+
+        viewModel.DismissHideConfirmationCommand.Execute(null);
+
+        Assert.Null(viewModel.HideConfirmationMessage);
+    }
+
+    [Fact]
+    public async Task RetryRowAsync_AppRunning_ReRunsPlainUpgrade()
+    {
+        var package = Package("Some.Id");
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        _wingetClient.UpgradeResultsById["Some.Id"] = new WingetResult(unchecked((int)0x8A150101), []);
+        var viewModel = CreateViewModel();
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+        var row = viewModel.Packages.Single();
+        Assert.Equal("Close the app and try again", row.StatusText);
+        Assert.False(row.IsCriticalReinstallFailure);
+
+        _wingetClient.UpgradeResultsById["Some.Id"] = new WingetResult(0, []);
+        _wingetClient.UpgradeListResults.Enqueue([]);
+        await viewModel.RetryRowCommand.ExecuteAsync(row);
+
+        Assert.Equal(2, _wingetClient.UpgradeCalls.Count(id => id == "Some.Id"));
+        Assert.Empty(_wingetClient.UninstallCalls);
+    }
+
+    [Fact]
+    public async Task RetryRowAsync_CriticalReinstallFailure_CallsInstallOnlyNeverUninstall()
+    {
+        var row = new UpdatePackageViewModel(Package("Some.Id"));
+        _wingetClient.UninstallResult = new WingetResult(0, []);
+        _wingetClient.InstallResult = new WingetResult(unchecked((int)0x8A150107), []);
+        var viewModel = CreateViewModel();
+        viewModel.RequestReinstallCommand.Execute(row);
+        await viewModel.ConfirmReinstallCommand.ExecuteAsync(null);
+        Assert.True(row.IsCriticalReinstallFailure);
+        Assert.Equal(["Some.Id"], _wingetClient.UninstallCalls);
+
+        _wingetClient.InstallResult = new WingetResult(0, []);
+        _wingetClient.UpgradeListResults.Enqueue([]);
+        await viewModel.RetryRowCommand.ExecuteAsync(row);
+
+        // Still exactly one uninstall call ever - the critical retry only installs.
+        Assert.Equal(["Some.Id"], _wingetClient.UninstallCalls);
+        Assert.Equal(["Some.Id", "Some.Id"], _wingetClient.InstallCalls);
+        Assert.Equal("Updated", row.StatusText);
+        Assert.False(row.IsCriticalReinstallFailure);
+    }
+
+    [Fact]
+    public async Task UpdateSelectedAsync_NonSilentLongRunningPackage_ShowsInteractiveWaitingHintThenClearsIt()
+    {
+        var package = Package("Slow.Id");
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        _wingetClient.Gate = new TaskCompletionSource();
+        var timeProvider = new FakeTimeProvider();
+        var viewModel = CreateViewModel(timeProvider);
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+        var row = viewModel.Packages.Single();
+
+        var updateTask = viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+        await Task.Delay(20, TestContext.Current.CancellationToken); // let the loop reach and start awaiting the winget call
+
+        Assert.Null(row.WaitingHint);
+
+        timeProvider.Advance(UpdatesViewModel.WaitingHintThreshold);
+        await Task.Delay(20, TestContext.Current.CancellationToken); // let the Task.Delay continuation observe the advance
+
+        Assert.Equal(UpdatesViewModel.WaitingHintTextInteractive, row.WaitingHint);
+
+        _wingetClient.UpgradeListResults.Enqueue([]);
+        _wingetClient.Gate.SetResult();
+        await updateTask;
+
+        Assert.Null(row.WaitingHint);
+    }
+
+    [Fact]
+    public async Task UpdateSelectedAsync_SilentLongRunningPackage_ShowsSilentWaitingHint()
+    {
+        var package = Package("Slow.Id");
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        _wingetClient.Gate = new TaskCompletionSource();
+        var timeProvider = new FakeTimeProvider();
+        var viewModel = CreateViewModel(timeProvider);
+        viewModel.Silent = true;
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+        var row = viewModel.Packages.Single();
+
+        var updateTask = viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+        await Task.Delay(20, TestContext.Current.CancellationToken);
+
+        timeProvider.Advance(UpdatesViewModel.WaitingHintThreshold);
+        await Task.Delay(20, TestContext.Current.CancellationToken);
+
+        Assert.Equal(UpdatesViewModel.WaitingHintTextSilent, row.WaitingHint);
+
+        _wingetClient.UpgradeListResults.Enqueue([]);
+        _wingetClient.Gate.SetResult();
+        await updateTask;
+    }
+
+    [Fact]
+    public async Task UpdateSelectedAsync_FastPackage_NeverShowsWaitingHint()
+    {
+        var package = Package("Fast.Id");
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        _wingetClient.UpgradeListResults.Enqueue([]);
+        var timeProvider = new FakeTimeProvider();
+        var viewModel = CreateViewModel(timeProvider);
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+        var row = viewModel.Packages.Single();
+
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+
+        Assert.Null(row.WaitingHint);
     }
 }

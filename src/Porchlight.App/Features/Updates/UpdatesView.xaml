@@ -46,6 +46,9 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Title + summary -->
@@ -69,6 +72,7 @@
         <!-- Package list -->
         <DataGrid x:Name="PackagesGrid" Grid.Row="2"
                   ItemsSource="{Binding PackagesView}"
+                  SelectedItem="{Binding SelectedRow}"
                   AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
                   HeadersVisibility="Column" GridLinesVisibility="Horizontal"
                   SelectionMode="Extended" SelectionUnit="FullRow" RowHeight="32"
@@ -117,7 +121,11 @@
                 <DataGridTemplateColumn Header="Status" Width="1.4*" SortMemberPath="State">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <StackPanel Orientation="Horizontal">
+                            <!-- Tooltip/HelpText = Explanation + "(winget code 0x...)" - the raw code is
+                                 never shown as the only thing here, only in the tooltip. See
+                                 docs/specs/09-friendly-update-outcomes.md. -->
+                            <StackPanel Orientation="Horizontal" ToolTip="{Binding StatusTooltip}"
+                                        AutomationProperties.HelpText="{Binding StatusTooltip}">
                                 <TextBlock Text="{Binding StatusGlyph}" Style="{StaticResource StatusIconStyle}"
                                            FontSize="13" Margin="0,0,6,0"/>
                                 <TextBlock Text="{Binding StatusText}" Style="{StaticResource StatusTextStyle}"
@@ -129,9 +137,71 @@
             </DataGrid.Columns>
         </DataGrid>
 
+        <!-- Selected row details + actions - see docs/specs/09-friendly-update-outcomes.md's row
+             actions: Reinstall..., Hide this update, Try again / Try install again. Only shown
+             once a row is selected and only the button(s) that apply to its SuggestedAction. -->
+        <Border Grid.Row="3" Padding="12,8" Margin="0,10,0,0">
+            <Border.Style>
+                <Style TargetType="Border" BasedOn="{StaticResource Card}">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding SelectedRow}" Value="{x:Null}">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <DockPanel LastChildFill="True">
+                <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <Button Content="Reinstall..." Margin="8,0,0,0"
+                            Command="{Binding RequestReinstallCommand}" CommandParameter="{Binding SelectedRow}"
+                            Visibility="{Binding SelectedRow.CanReinstall, Converter={StaticResource BoolToVis}}"/>
+                    <Button Content="Hide this update" Margin="8,0,0,0"
+                            Command="{Binding HideUpdateCommand}" CommandParameter="{Binding SelectedRow}"
+                            Visibility="{Binding SelectedRow.CanHide, Converter={StaticResource BoolToVis}}"/>
+                    <Button Content="{Binding SelectedRow.RetryButtonText}" Margin="8,0,0,0"
+                            Command="{Binding RetryRowCommand}" CommandParameter="{Binding SelectedRow}"
+                            Visibility="{Binding SelectedRow.CanRetry, Converter={StaticResource BoolToVis}}"/>
+                </WrapPanel>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{Binding SelectedRow.Name}" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding SelectedRow.StatusTooltip}" Style="{StaticResource Secondary}"
+                               TextWrapping="Wrap" Margin="0,2,0,0"
+                               Visibility="{Binding SelectedRow.StatusTooltip, Converter={StaticResource StringToVis}}"/>
+                    <TextBlock Text="{Binding SelectedRow.WaitingHint}" Style="{StaticResource Secondary}"
+                               Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                               TextWrapping="Wrap" Margin="0,2,0,0"
+                               Visibility="{Binding SelectedRow.WaitingHint, Converter={StaticResource StringToVis}}"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Reinstall confirmation - see docs/specs/09-friendly-update-outcomes.md: "Reinstall
+             requires confirmation". -->
+        <Border Grid.Row="4" Style="{StaticResource Card}" Padding="12,8" Margin="0,8,0,0"
+                Visibility="{Binding ReinstallConfirmationMessage, Converter={StaticResource StringToVis}}">
+            <DockPanel LastChildFill="True">
+                <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <Button Content="Cancel" Margin="8,0,0,0" Command="{Binding CancelReinstallCommand}"/>
+                    <Button Content="Reinstall" Margin="8,0,0,0" Style="{DynamicResource AccentButtonStyle}"
+                            Command="{Binding ConfirmReinstallCommand}"/>
+                </WrapPanel>
+                <TextBlock Text="{Binding ReinstallConfirmationMessage}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+            </DockPanel>
+        </Border>
+
+        <!-- "Hide this update" one-line confirmation - dismissible. -->
+        <Border Grid.Row="5" Style="{StaticResource Card}" Padding="12,8" Margin="0,8,0,0"
+                Visibility="{Binding HideConfirmationMessage, Converter={StaticResource StringToVis}}">
+            <DockPanel LastChildFill="True">
+                <Button DockPanel.Dock="Right" Content="Dismiss" Margin="8,0,0,0"
+                        Command="{Binding DismissHideConfirmationCommand}"/>
+                <TextBlock Text="{Binding HideConfirmationMessage}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+            </DockPanel>
+        </Border>
+
         <!-- Actions: checkboxes on their own line, buttons on the next - keeps both readable down
              to 900px wide instead of competing for the same row. -->
-        <StackPanel Grid.Row="3" Margin="0,12,0,0">
+        <StackPanel Grid.Row="6" Margin="0,12,0,0">
             <WrapPanel>
                 <CheckBox Content="Silent install (hide installer windows)" IsChecked="{Binding Silent}" Margin="0,0,16,4"/>
                 <CheckBox Content="Include apps with unknown version" IsChecked="{Binding IncludeUnknown}"
@@ -151,7 +221,7 @@
 
         <!-- Progress: current step (queue position / stopping / finished summary) and winget's own
              latest progress line shown side by side rather than combined into one string. -->
-        <StackPanel Grid.Row="4" Margin="0,10,0,0">
+        <StackPanel Grid.Row="7" Margin="0,10,0,0">
             <ProgressBar Height="4" IsIndeterminate="True" BorderThickness="0"
                          Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
             <DockPanel Margin="0,4,0,0" LastChildFill="True">
@@ -164,7 +234,7 @@
         </StackPanel>
 
         <!-- Log -->
-        <Expander Grid.Row="5" Header="Log" Margin="0,8,0,0" IsExpanded="{Binding IsLogExpanded}">
+        <Expander Grid.Row="8" Header="Log" Margin="0,8,0,0" IsExpanded="{Binding IsLogExpanded}">
             <DockPanel Margin="0,6,0,0">
                 <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
                     <Button Content="Open log folder" Command="{Binding OpenLogFolderCommand}" Margin="0,0,8,0"/>

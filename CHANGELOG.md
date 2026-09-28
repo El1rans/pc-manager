@@ -72,6 +72,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   an optional `SIGNPATH_REQUIRED` repository variable instead fails the release outright when
   signing isn't configured). Added `SECURITY.md` describing how to report vulnerabilities privately
   via GitHub.
+- Updates: friendlier update outcomes - the Status column always shows a short plain-language
+  sentence (e.g. "Needs a reinstall", "Not available for this PC", "Close the app and try again")
+  instead of a bare winget exit code; the code now only appears in the tooltip/`AutomationProperties.HelpText`
+  and the log. Selecting a row shows a details panel with the action that fits its outcome:
+  **Reinstall...** (behind a confirmation dialog) for the "install technology mismatch" case,
+  running a new `ReinstallWorkflow` (uninstall, then install the newest version) via new
+  `IWingetClient.UninstallAsync`/`InstallAsync` methods; **Hide this update** for "no applicable
+  update"; and **Try again** / **Try install again** for retryable failures. A failed install after
+  a successful uninstall is reported as a clearly critical "Not installed" state rather than being
+  left ambiguous. The run summary is now plain words too, e.g. "Finished: 1 updated, 1 needs a
+  reinstall, 1 not available for this PC". See `docs/specs/09-friendly-update-outcomes.md`.
 - Updates: a "Check for updates when PC Manager starts" toggle on the Updates page (on by default,
   matching prior behaviour) that controls whether `UpdatesAutoCheckHostedService` runs a `winget
   upgrade` listing in the background on every app start - see `docs/CODE_SIGNING_POLICY.md`'s
