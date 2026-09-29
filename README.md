@@ -110,6 +110,12 @@ milestone specs.
   updated once a second (paused while the window is minimized). Drives with a low-space warning,
   top processes by CPU/memory, a pending-restart badge, and static system info (computer name, OS,
   manufacturer/model, CPU, GPU, RAM).
+- Porchlight updates itself: an installed copy checks GitHub Releases (at startup unless the "Check
+  for updates when Porchlight starts" option is off, and on Refresh) and shows "Porchlight X.Y.Z is
+  available" at the top of the Updates page with a "What's new" link and an "Update now" button that
+  downloads the installer, verifies its SHA-256, runs it (one Windows permission prompt) and restarts
+  Porchlight on the new version. A copy that wasn't installed with the installer only gets a link to
+  the release page. See `docs/specs/23-self-update.md`.
 - Updates page: lists `winget upgrade` results with selection, filtering and an ignore list;
   installs the selected apps one at a time with a live log and progress, "Silent install",
   "Include apps with unknown version" and "Check for updates when Porchlight starts" options, and

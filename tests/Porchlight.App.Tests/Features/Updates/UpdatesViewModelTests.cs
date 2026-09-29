@@ -17,6 +17,7 @@ public sealed class UpdatesViewModelTests : IDisposable
     private readonly FakeAppInUseDiagnosticsService _appInUseDiagnostics = new();
     private readonly PendingUpdatesTracker _tracker = new();
     private readonly FakeFileDialogService _fileDialogs = new();
+    private readonly PorchlightUpdateHarness _porchlight = new();
 
     public UpdatesViewModelTests()
     {
@@ -34,10 +35,12 @@ public sealed class UpdatesViewModelTests : IDisposable
     }
 
     private UpdatesViewModel CreateViewModel() =>
-        new(_wingetClient, _settingsStore, _appInUseDiagnostics, _tracker, _fileDialogs, NullLogger<UpdatesViewModel>.Instance);
+        new(_wingetClient, _settingsStore, _appInUseDiagnostics, _tracker, _fileDialogs, _porchlight.Create(),
+            NullLogger<UpdatesViewModel>.Instance);
 
     private UpdatesViewModel CreateViewModel(TimeProvider timeProvider) =>
-        new(_wingetClient, _settingsStore, _appInUseDiagnostics, _tracker, _fileDialogs, NullLogger<UpdatesViewModel>.Instance, timeProvider);
+        new(_wingetClient, _settingsStore, _appInUseDiagnostics, _tracker, _fileDialogs, _porchlight.Create(),
+            NullLogger<UpdatesViewModel>.Instance, timeProvider);
 
     private static WingetPackage Package(
         string id, bool requiresExplicit = false, string name = "", string installedVersion = "1.0", string availableVersion = "2.0") =>
@@ -129,6 +132,31 @@ public sealed class UpdatesViewModelTests : IDisposable
         await viewModel.RefreshAsync(quiet: false);
 
         Assert.Equal("2", viewModel.Badge);
+    }
+
+    [Fact]
+    public async Task PorchlightUpdate_CountsTowardTheBadge()
+    {
+        _wingetClient.UpgradeListResults.Enqueue([Package("A"), Package("B")]);
+        _porchlight.Offer();
+        var viewModel = CreateViewModel();
+
+        await viewModel.RefreshAsync(quiet: false);
+        await viewModel.PorchlightUpdate.CheckAsync();
+
+        Assert.Equal("3", viewModel.Badge);
+    }
+
+    [Fact]
+    public async Task PorchlightUpdate_AloneShowsBadgeOne()
+    {
+        _wingetClient.UpgradeListResults.Enqueue([]);
+        _porchlight.Offer();
+        var viewModel = CreateViewModel();
+
+        await viewModel.RefreshCommand.ExecuteAsync(null);
+
+        Assert.Equal("1", viewModel.Badge);
     }
 
     [Fact]

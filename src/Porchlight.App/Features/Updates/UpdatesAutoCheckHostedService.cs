@@ -13,7 +13,8 @@ namespace Porchlight.App.Features.Updates;
 /// <c>docs/specs/02-updates.md</c>: "Check runs automatically when the app starts... Nav badge
 /// shows the count of non-ignored updates." <see cref="UpdatesViewModel.EnsureInitialCheckStartedAsync"/>
 /// guards against also running this if the user opens the Updates page before this service does.
-/// Only runs when <see cref="UpdatesSettings.CheckOnStartup"/> is enabled (the default) - see the
+/// It also checks GitHub Releases for a newer Porchlight (<see cref="PorchlightUpdateViewModel"/>,
+/// <c>docs/specs/23-self-update.md</c>). Only runs when <see cref="UpdatesSettings.CheckOnStartup"/> is enabled (the default) - see the
 /// "Check for updates when Porchlight starts" toggle on the Updates page and
 /// <c>docs/CODE_SIGNING_POLICY.md</c>'s privacy statement, which this toggle's existence keeps
 /// accurate.
@@ -69,8 +70,14 @@ public sealed class UpdatesAutoCheckHostedService : IHostedService
             // Starting EnsureInitialCheckStartedAsync() here also means RefreshAsync's
             // ConfigureAwait(true) continuations resume on the Dispatcher, so its
             // ObservableCollection updates stay on the right thread throughout.
-            await dispatcher.InvokeAsync(() => _serviceProvider.GetRequiredService<UpdatesViewModel>()
-                    .EnsureInitialCheckStartedAsync())
+            //
+            // The same UI-thread callback also starts the (independent) check for a new Porchlight
+            // release, so a slow winget listing never delays it; its failures are handled inside.
+            await dispatcher.InvokeAsync(() =>
+                {
+                    var viewModel = _serviceProvider.GetRequiredService<UpdatesViewModel>();
+                    return Task.WhenAll(viewModel.PorchlightUpdate.CheckAsync(), viewModel.EnsureInitialCheckStartedAsync());
+                })
                 .Task.Unwrap()
                 .ConfigureAwait(false);
         }
