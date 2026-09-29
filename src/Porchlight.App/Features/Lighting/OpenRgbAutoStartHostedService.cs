@@ -26,24 +26,34 @@ public sealed class OpenRgbAutoStartHostedService : IHostedService
         _logger = logger;
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken)
     {
         if (!_settingsStore.Current.Lighting.AutoStartOpenRgb)
         {
-            return;
+            return Task.CompletedTask;
         }
 
+        // Deliberately not awaited: every IHostedService.StartAsync is awaited before the main
+        // window is shown (see App.OnStartup), and detecting, verifying and launching OpenRGB must
+        // not delay that. Task.Run so even the synchronous part of detection stays off this thread.
+        // The startup token is not passed on: the host may dispose its source once startup completes.
+        _ = Task.Run(AutoStartAsync, CancellationToken.None);
+        return Task.CompletedTask;
+    }
+
+    private async Task AutoStartAsync()
+    {
         try
         {
-            var status = await _componentService.GetStatusAsync(ComponentIds.OpenRgb, cancellationToken)
+            var status = await _componentService.GetStatusAsync(ComponentIds.OpenRgb, CancellationToken.None)
                 .ConfigureAwait(false);
 
             if (status.State == ComponentState.Installed)
             {
-                await _componentService.StartAsync(ComponentIds.OpenRgb, cancellationToken).ConfigureAwait(false);
+                await _componentService.StartAsync(ComponentIds.OpenRgb, CancellationToken.None).ConfigureAwait(false);
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             // Best-effort convenience feature: a failure here must never block or crash startup.
             _logger.LogWarning(ex, "Could not auto-start OpenRGB.");

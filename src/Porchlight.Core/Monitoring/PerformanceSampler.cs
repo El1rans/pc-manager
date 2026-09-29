@@ -22,7 +22,10 @@ public sealed partial class PerformanceSampler : IPerformanceSampler
     private PerformanceCounter? _diskReadCounter;
     private PerformanceCounter? _diskWriteCounter;
     private bool _gpuCategoryAvailable;
-    private bool _initialized;
+
+    /// <summary>Volatile: set by <see cref="WarmUp"/> on one thread and read by
+    /// <see cref="SampleWithoutWaiting"/> on another.</summary>
+    private volatile bool _initialized;
 
     private Dictionary<string, CounterSample> _previousGpuSamples = [];
     private Dictionary<string, NetworkAdapterSample> _previousNetworkSamples = new(StringComparer.Ordinal);
@@ -36,11 +39,37 @@ public sealed partial class PerformanceSampler : IPerformanceSampler
         // Counter creation/priming (and the first GPU ReadCategory call) is slow - measured at
         // ~1 second - so it must not run in the constructor: DI resolves this singleton on the UI
         // thread (as a MainViewModel/MainWindow dependency chain), and doing this work there would
-        // freeze the window before it is even shown. Deferred to the first Sample() call instead,
-        // which always runs on the dashboard's background sampling loop thread (see
-        // DashboardViewModel.RunAsync). Sample() is only ever called sequentially from that one
-        // thread, so EnsureInitialized() does not need to guard against concurrent callers, but the
-        // lock is kept cheap insurance against that assumption changing later.
+        // freeze the window before it is even shown. Deferred to WarmUp() (the dashboard starts it
+        // on a background thread as soon as it is created) or the first Sample() call, whichever
+        // comes first; the lock makes the two safe to race.
+    }
+
+    public bool IsWarmedUp => _initialized;
+
+    public void WarmUp() => EnsureInitialized();
+
+    public PerformanceSnapshot SampleWithoutWaiting()
+    {
+        if (_initialized)
+        {
+            return Sample();
+        }
+
+        // Memory and network need no counters, so they can show while WarmUp() is still running.
+        var (memoryUsed, memoryTotal) = SampleMemory();
+        var (download, upload) = SampleNetwork();
+        return new PerformanceSnapshot(
+            null,
+            memoryUsed,
+            memoryTotal,
+            null,
+            null,
+            null,
+            null,
+            download,
+            upload,
+            _cumulativeDownloadBytes,
+            _cumulativeUploadBytes);
     }
 
     public PerformanceSnapshot Sample()
@@ -113,8 +142,6 @@ public sealed partial class PerformanceSampler : IPerformanceSampler
             {
                 _previousGpuSamples = ReadGpuSamples() ?? [];
             }
-
-            _networkStopwatch.Start();
 
             _initialized = true;
         }
@@ -196,6 +223,9 @@ public sealed partial class PerformanceSampler : IPerformanceSampler
         try
         {
             var current = ReadNetworkAdapterSamples();
+
+            // Zero on the very first call (the stopwatch has not started yet), which reports "no
+            // rate yet" below rather than a meaningless rate over a near-zero interval.
             var elapsed = _networkStopwatch.Elapsed;
             _networkStopwatch.Restart();
 
