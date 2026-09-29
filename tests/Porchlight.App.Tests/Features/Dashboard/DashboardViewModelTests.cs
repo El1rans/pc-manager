@@ -54,6 +54,57 @@ public sealed class DashboardViewModelTests
         Assert.False(fine.IsLow);
     }
 
+    [Fact]
+    public async Task FirstTick_ShowsMemoryImmediately_WhileCountersAreStillWarmingUp()
+    {
+        var sampler = new WarmingUpSampler();
+        using var viewModel = new DashboardViewModel(
+            sampler,
+            new FakeSystemInfoProvider(),
+            new FakeProcessMonitor(),
+            new FakeDriveMonitor(),
+            new FakeRestartDetector(),
+            new PageNavigator(),
+            NullLogger<DashboardViewModel>.Instance);
+
+        // Well under the 1-second sample interval: the first tick must not wait for it.
+        var deadline = DateTime.UtcNow.AddMilliseconds(700);
+        while (viewModel.MemoryTile.ValueText == "–" && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal("50%", viewModel.MemoryTile.ValueText);
+        Assert.Equal("–", viewModel.CpuTile.ValueText);
+        Assert.Equal(0, sampler.BlockingSampleCalls);
+    }
+
+    /// <summary>Counters never finish warming up; only <see cref="SampleWithoutWaiting"/> is
+    /// expected to be called.</summary>
+    private sealed class WarmingUpSampler : IPerformanceSampler
+    {
+        public int BlockingSampleCalls { get; private set; }
+
+        public bool IsWarmedUp => false;
+
+        public void WarmUp()
+        {
+        }
+
+        public PerformanceSnapshot Sample()
+        {
+            BlockingSampleCalls++;
+            return SampleWithoutWaiting();
+        }
+
+        public PerformanceSnapshot SampleWithoutWaiting() =>
+            new(null, 50, 100, null, null, null, null, null, null, 0, 0);
+
+        public void Dispose()
+        {
+        }
+    }
+
     private sealed class FakePerformanceSampler : IPerformanceSampler
     {
         public PerformanceSnapshot Sample() => new(null, null, null, null, null, null, null, null, null, 0, 0);

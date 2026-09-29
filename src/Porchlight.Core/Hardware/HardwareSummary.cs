@@ -99,7 +99,7 @@ public static class HardwareSummarySelector
     /// over Intel's "Package", falling back to the first valid temperature on the node.</summary>
     public static SensorReading? SelectCpuTemperature(HardwareNode cpu)
     {
-        var candidates = TemperatureSensors(cpu).ToList();
+        var candidates = TemperatureSensors(cpu).Where(HasRealCpuReading).ToList();
         return candidates.FirstOrDefault(s => s.Name.Contains("Tctl", StringComparison.OrdinalIgnoreCase)
                                                || s.Name.Contains("Tdie", StringComparison.OrdinalIgnoreCase))
             ?? candidates.FirstOrDefault(s => s.Name.Contains("Package", StringComparison.OrdinalIgnoreCase))
@@ -118,7 +118,7 @@ public static class HardwareSummarySelector
 
     public static SensorReading? SelectCpuPackagePower(HardwareNode cpu)
     {
-        var candidates = AllSensors(cpu).Where(s => s.Type == SensorType.Power).ToList();
+        var candidates = AllSensors(cpu).Where(s => s.Type == SensorType.Power && HasRealCpuReading(s)).ToList();
         return candidates.FirstOrDefault(s => s.Name.Contains("Package", StringComparison.OrdinalIgnoreCase))
             ?? candidates.FirstOrDefault();
     }
@@ -144,6 +144,12 @@ public static class HardwareSummarySelector
 
         return hottest;
     }
+
+    /// <summary>A running CPU is never at 0 °C or drawing 0 W, but that is exactly what
+    /// LibreHardwareMonitor reports for sensors it cannot read - e.g. an AMD CPU's SMU sensors when
+    /// Porchlight is not running as administrator. Treat those as "no reading", so they are hidden
+    /// (or skipped for a readable fallback) instead of shown as a real, "Normal" value.</summary>
+    private static bool HasRealCpuReading(SensorReading sensor) => sensor.Value is > 0;
 
     private static HardwareSummarySeverity Severity(double temperatureC, double failsafeTemperatureC)
     {

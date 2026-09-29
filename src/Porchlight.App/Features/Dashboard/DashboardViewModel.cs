@@ -72,8 +72,11 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
         // whole lifetime - started here rather than in OnNavigatedToAsync, and cancelled/awaited
         // (bounded) with this singleton at shutdown (this view model is a DI singleton; see
         // DashboardFeature/AddPage). Wrapped in Task.Run so even each method's synchronous prologue
-        // (before its first await) never touches the UI thread.
+        // (before its first await) never touches the UI thread. The performance counters' ~1 second
+        // setup also runs on its own, so memory, network and processes show on the very first tick
+        // instead of waiting for it; CPU/GPU/disk join as soon as it finishes.
         _ = Task.Run(() => LoadSystemInfoWithLoggingAsync(_cts.Token), _cts.Token);
+        _ = Task.Run(WarmUpPerformanceSamplerWithLogging, _cts.Token);
         _loopTask = Task.Run(() => RunAsync(_cts.Token), _cts.Token);
     }
 
@@ -153,7 +156,9 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
 
         try
         {
-            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            // do/while so the first tick runs immediately rather than a full interval after the
+            // dashboard opens; `continue` below still waits for the next tick.
+            do
             {
                 tick++;
 
@@ -175,7 +180,7 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
                     // misleading spike or trough. Take one sample now purely to re-prime their
                     // internal "previous" state, discard it, and resume showing real per-second
                     // values from the next tick.
-                    _performanceSampler.Sample();
+                    _performanceSampler.SampleWithoutWaiting();
                     _processMonitor.SampleTop(TopProcessCount);
                     continue;
                 }
@@ -183,8 +188,9 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
                 await RunTickStepAsync("performance", SamplePerformanceAsync, cancellationToken).ConfigureAwait(false);
 
                 // (tick - 1) so each of these also runs on the very first tick, not only once the
-                // count is first reached.
-                if ((tick - 1) % ProcessSampleEveryNTicks == 0)
+                // count is first reached. Processes also run on tick 2: the first sample has no
+                // previous CPU times, so it can only rank by memory - the second gives real CPU%.
+                if (tick == 2 || (tick - 1) % ProcessSampleEveryNTicks == 0)
                 {
                     await RunTickStepAsync("processes", SampleProcessesAsync, cancellationToken).ConfigureAwait(false);
                 }
@@ -201,6 +207,7 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
 
                 await RunTickStepAsync("subtitle", UpdateSubtitleAsync, cancellationToken).ConfigureAwait(false);
             }
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false));
         }
         catch (OperationCanceledException)
         {
@@ -238,6 +245,19 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
 
         _lastTickFailureLoggedAtUtc[step] = now;
         _logger.LogWarning(ex, "Dashboard tick step {Step} failed; will keep retrying.", step);
+    }
+
+    private void WarmUpPerformanceSamplerWithLogging()
+    {
+        try
+        {
+            _performanceSampler.WarmUp();
+        }
+        catch (Exception ex)
+        {
+            // Not fatal: the sampling loop's own Sample() call retries the setup.
+            _logger.LogError(ex, "Failed to warm up the performance counters for the dashboard.");
+        }
     }
 
     private async Task LoadSystemInfoWithLoggingAsync(CancellationToken cancellationToken)
@@ -290,13 +310,22 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
 
     private async Task SamplePerformanceAsync(CancellationToken cancellationToken)
     {
-        var snapshot = _performanceSampler.Sample();
+        // Read before sampling: if the setup finishes in between, this tick merely skips the
+        // counter tiles once more, rather than counting a spurious miss against them.
+        var countersReady = _performanceSampler.IsWarmedUp;
+        var snapshot = _performanceSampler.SampleWithoutWaiting();
         var logicalProcessors = _systemInfo is { LogicalProcessors: > 0 } info ? info.LogicalProcessors : Environment.ProcessorCount;
         var gpuName = _systemInfo is { GpuNames.Count: > 0 } sysInfo ? sysInfo.GpuNames[0] : null;
 
         await RunOnUiThreadAsync(() =>
         {
-            CpuTile.Update(snapshot.CpuPercent, FormatPercent(snapshot.CpuPercent), $"{logicalProcessors} logical processors");
+            // Until the counters are ready their values are null because they are still warming
+            // up, not because they failed - leave those tiles on their neutral placeholder rather
+            // than counting misses toward "Not available on this PC".
+            if (countersReady)
+            {
+                CpuTile.Update(snapshot.CpuPercent, FormatPercent(snapshot.CpuPercent), $"{logicalProcessors} logical processors");
+            }
 
             var memoryPercent = snapshot is { MemoryUsedBytes: { } used, MemoryTotalBytes: { } total } && total > 0
                 ? 100.0 * used / total
@@ -306,12 +335,15 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
                 : $"{ByteFormatter.FormatBytes(snapshot.MemoryUsedBytes!.Value)} of {ByteFormatter.FormatBytes(snapshot.MemoryTotalBytes!.Value)}";
             MemoryTile.Update(memoryPercent, FormatPercent(memoryPercent), memoryDetail);
 
-            GpuTile.Update(snapshot.GpuPercent, FormatPercent(snapshot.GpuPercent), gpuName ?? string.Empty);
+            if (countersReady)
+            {
+                GpuTile.Update(snapshot.GpuPercent, FormatPercent(snapshot.GpuPercent), gpuName ?? string.Empty);
 
-            var diskDetail = snapshot is { DiskReadBytesPerSecond: { } read, DiskWriteBytesPerSecond: { } write }
-                ? $"R {ByteFormatter.FormatByteRate(read)} · W {ByteFormatter.FormatByteRate(write)}"
-                : string.Empty;
-            DiskTile.Update(snapshot.DiskActivePercent, FormatPercent(snapshot.DiskActivePercent), diskDetail);
+                var diskDetail = snapshot is { DiskReadBytesPerSecond: { } read, DiskWriteBytesPerSecond: { } write }
+                    ? $"R {ByteFormatter.FormatByteRate(read)} · W {ByteFormatter.FormatByteRate(write)}"
+                    : string.Empty;
+                DiskTile.Update(snapshot.DiskActivePercent, FormatPercent(snapshot.DiskActivePercent), diskDetail);
+            }
 
             var downloadDetail = $"Total: {ByteFormatter.FormatBytes(snapshot.NetworkTotalDownloadedBytes)} since start";
             DownloadTile.Update(snapshot.NetworkDownloadBytesPerSecond, FormatRate(snapshot.NetworkDownloadBytesPerSecond), downloadDetail);

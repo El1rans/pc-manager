@@ -2,8 +2,9 @@ namespace Porchlight.Core.Lighting.Effects;
 
 /// <summary>
 /// Pac-Man eats his way across the matrix in a boustrophedon path (row 0 left-to-right, row 1
-/// right-to-left, and so on), leaving eaten cells dark and unvisited cells lit as "dots", with a
-/// ghost trailing a few cells behind and the path refilling once he reaches the end - see
+/// right-to-left, and so on), leaving eaten cells dark and unvisited cells lit as "dots", chasing a
+/// ghost fleeing a few cells ahead of him (it is cornered on the last cell, where he catches it)
+/// and the path refilling once he reaches the end - see
 /// docs/specs/11-led-effects.md. Matrix-only: on a non-matrix layout this renders nothing (the
 /// buffer is left at its default, black).
 /// </summary>
@@ -21,28 +22,28 @@ public sealed class PacManEffect : IEffect
 
     /// <param name="cellsPerSecond">How many grid cells Pac-Man advances per second. Must be
     /// positive.</param>
-    /// <param name="ghostLagCells">How many cells behind Pac-Man the ghost trails.</param>
-    public PacManEffect(double cellsPerSecond = 6.0, int ghostLagCells = 2)
+    /// <param name="ghostLeadCells">How many cells ahead of Pac-Man the ghost flees.</param>
+    public PacManEffect(double cellsPerSecond = 6.0, int ghostLeadCells = 2)
     {
         if (cellsPerSecond <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(cellsPerSecond), cellsPerSecond, "Must be positive.");
         }
 
-        if (ghostLagCells < 0)
+        if (ghostLeadCells < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(ghostLagCells), ghostLagCells, "Cannot be negative.");
+            throw new ArgumentOutOfRangeException(nameof(ghostLeadCells), ghostLeadCells, "Cannot be negative.");
         }
 
         CellsPerSecond = cellsPerSecond;
-        GhostLagCells = ghostLagCells;
+        GhostLeadCells = ghostLeadCells;
     }
 
     public string Name => "Pac-Man";
 
     public double CellsPerSecond { get; }
 
-    public int GhostLagCells { get; }
+    public int GhostLeadCells { get; }
 
     /// <summary>Builds the boustrophedon traversal path as indices into <paramref name="layout"/>'s
     /// points: row 0 left-to-right, row 1 right-to-left, and so on, skipping any grid cell with no
@@ -117,11 +118,10 @@ public sealed class PacManEffect : IEffect
             buffer[path[step]] = EatenColor;
         }
 
-        var ghostStep = currentStep - GhostLagCells;
-        if (ghostStep >= 0)
-        {
-            buffer[path[ghostStep]] = GhostColor;
-        }
+        // The ghost flees ahead along the same path; it cannot run past the end, so it is cornered
+        // on the last cell and Pac-Man catches it there just before the path refills.
+        var ghostStep = Math.Min(currentStep + GhostLeadCells, path.Count - 1);
+        buffer[path[ghostStep]] = GhostColor;
 
         buffer[path[currentStep]] = PacManColor;
     }
