@@ -65,7 +65,7 @@ public static class EffectRegistry
 
             "Pac-Man" => new PacManEffect(
                 cellsPerSecond: GetDouble(s, "cellsPerSecond", 6.0),
-                ghostLagCells: (int)GetDouble(s, "ghostLagCells", 2)),
+                ghostLeadCells: (int)GetDouble(s, "ghostLeadCells", 2)),
 
             "Rain" => new RainEffect(
                 rowsPerSecond: GetDouble(s, "rowsPerSecond", 8.0),

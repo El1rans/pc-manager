@@ -33,7 +33,7 @@ public sealed class PacManEffectTests
     public void Render_AtTimeT_KeysAlreadyPassedAreDarkAndKeysAheadAreLit()
     {
         var layout = MakeGrid(width: 5, height: 1);
-        var effect = new PacManEffect(cellsPerSecond: 1.0, ghostLagCells: 0);
+        var effect = new PacManEffect(cellsPerSecond: 1.0, ghostLeadCells: 0);
         var frame = new EffectFrame(TimeSpan.FromSeconds(2.5), layout, EffectContext.Empty);
         Span<RgbColor> buffer = stackalloc RgbColor[layout.Count];
 
@@ -51,7 +51,7 @@ public sealed class PacManEffectTests
     public void Render_OnCompletion_PathRefillsAndLoops()
     {
         var layout = MakeGrid(width: 5, height: 1);
-        var effect = new PacManEffect(cellsPerSecond: 1.0, ghostLagCells: 0);
+        var effect = new PacManEffect(cellsPerSecond: 1.0, ghostLeadCells: 0);
 
         Span<RgbColor> bufferStart = stackalloc RgbColor[layout.Count];
         var frameStart = new EffectFrame(TimeSpan.Zero, layout, EffectContext.Empty);
@@ -67,6 +67,56 @@ public sealed class PacManEffectTests
         {
             Assert.Equal(bufferStart[i], bufferAfterFullLoop[i]);
         }
+    }
+
+    [Fact]
+    public void Render_GhostFleesAheadOfPacMan()
+    {
+        var layout = MakeGrid(width: 6, height: 1);
+        var effect = new PacManEffect(cellsPerSecond: 1.0, ghostLeadCells: 2);
+        var frame = new EffectFrame(TimeSpan.FromSeconds(1.5), layout, EffectContext.Empty);
+        Span<RgbColor> buffer = stackalloc RgbColor[layout.Count];
+
+        effect.Render(in frame, buffer);
+
+        // Pac-Man on cell 1, so the ghost is 2 cells ahead on cell 3 - never behind him.
+        var ghost = buffer[3];
+        Assert.NotEqual(buffer[1], ghost);
+        Assert.NotEqual(buffer[2], ghost);
+        Assert.NotEqual(buffer[0], ghost);
+        Assert.Equal(1, CountOf(buffer, ghost));
+    }
+
+    [Fact]
+    public void Render_NearTheEnd_GhostIsCorneredOnTheLastCell()
+    {
+        var layout = MakeGrid(width: 6, height: 1);
+        var effect = new PacManEffect(cellsPerSecond: 1.0, ghostLeadCells: 3);
+        var chased = new EffectFrame(TimeSpan.FromSeconds(1), layout, EffectContext.Empty);
+        var cornered = new EffectFrame(TimeSpan.FromSeconds(4), layout, EffectContext.Empty);
+        Span<RgbColor> chasedBuffer = stackalloc RgbColor[layout.Count];
+        Span<RgbColor> corneredBuffer = stackalloc RgbColor[layout.Count];
+
+        effect.Render(in chased, chasedBuffer);
+        effect.Render(in cornered, corneredBuffer);
+
+        // Pac-Man on cell 4 with a lead of 3 would put the ghost past the end - it stays on cell 5.
+        var ghost = chasedBuffer[4];
+        Assert.Equal(ghost, corneredBuffer[5]);
+    }
+
+    private static int CountOf(ReadOnlySpan<RgbColor> buffer, RgbColor color)
+    {
+        var count = 0;
+        foreach (var c in buffer)
+        {
+            if (c == color)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     [Fact]

@@ -57,7 +57,7 @@ assign one to each device.
   smoothed so a noisy sensor reading doesn't flicker the color), `UpdatesAlertEffect` (a composable
   overlay - wraps another effect and pulses a warning color over it while updates are pending, see
   `EffectRegistry.CreateWithOverlay`), `PacManEffect` (matrix-only: boustrophedon path across rows,
-  eaten cells dark, a mouth-open/closed animation, a ghost trailing a few cells behind, refills once
+  eaten cells dark, a mouth-open/closed animation, a ghost fleeing a few cells ahead that Pac-Man chases, refills once
   the path completes), `RainEffect` (matrix-only: one falling drop per column with a fading trail,
   each column phase-shifted so drops don't fall in lockstep). `TypingRippleEffect` exists
   (matrix-only: expanding rings from `IEffectContext.RecentKeyPresses`) but is not yet reachable from
@@ -142,7 +142,7 @@ That implementation must, from the start:
 `LedLayoutBuilderTests` (matrix/linear/single-LED layout, hole-skipping, LED naming, the real G915
 27x7/117-LED and B550-F 5-LED linear cases); `RainbowWaveEffectTests`, `BreathingEffectTests`,
 `CpuTemperatureEffectTests`, `PacManEffectTests`, `RainEffectTests` (each effect's determinism for a
-fixed elapsed time, its key visual property - e.g. Pac-Man's eaten-cell/ghost-lag rule, Rain's
+fixed elapsed time, its key visual property - e.g. Pac-Man's eaten-cell/ghost-lead rule, Rain's
 per-column phase spread, Breathing's period/peak - and matrix-only effects rendering nothing on a
 non-matrix layout); `EffectRegistryTests` (every name builds the right type, unknown name/unparsable
 setting falls back safely, the updates-alert overlay composes); `EffectModeSelectorTests`;
