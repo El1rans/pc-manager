@@ -111,7 +111,11 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
 
     public override string Glyph => "";
 
-    public override int Order => 2;
+    public override int Order => 1;
+
+    public override PageCategory Category => PageCategory.Hardware;
+
+    public override string TabTitle => "Sensors & fans";
 
     public ComponentCardViewModel PawnIoCard { get; }
 

@@ -3,23 +3,14 @@ using System.Windows;
 namespace Porchlight.App.Shell;
 
 /// <inheritdoc cref="IShellWindowService"/>
-public sealed class ShellWindowService(IAppLifetime appLifetime) : IShellWindowService
+public sealed class ShellWindowService(IAppLifetime appLifetime, IPageNavigator pageNavigator) : IShellWindowService
 {
     public void ShowMainWindow() => RunOnUi(ShowCore);
 
     public void NavigateTo(Type pageViewModelType) => RunOnUi(() =>
     {
         ShowCore();
-        if (Application.Current?.MainWindow is not MainWindow { DataContext: MainViewModel viewModel } window)
-        {
-            return;
-        }
-
-        var page = viewModel.Pages.Concat(viewModel.PinnedPages).FirstOrDefault(p => p.GetType() == pageViewModelType);
-        if (page is not null)
-        {
-            window.SelectPage(page);
-        }
+        pageNavigator.NavigateTo(pageViewModelType);
     });
 
     public void RequestExit() => RunOnUi(() =>

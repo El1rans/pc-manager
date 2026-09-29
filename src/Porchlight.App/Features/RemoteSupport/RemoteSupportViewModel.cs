@@ -174,11 +174,9 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
     // Segoe Fluent Icons "People" glyph - visually distinct from the other nav items, per spec.
     public override string Glyph => "";
 
-    // Pinned to the bottom of the nav rail, below every regular page - see IPage.IsPinnedToBottom.
-    public override bool IsPinnedToBottom => true;
+    public override int Order => 1;
 
-    // Not used for placement (IsPinnedToBottom handles that); kept only because IPage requires it.
-    public override int Order => 0;
+    public override PageCategory Category => PageCategory.Help;
 
     /// <summary>Card for AnyDesk itself; shown (larger, via the view's own styling) while AnyDesk is
     /// not installed or a detection/install error occurred. See <see cref="ShowComponentCard"/>.</summary>

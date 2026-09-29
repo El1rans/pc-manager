@@ -58,7 +58,9 @@ public sealed partial class BrowserExtensionsViewModel : PageViewModelBase, IDis
     // Segoe Fluent Icons "Puzzle" glyph.
     public override string Glyph => "";
 
-    public override int Order => 8;
+    public override int Order => 2;
+
+    public override PageCategory Category => PageCategory.InternetAndSafety;
 
     public bool ShowEmptyState => HasLoaded && !HasError && Sections.Count == 0;
 

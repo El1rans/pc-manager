@@ -247,6 +247,8 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
 
     public override int Order => 1;
 
+    public override PageCategory Category => PageCategory.TuneUp;
+
     public ObservableCollection<UpdatePackageViewModel> Packages { get; }
 
     public ICollectionView PackagesView { get; }

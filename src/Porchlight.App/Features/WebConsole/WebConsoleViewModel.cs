@@ -82,7 +82,9 @@ public sealed partial class WebConsoleViewModel : PageViewModelBase, IDisposable
     // Segoe Fluent Icons "Globe".
     public override string Glyph => "";
 
-    public override int Order => 9;
+    public override int Order => 2;
+
+    public override PageCategory Category => PageCategory.Help;
 
     /// <summary>Other addresses this PC answers on (e.g. Wi-Fi and Ethernet both connected), for
     /// when the first link does not work from the viewing device's network.</summary>

@@ -83,6 +83,8 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
 
     public override int Order => 0;
 
+    public override PageCategory Category => PageCategory.Overview;
+
     [ObservableProperty]
     private string _subtitleText = "Loading...";
 

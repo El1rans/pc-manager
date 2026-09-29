@@ -47,7 +47,7 @@
 
                 <!-- Pinned pages (e.g. "Get help"): their own group at the very bottom of the rail,
                      above the admin block, separated and styled distinctly - see
-                     IPage.IsPinnedToBottom. Docked before the fill ListBox below so it stacks just
+                     PageCategoryCatalog. Docked before the fill ListBox below so it stacks just
                      above the (already Bottom-docked) admin block. -->
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,4,0,0">
                     <Border BorderThickness="0,1,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
@@ -60,10 +60,15 @@
                          back through the shared SelectedPage property and clobber it to null -
                          since both lists are bound to that one property, that silently blanked the
                          content area right after picking "Get help". -->
-                    <ListBox x:Name="PinnedNavList" ItemsSource="{Binding PinnedPages}"
-                             SelectedItem="{Binding SelectedPage, Mode=OneWay}"
+                    <ListBox x:Name="PinnedNavList" ItemsSource="{Binding PinnedCategories}"
+                             SelectedItem="{Binding SelectedCategory, Mode=OneWay}"
                              BorderThickness="0" Background="Transparent"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                <Setter Property="AutomationProperties.Name" Value="{Binding Title}"/>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <Grid Margin="4,6">
@@ -76,7 +81,7 @@
                                          so this pinned item still reads as clickable rather than
                                          disabled; only IsSelected/IsMouseOver (handled identically
                                          to the main list, via the same default ListBoxItem style -
-                                         no ItemContainerStyle override here either) should change
+                                         the container style below only adds an automation name) should change
                                          its appearance. -->
                                     <TextBlock Grid.Column="0" Text="{Binding Glyph}" Style="{StaticResource Icon}"
                                                FontSize="16" Margin="4,0,12,0"
@@ -90,10 +95,15 @@
                 </StackPanel>
 
                 <!-- SelectedItem is OneWay here too - see PinnedNavList's comment above. -->
-                <ListBox x:Name="MainNavList" ItemsSource="{Binding Pages}"
-                          SelectedItem="{Binding SelectedPage, Mode=OneWay}"
+                <ListBox x:Name="MainNavList" ItemsSource="{Binding Categories}"
+                          SelectedItem="{Binding SelectedCategory, Mode=OneWay}"
                           BorderThickness="0" Background="Transparent"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                            <Setter Property="AutomationProperties.Name" Value="{Binding Title}"/>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <Grid Margin="4,6">
@@ -117,7 +127,33 @@
             </DockPanel>
         </Border>
 
-        <!-- Content -->
-        <ContentControl Grid.Column="1" Content="{Binding SelectedPageView}" Margin="24"/>
+        <!-- Content: tab strip (only for a category with more than one page) above the page.
+             SelectedItem is OneWay for the same reason as the rail lists - see MainWindow.xaml.cs. -->
+        <DockPanel Grid.Column="1" Margin="24">
+            <ListBox x:Name="TabStrip" DockPanel.Dock="Top" Style="{StaticResource TabStripList}"
+                     ItemsSource="{Binding SelectedCategory.Pages}"
+                     SelectedItem="{Binding SelectedCategory.SelectedPage, Mode=OneWay}"
+                     Visibility="{Binding SelectedCategory.HasTabs, Converter={StaticResource BoolToVis}}"
+                     AutomationProperties.Name="Page tabs">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource TabStripItem}">
+                        <Setter Property="AutomationProperties.Name" Value="{Binding TabTitle}"/>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding TabTitle}" VerticalAlignment="Center"/>
+                            <Border Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                    CornerRadius="8" Padding="6,2" Margin="8,0,0,0"
+                                    Visibility="{Binding Badge, Converter={StaticResource StringToVis}}">
+                                <TextBlock Text="{Binding Badge}" FontSize="11" Foreground="White"/>
+                            </Border>
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            <ContentControl Content="{Binding SelectedPageView}"/>
+        </DockPanel>
     </Grid>
 </Window>
