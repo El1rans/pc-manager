@@ -189,7 +189,10 @@ public sealed class WebConsoleStatsCollector : IWebConsoleStatsSource, IDisposab
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Web console sampling step {Step} failed; serving without it.", step);
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug(ex, "Web console sampling step {Step} failed; serving without it.", step);
+            }
             return null;
         }
     }
@@ -202,7 +205,10 @@ public sealed class WebConsoleStatsCollector : IWebConsoleStatsSource, IDisposab
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Web console sampling step {Step} failed; serving without it.", step);
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug(ex, "Web console sampling step {Step} failed; serving without it.", step);
+            }
             return null;
         }
     }
@@ -215,7 +221,10 @@ public sealed class WebConsoleStatsCollector : IWebConsoleStatsSource, IDisposab
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Web console sampling step {Step} failed; serving without it.", step);
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug(ex, "Web console sampling step {Step} failed; serving without it.", step);
+            }
         }
     }
 }

@@ -142,9 +142,10 @@ public sealed class WebConsoleServer : IWebConsoleServer, IDisposable
         _listener = listener;
         _cts = cts;
         State = WebConsoleState.Running;
-        Port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        var boundPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+        Port = boundPort;
         ErrorMessage = null;
-        _logger.LogInformation("Web console listening on port {Port}.", Port);
+        _logger.LogInformation("Web console listening on port {Port}.", boundPort);
 
         _ = Task.Run(() => AcceptLoopAsync(listener, accessKey, cts.Token), CancellationToken.None);
     }

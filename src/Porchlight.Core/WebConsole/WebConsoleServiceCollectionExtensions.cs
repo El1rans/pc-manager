@@ -19,7 +19,13 @@ public static class WebConsoleServiceCollectionExtensions
         services.AddSingleton<IWebConsoleStatsSource>(sp => new WebConsoleStatsCollector(
             sp.GetRequiredService<ISystemInfoProvider>(),
             new PerformanceSampler(sp.GetRequiredService<ILogger<PerformanceSampler>>()),
-            CreateProcessMonitor(sp),
+#if DEBUG
+            // Same DEBUG-only demo data as the dashboard - see Monitoring.Demo.DemoDataMode.
+            Monitoring.Demo.DemoDataMode.IsEnabled
+                ? new Monitoring.Demo.DemoProcessMonitor()
+                :
+#endif
+                new ProcessMonitor(sp.GetRequiredService<ILogger<ProcessMonitor>>()),
             sp.GetRequiredService<IDriveMonitor>(),
             sp.GetRequiredService<IRestartDetector>(),
             sp.GetRequiredService<IHardwareService>(),
@@ -30,17 +36,5 @@ public static class WebConsoleServiceCollectionExtensions
         services.AddSingleton<ILocalAddressProvider, LocalAddressProvider>();
         services.AddSingleton<WebConsoleController>();
         return services;
-    }
-
-    private static IProcessMonitor CreateProcessMonitor(IServiceProvider services)
-    {
-#if DEBUG
-        // Same DEBUG-only demo data as the dashboard - see Monitoring.Demo.DemoDataMode.
-        if (Monitoring.Demo.DemoDataMode.IsEnabled)
-        {
-            return new Monitoring.Demo.DemoProcessMonitor();
-        }
-#endif
-        return new ProcessMonitor(services.GetRequiredService<ILogger<ProcessMonitor>>());
     }
 }
