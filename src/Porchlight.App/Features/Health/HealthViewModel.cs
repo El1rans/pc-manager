@@ -35,7 +35,9 @@ public sealed partial class HealthViewModel : PageViewModelBase, IBusyGuard
 
     public override string Glyph => "";
 
-    public override int Order => 6;
+    public override int Order => 4;
+
+    public override PageCategory Category => PageCategory.TuneUp;
 
     public DiskHealthCardViewModel Disks { get; }
 

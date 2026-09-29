@@ -49,7 +49,9 @@ public sealed partial class StartupViewModel : PageViewModelBase
     // Segoe Fluent Icons "PowerButton".
     public override string Glyph => "";
 
-    public override int Order => 5;
+    public override int Order => 2;
+
+    public override PageCategory Category => PageCategory.TuneUp;
 
     public ObservableCollection<StartupEntryViewModel> Items { get; } = [];
 

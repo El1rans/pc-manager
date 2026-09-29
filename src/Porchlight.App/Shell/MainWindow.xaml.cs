@@ -28,50 +28,42 @@ public partial class MainWindow : Window
         Loaded += async (_, _) => await viewModel.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
         Closing += OnClosing;
 
-        // MainNavList and PinnedNavList are two independent ListBox (Selector) controls, both
-        // showing the same MainViewModel.SelectedPage - but each is its own Selector with its own
-        // selection state, and WPF does not reliably clear one Selector's highlighted ListBoxItem
+        // MainNavList, PinnedNavList and the tab strip are independent ListBox (Selector) controls
+        // that each show part of the same MainViewModel selection - but each is its own Selector with
+        // its own selection state, and WPF does not reliably clear one Selector's highlighted item
         // just because a property it reads (via a OneWay SelectedItem binding - see the XAML
         // comments) changed to a value belonging to the OTHER Selector's ItemsSource. So both
         // directions here are handled explicitly instead of by binding:
-        //  - user click -> SelectedPage: pushed to the view model directly (a plain property
-        //    set, not a binding), from whichever list's SelectionChanged fired with a real item.
+        //  - user click -> view model: pushed directly (a plain property set, not a binding), from
+        //    whichever list's SelectionChanged fired with a real item.
         //  - clearing the sibling list's stale highlight: SelectedIndex = -1 on the other list.
         // SelectedItem is deliberately OneWay (not TwoWay) in XAML so that clearing step never
-        // round-trips back through a shared TwoWay-bound property and clobbers SelectedPage to
-        // null - which previously blanked the content area right after picking "Get help" (the
-        // pinned list's own clear-the-other-list step ended up wiping the very selection it had
-        // just set, because both lists' SelectedItem were TwoWay-bound to the same property).
+        // round-trips back through a shared TwoWay-bound property and clobbers the selection to
+        // null - which previously blanked the content area right after picking "Get help". The same
+        // goes for the tab strip, whose ItemsSource is swapped whenever the category changes.
         MainNavList.SelectionChanged += (_, _) =>
         {
-            if (MainNavList.SelectedItem is IPage page)
+            if (MainNavList.SelectedItem is NavCategoryViewModel category)
             {
                 PinnedNavList.SelectedIndex = -1;
-                viewModel.SelectedPage = page;
+                viewModel.SelectedCategory = category;
             }
         };
         PinnedNavList.SelectionChanged += (_, _) =>
         {
-            if (PinnedNavList.SelectedItem is IPage page)
+            if (PinnedNavList.SelectedItem is NavCategoryViewModel category)
             {
                 MainNavList.SelectedIndex = -1;
+                viewModel.SelectedCategory = category;
+            }
+        };
+        TabStrip.SelectionChanged += (_, _) =>
+        {
+            if (TabStrip.SelectedItem is IPage page)
+            {
                 viewModel.SelectedPage = page;
             }
         };
-    }
-
-    /// <summary>Selects <paramref name="page"/> in the navigation rail exactly as a click would
-    /// (the selection handlers above then update the view model and clear the other list).</summary>
-    public void SelectPage(IPage page)
-    {
-        if (MainNavList.Items.Contains(page))
-        {
-            MainNavList.SelectedItem = page;
-        }
-        else if (PinnedNavList.Items.Contains(page))
-        {
-            PinnedNavList.SelectedItem = page;
-        }
     }
 
     /// <summary>Asks the user to confirm quitting while <paramref name="busyPage"/> has work in

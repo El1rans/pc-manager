@@ -89,7 +89,9 @@ public sealed partial class CleanupViewModel : PageViewModelBase, IBusyGuard, ID
 
     public override string Glyph => "";
 
-    public override int Order => 4;
+    public override int Order => 3;
+
+    public override PageCategory Category => PageCategory.TuneUp;
 
     public ObservableCollection<CleanupCategoryRowViewModel> Categories { get; } = [];
 

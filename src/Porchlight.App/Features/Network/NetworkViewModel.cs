@@ -170,7 +170,9 @@ public sealed partial class NetworkViewModel : PageViewModelBase, IBusyGuard, ID
 
     public override string Glyph => "";
 
-    public override int Order => 7;
+    public override int Order => 1;
+
+    public override PageCategory Category => PageCategory.InternetAndSafety;
 
     public ObservableCollection<TroubleshootStepViewModel> Steps { get; }
 

@@ -14,7 +14,9 @@ public abstract partial class PageViewModelBase : ObservableObject, IPage
 
     public abstract int Order { get; }
 
-    public virtual bool IsPinnedToBottom => false;
+    public virtual string TabTitle => Title;
+
+    public abstract PageCategory Category { get; }
 
     public virtual Task OnNavigatedToAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

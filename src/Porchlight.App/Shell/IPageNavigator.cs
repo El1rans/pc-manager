@@ -10,7 +10,7 @@ public interface IPageNavigator
     /// the page.</summary>
     event Action<Type>? NavigationRequested;
 
-    /// <summary>Asks the shell to show the page whose view model is <typeparamref name="TPage"/>.</summary>
-    void NavigateTo<TPage>()
-        where TPage : IPage;
+    /// <summary>Asks the shell to show the page whose view model type is
+    /// <paramref name="pageViewModelType"/> (its category and tab). Unknown types are ignored.</summary>
+    void NavigateTo(Type pageViewModelType);
 }

@@ -153,7 +153,9 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
 
     public override string Glyph => "";
 
-    public override int Order => 3;
+    public override int Order => 2;
+
+    public override PageCategory Category => PageCategory.Hardware;
 
     /// <summary>The shared setup card for the OpenRGB component (install/start). Shown instead of
     /// the rest of the page until it reports ready.</summary>

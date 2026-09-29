@@ -86,7 +86,8 @@ milestone specs.
 
 ## Features
 
-- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Free up space, Startup apps, Health check, Internet, Browser add-ons, Web console, Get help), following
+- App shell with a navigation rail of five entries - Overview, Tune-up (Updates, Startup apps, Free up space, Health check), Internet & safety (Internet, Browser add-ons),
+  Hardware (Sensors & fans, Lighting) and Get help (Get help, Web console) - with a tab row above the page for categories that hold more than one, following
   Windows light/dark theme, with the app version shown in the sidebar footer.
 - Browser add-ons page: read-only list of the add-ons installed in Edge, Chrome, Brave and Firefox
   (every profile), each with a plain-language note on what it can do (read all websites, see

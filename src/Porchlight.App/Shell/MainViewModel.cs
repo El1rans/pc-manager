@@ -18,12 +18,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly IPageNavigator _navigator;
     private readonly INotificationsLauncher? _notificationsLauncher;
     private readonly ILogger<MainViewModel> _logger;
+    private readonly IReadOnlyList<NavCategoryViewModel> _allCategories;
     private CancellationTokenSource _navigationCts = new();
     private bool _disposed;
     private Task _currentNavigation = Task.CompletedTask;
 
     [ObservableProperty]
     private IPage? _selectedPage;
+
+    [ObservableProperty]
+    private NavCategoryViewModel? _selectedCategory;
 
     [ObservableProperty]
     private FrameworkElement? _selectedPageView;
@@ -44,16 +48,22 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _logger = logger;
         _notificationsLauncher = notificationsLauncher;
         var pageList = pages as IReadOnlyCollection<IPage> ?? pages.ToList();
-        Pages = new ObservableCollection<IPage>(pageList.Where(p => !p.IsPinnedToBottom).OrderBy(p => p.Order));
-        PinnedPages = new ObservableCollection<IPage>(pageList.Where(p => p.IsPinnedToBottom).OrderBy(p => p.Order));
+        var categories = pageList
+            .GroupBy(p => p.Category)
+            .Select(g => new NavCategoryViewModel(PageCategoryCatalog.Get(g.Key), g))
+            .OrderBy(c => c.Info.Order)
+            .ToList();
+        _allCategories = categories;
+        Categories = new ObservableCollection<NavCategoryViewModel>(categories.Where(c => !c.IsPinnedToBottom));
+        PinnedCategories = new ObservableCollection<NavCategoryViewModel>(categories.Where(c => c.IsPinnedToBottom));
         _navigator.NavigationRequested += OnNavigationRequested;
     }
 
-    /// <summary>Selects the page a feature asked for (see <see cref="IPageNavigator"/>). The nav
-    /// rail's OneWay SelectedItem bindings follow <see cref="SelectedPage"/>.</summary>
+    /// <summary>Selects the page a feature asked for (see <see cref="IPageNavigator"/>): its category
+    /// and its tab. The nav rail's OneWay SelectedItem bindings follow <see cref="SelectedCategory"/>.</summary>
     private void OnNavigationRequested(Type pageType)
     {
-        var page = Pages.Concat(PinnedPages).FirstOrDefault(p => p.GetType() == pageType);
+        var page = _allCategories.SelectMany(c => c.Pages).FirstOrDefault(p => p.GetType() == pageType);
         if (page is null)
         {
             _logger.LogWarning("A feature asked to show {PageType}, which is not a registered page.", pageType.Name);
@@ -63,11 +73,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         SelectedPage = page;
     }
 
-    public ObservableCollection<IPage> Pages { get; }
+    /// <summary>Unpinned categories shown in the nav rail, in order.</summary>
+    public ObservableCollection<NavCategoryViewModel> Categories { get; }
 
-    /// <summary>Pages shown in their own group at the bottom of the nav rail - see
-    /// <see cref="IPage.IsPinnedToBottom"/>.</summary>
-    public ObservableCollection<IPage> PinnedPages { get; }
+    /// <summary>Categories shown in their own group at the bottom of the nav rail (Get help).</summary>
+    public ObservableCollection<NavCategoryViewModel> PinnedCategories { get; }
 
     public bool IsElevated => _shellService.IsElevated;
 
@@ -108,7 +118,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>The first page reporting work in flight (see <see cref="IBusyGuard"/>), or null.</summary>
     public IBusyGuard? FindBusyPage()
     {
-        foreach (var page in Pages)
+        foreach (var page in _allCategories.SelectMany(c => c.Pages))
         {
             if (page is IBusyGuard { IsBusyWithWork: true } guard)
             {
@@ -126,8 +136,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        SelectedPage = Pages.FirstOrDefault();
+        SelectedCategory = Categories.FirstOrDefault();
         await _currentNavigation.ConfigureAwait(true);
+    }
+
+    /// <summary>Selecting a category (rail click) shows the tab last used in it.</summary>
+    partial void OnSelectedCategoryChanged(NavCategoryViewModel? value)
+    {
+        if (value is not null)
+        {
+            SelectedPage = value.SelectedPage;
+        }
     }
 
     /// <summary>
@@ -136,6 +155,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     partial void OnSelectedPageChanged(IPage? value)
     {
+        // Keep category and remembered tab in step with the page, whichever way it was selected.
+        var category = value is null ? null : _allCategories.FirstOrDefault(c => c.Pages.Contains(value));
+        if (category is not null)
+        {
+            category.SelectedPage = value!;
+            SelectedCategory = category;
+        }
+
         SelectedPageView = value is null ? null : _pageViewLocator.GetOrCreateView(value);
 
         _navigationCts.Cancel();
@@ -182,6 +209,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         _disposed = true;
         _navigator.NavigationRequested -= OnNavigationRequested;
+        foreach (var category in _allCategories)
+        {
+            category.Dispose();
+        }
+
         _navigationCts.Cancel();
         _navigationCts.Dispose();
     }

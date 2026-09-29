@@ -7,7 +7,7 @@ namespace Porchlight.App.Shell;
 /// </summary>
 public interface IPage : INotifyPropertyChanged
 {
-    /// <summary>Display name shown in the navigation rail.</summary>
+    /// <summary>Page name; also the tab text unless <see cref="TabTitle"/> differs.</summary>
     string Title { get; }
 
     /// <summary>Segoe Fluent Icons glyph shown next to the title.</summary>
@@ -16,17 +16,15 @@ public interface IPage : INotifyPropertyChanged
     /// <summary>Optional badge text (e.g. a count). Observable; null/empty hides the badge.</summary>
     string? Badge { get; }
 
-    /// <summary>Position in the navigation rail, ascending. Ignored for a page with
-    /// <see cref="IsPinnedToBottom"/> set, which is placed by that instead.</summary>
-    int Order { get; }
+    /// <summary>Tab text when the page is shown as a tab in its category. Defaults to
+    /// <see cref="Title"/>.</summary>
+    string TabTitle { get; }
 
-    /// <summary>
-    /// When true, the shell places this page in its own group at the very bottom of the nav rail
-    /// (above the admin block), separated and styled distinctly, instead of among the regular pages
-    /// ordered by <see cref="Order"/>. For a page that is deliberately the least prominent one (e.g.
-    /// "Get help") rather than a peer of the main features - see docs/specs/06-remote-support.md.
-    /// </summary>
-    bool IsPinnedToBottom { get; }
+    /// <summary>The navigation category (rail entry) this page belongs to.</summary>
+    PageCategory Category { get; }
+
+    /// <summary>Position of the page's tab within its <see cref="Category"/>, ascending.</summary>
+    int Order { get; }
 
     /// <summary>Called on first navigation to the page and every subsequent navigation to it.</summary>
     Task OnNavigatedToAsync(CancellationToken cancellationToken);

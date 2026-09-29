@@ -8,8 +8,8 @@ public interface IShellWindowService
     /// to the front.</summary>
     void ShowMainWindow();
 
-    /// <summary>Selects the page whose view model is <paramref name="pageViewModelType"/>, showing
-    /// the main window first. Does nothing if no such page exists.</summary>
+    /// <summary>Selects the category and tab of the page whose view model is
+    /// <paramref name="pageViewModelType"/>, showing the main window first. Does nothing if no such page exists.</summary>
     void NavigateTo(Type pageViewModelType);
 
     /// <summary>Quits Porchlight through the normal shutdown path, after asking for confirmation
