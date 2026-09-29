@@ -86,8 +86,7 @@ milestone specs.
 
 ## Features
 
-- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Free up space, Get help), following
-- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Internet, Get help), following
+- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Free up space, Startup apps, Health check, Internet, Get help), following
   Windows light/dark theme, with the app version shown in the sidebar footer.
 - Settings persisted as JSON under `%APPDATA%\Porchlight\settings.json`, atomic writes, corrupt-file
   recovery.
