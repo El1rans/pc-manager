@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Porchlight.App.Controls;
+using Porchlight.App.Features.Browsers;
 using Porchlight.App.Features.Cleanup;
 using Porchlight.App.Features.Dashboard;
 using Porchlight.App.Features.Hardware;
@@ -247,6 +248,7 @@ public partial class App : System.Windows.Application, IDisposable
         services.AddStartupFeature();
         services.AddHealthFeature();
         services.AddNetworkFeature();
+        services.AddBrowsersFeature();
     }
 
     /// <summary>Applies every feature's <see cref="PageRegistration"/> to the view locator. Runs
