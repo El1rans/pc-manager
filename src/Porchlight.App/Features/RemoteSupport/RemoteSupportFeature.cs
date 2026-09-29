@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Porchlight.App.Shell;
+using Porchlight.Core.Checkup;
 using Porchlight.Core.RemoteSupport;
 
 namespace Porchlight.App.Features.RemoteSupport;
@@ -17,6 +18,9 @@ public static class RemoteSupportFeature
         // of creating a second, redundant singleton instance.
         services.TryAddSingleton<IUrlLauncher, UrlLauncher>();
         services.AddSingleton<IWindowsVersionReader, WindowsVersionReader>();
+        services.AddCheckup();
+        services.TryAddSingleton<IFileDialogService, FileDialogService>();
+        services.AddSingleton<CheckupCardViewModel>();
         return services.AddPage<RemoteSupportViewModel, RemoteSupportView>();
     }
 }

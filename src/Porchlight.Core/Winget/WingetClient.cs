@@ -101,6 +101,34 @@ public sealed partial class WingetClient : IWingetClient
         return new WingetResult(result.ExitCode, result.StandardOutputLines);
     }
 
+    public async Task<WingetResult> ExportAsync(
+        string filePath, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(filePath);
+
+        string[] arguments = ["export", "-o", filePath, "--accept-source-agreements", "--disable-interactivity"];
+        var result = await RunAsync(arguments, log, progress, cancellationToken).ConfigureAwait(false);
+        return new WingetResult(result.ExitCode, result.StandardOutputLines);
+    }
+
+    public async Task<WingetResult> ImportAsync(
+        string filePath, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(filePath);
+
+        string[] arguments =
+        [
+            "import",
+            "-i", filePath,
+            "--accept-package-agreements",
+            "--accept-source-agreements",
+            "--ignore-unavailable",
+            "--disable-interactivity",
+        ];
+        var result = await RunAsync(arguments, log, progress, cancellationToken).ConfigureAwait(false);
+        return new WingetResult(result.ExitCode, result.StandardOutputLines);
+    }
+
     private async Task<ProcessRunResult> RunAsync(
         IReadOnlyList<string> arguments,
         IProgress<string>? onLine,

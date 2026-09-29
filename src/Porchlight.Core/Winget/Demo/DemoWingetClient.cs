@@ -88,5 +88,19 @@ internal sealed class DemoWingetClient : IWingetClient
         progress?.Report("Done.");
         return Task.FromResult(new WingetResult(0, [$"Successfully installed {id} (demo mode)."]));
     }
+
+    public Task<WingetResult> ExportAsync(
+        string filePath, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken)
+    {
+        log?.Report("Demo mode: pretending to save the app list.");
+        return Task.FromResult(new WingetResult(0, []));
+    }
+
+    public Task<WingetResult> ImportAsync(
+        string filePath, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken)
+    {
+        log?.Report("Demo mode: pretending to install apps from a list.");
+        return Task.FromResult(new WingetResult(0, []));
+    }
 }
 #endif
