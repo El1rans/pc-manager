@@ -13,6 +13,7 @@ using Porchlight.App.Features.Hardware;
 using Porchlight.App.Features.Lighting;
 using Porchlight.App.Features.RemoteSupport;
 using Porchlight.App.Features.Setup;
+using Porchlight.App.Features.Startup;
 using Porchlight.App.Features.Updates;
 using Porchlight.App.Shell;
 using Porchlight.Core.Components;
@@ -241,6 +242,7 @@ public partial class App : System.Windows.Application, IDisposable
         services.AddHostedService<Features.Lighting.OpenRgbAutoStartHostedService>();
         services.AddRemoteSupportFeature();
         services.AddCleanupFeature();
+        services.AddStartupFeature();
     }
 
     /// <summary>Applies every feature's <see cref="PageRegistration"/> to the view locator. Runs
