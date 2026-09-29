@@ -107,6 +107,22 @@ internal sealed class FakeOpenRgbTcpServer : IDisposable
         _accepted?.Dispose();
     }
 
+    /// <summary>Writes raw bytes to the client - lets a test send malformed or unexpected packets.</summary>
+    public async Task SendRawAsync(byte[] bytes, CancellationToken cancellationToken) =>
+        await _stream!.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>Builds a wire packet (header + payload) with an explicit, possibly lying, length.</summary>
+    public static byte[] BuildPacket(uint command, uint declaredLength, byte[] payload, bool validMagic = true)
+    {
+        var packet = new byte[16 + payload.Length];
+        (validMagic ? "ORGB"u8 : "XXXX"u8).CopyTo(packet);
+        BitConverter.GetBytes(0u).CopyTo(packet, 4);
+        BitConverter.GetBytes(command).CopyTo(packet, 8);
+        BitConverter.GetBytes(declaredLength).CopyTo(packet, 12);
+        payload.CopyTo(packet, 16);
+        return packet;
+    }
+
     public void Dispose()
     {
         _stream?.Dispose();

@@ -14,6 +14,12 @@ namespace OpenRGB.NET;
 
 internal sealed class OpenRgbConnection : IDisposable
 {
+    // Porchlight patch: upper bound for a single packet's payload. The length comes straight off the
+    // wire, so without a cap a hostile or buggy peer could make the read loop allocate up to 4 GiB.
+    // The largest legitimate packet (a controller's data block) is a few tens of KiB even for a
+    // device with thousands of LEDs. See docs/upstream/openrgb-net.md.
+    internal const uint MaxPacketDataLength = 16 * 1024 * 1024;
+
     private readonly CancellationTokenSource _cancellationTokenSource;
     private readonly Socket _socket;
     private readonly Dictionary<CommandId, BlockingCollection<byte[]>> _pendingRequests;
@@ -66,7 +72,21 @@ internal sealed class OpenRgbConnection : IDisposable
                 try
                 {
                     await _socket.ReceiveAllAsync(headerBuffer, _cancellationTokenSource.Token);
-                    var header = PacketHeader.FromSpan(headerBuffer);
+                    // Porchlight patch: FromSpan throws ArgumentException when the "ORGB" magic is
+                    // missing; treat that (and an absurd length) as a protocol error and close the
+                    // connection the same way a remote close is handled.
+                    PacketHeader header;
+                    try
+                    {
+                        header = PacketHeader.FromSpan(headerBuffer);
+                    }
+                    catch (ArgumentException)
+                    {
+                        break;
+                    }
+
+                    if (header.DataLength > MaxPacketDataLength)
+                        break;
 
                     if (header.Command == CommandId.DeviceListUpdated)
                     {
@@ -86,7 +106,10 @@ internal sealed class OpenRgbConnection : IDisposable
                     {
                         var dataBuffer = new byte[header.DataLength];
                         await _socket.ReceiveAllAsync(dataBuffer, _cancellationTokenSource.Token);
-                        _pendingRequests[header.Command].Add(dataBuffer, _cancellationTokenSource.Token);
+                        // Porchlight patch: an unknown command id has no queue; its payload has
+                        // been read (so the stream stays in sync) and is simply dropped.
+                        if (_pendingRequests.TryGetValue(header.Command, out var pending))
+                            pending.Add(dataBuffer, _cancellationTokenSource.Token);
                     }
                 }
                 catch (TaskCanceledException)
@@ -100,6 +123,13 @@ internal sealed class OpenRgbConnection : IDisposable
                 // stayed true. Exit the loop instead; the finally below unblocks anyone still
                 // waiting on a reply. See docs/upstream/openrgb-net.md.
                 catch (IOException)
+                {
+                    break;
+                }
+                // Porchlight patch: anything else (socket reset, disposed socket, a completed queue,
+                // ...) must not escape this fire-and-forget task, where it would go unobserved.
+                // Handle it like a disconnect; the finally below still unblocks waiting callers.
+                catch (Exception)
                 {
                     break;
                 }

@@ -77,3 +77,13 @@ _connection.DeviceListUpdated += (sender, args) => DeviceListUpdated?.Invoke(sen
 
 **Repro:** `var client = new OpenRgbClient(...); client.DeviceListUpdated += (_, _) => Console.WriteLine("fired");`
 then change the device list from another OpenRGB client (or its own UI) - nothing is printed.
+
+## Porchlight-only hardening (not an upstream bug report): untrusted packet headers
+
+`OpenRgbConnection.ReadLoop` trusted the remote peer's packet header: `new byte[header.DataLength]`
+was allocated from a wire-controlled `uint` (up to 4 GiB), `_pendingRequests[header.Command]` threw
+`KeyNotFoundException` for an unknown command id, and any unexpected exception escaped the
+fire-and-forget read task. Patched in the vendored copy (`// Porchlight patch:` comments): a bad
+"ORGB" magic or a `DataLength` above 16 MiB (`MaxPacketDataLength`) is a protocol error that ends the
+read loop like a remote close; unknown commands use `TryGetValue` and have their payload drained and
+dropped; any other exception in the loop is handled like a disconnect.

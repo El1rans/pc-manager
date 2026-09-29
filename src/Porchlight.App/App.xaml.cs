@@ -71,12 +71,17 @@ public partial class App : System.Windows.Application, IDisposable
         // A bootstrap logger so a failure before (or during) host construction is still on record,
         // even though the "real" logger (wired into DI below) does not exist yet.
         Serilog.Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
+            // Information (not Debug) plus a size cap per file: per-frame/per-tick diagnostics must not
+            // grow the log without bound over the app's tray-resident lifetime.
+            .MinimumLevel.Information()
+            .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
             .WriteTo.File(
                 logPath,
                 formatProvider: CultureInfo.InvariantCulture,
                 rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: 14)
+                retainedFileCountLimit: 14,
+                fileSizeLimitBytes: 10 * 1024 * 1024,
+                rollOnFileSizeLimit: true)
             .CreateBootstrapLogger();
 
         // Must run before anything reads settings.json or the fan-control marker from the new
@@ -199,13 +204,17 @@ public partial class App : System.Windows.Application, IDisposable
 
     private static void ConfigureLogging(HostApplicationBuilder builder, string logPath)
     {
+        // Information (not Debug) with a per-file size cap - see the bootstrap logger above.
         builder.Services.AddSerilog((_, loggerConfiguration) => loggerConfiguration
-            .MinimumLevel.Debug()
+            .MinimumLevel.Information()
+            .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
             .WriteTo.File(
                 logPath,
                 formatProvider: CultureInfo.InvariantCulture,
                 rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: 14));
+                retainedFileCountLimit: 14,
+                fileSizeLimitBytes: 10 * 1024 * 1024,
+                rollOnFileSizeLimit: true));
     }
 
     private static void ConfigureServices(IServiceCollection services)

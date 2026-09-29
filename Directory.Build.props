@@ -20,4 +20,10 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
+  <!-- No .pdb files next to a published build (dotnet publish sets _IsPublishing): the installer
+       only ships Porchlight.exe, so they would just be clutter in the publish folder. -->
+  <PropertyGroup Condition="'$(_IsPublishing)' == 'true'">
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
 </Project>

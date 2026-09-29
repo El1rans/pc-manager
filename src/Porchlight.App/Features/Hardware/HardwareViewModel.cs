@@ -26,6 +26,8 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
     private readonly UnusedSensorTracker _unusedSensorTracker = new();
     private bool _loadingToggle;
     private bool _disposed;
+    private volatile bool _viewActive;
+    private HardwareSnapshot? _pendingSnapshot;
 
     [ObservableProperty]
     private HardwareStatus _status = HardwareStatus.NotElevated;
@@ -308,8 +310,51 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
         }
     }
 
-    private void OnSnapshotUpdated(object? sender, HardwareSnapshot snapshot) =>
-        _dispatcher.InvokeAsync(() => ApplySnapshot(snapshot));
+    /// <summary>Called by the view whenever it becomes visible/hidden (page selected or not, window
+    /// shown or hidden to tray). While inactive, snapshot ticks are only remembered, not applied -
+    /// this page is pure display; fan control runs off <see cref="IHardwareService.SnapshotUpdated"/>
+    /// in <see cref="FanControlManager"/> directly and never depends on it. Becoming active again
+    /// applies the latest snapshot immediately.</summary>
+    public void SetViewActive(bool active)
+    {
+        _viewActive = active;
+        if (active)
+        {
+            ApplyPendingSnapshot();
+        }
+    }
+
+    /// <summary>Called by the view when the main window's state changes, so a restore from minimized
+    /// catches up immediately instead of on the next tick.</summary>
+    public void OnWindowStateChanged() => ApplyPendingSnapshot();
+
+    private void OnSnapshotUpdated(object? sender, HardwareSnapshot snapshot)
+    {
+        _pendingSnapshot = snapshot;
+        if (_viewActive)
+        {
+            _dispatcher.InvokeAsync(ApplyPendingSnapshot);
+        }
+    }
+
+    /// <summary>Applies the newest not-yet-applied snapshot, if any, and only while the page is
+    /// shown and the main window is not minimized. UI thread only.</summary>
+    private void ApplyPendingSnapshot()
+    {
+        if (_disposed || !_viewActive || Application.Current?.MainWindow?.WindowState == WindowState.Minimized)
+        {
+            return;
+        }
+
+        var snapshot = _pendingSnapshot;
+        if (snapshot is null)
+        {
+            return;
+        }
+
+        _pendingSnapshot = null;
+        ApplySnapshot(snapshot);
+    }
 
     private void OnFanControlStatusChanged(object? sender, FanControlAlert alert) =>
         _dispatcher.InvokeAsync(() =>
@@ -332,7 +377,7 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
         var fanDisplayNameOverrides = BuildFanDisplayNameOverridesByRpmSensorId();
         MergeCards(snapshot.Nodes, fanDisplayNameOverrides);
         ApplyFilter();
-        _unusedSensorTracker.PruneTo(snapshot.AllSensors().Select(s => s.Id).ToList());
+        _unusedSensorTracker.PruneTo(snapshot.AllSensors().Select(s => s.Id).ToHashSet());
         MergeSummaryTiles(HardwareSummarySelector.Build(snapshot, FailsafeTemperatureC, fanDisplayNameOverrides));
         UpdateFans(snapshot);
         OnPropertyChanged(nameof(ShowNoControllableFansMessage));
@@ -493,6 +538,11 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
     {
         var controllers = _hardwareService.Controllers;
         var allSensors = snapshot.AllSensors().ToList();
+        var sensorsById = new Dictionary<string, SensorReading>(allSensors.Count);
+        foreach (var sensor in allSensors)
+        {
+            sensorsById[sensor.Id] = sensor;
+        }
 
         // S1: a sensor with inverted scale (e.g. Intel's per-core "Distance to TjMax") must never be
         // offered as a curve source - selecting one would make the curve react backwards.
@@ -522,7 +572,7 @@ public sealed partial class HardwareViewModel : PageViewModelBase, IDisposable
             // B1: the RPM reading now lives on a separate sensor from the control channel itself -
             // look it up by the id the controller pairs it with, not by the controller's own id.
             var rpmSensor = controller.RpmSensorId is { } rpmId
-                ? allSensors.FirstOrDefault(s => s.Id == rpmId)
+                ? sensorsById.GetValueOrDefault(rpmId)
                 : null;
             card.UpdateReadings(controller, rpmSensor);
             card.UpdateAvailableTemperatureSensors(temperatureSensors);

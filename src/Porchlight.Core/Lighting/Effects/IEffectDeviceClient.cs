@@ -29,6 +29,8 @@ public interface IEffectDeviceClient : IDisposable
 
     /// <summary>Sets every LED of the device to the given colors. <paramref name="colors"/> must
     /// have exactly as many entries as the device has LEDs (<see cref="EffectDeviceInfo.LedCount"/>).
-    /// Never call this for a device with zero LEDs.</summary>
+    /// Never call this for a device with zero LEDs. The list is only valid for the duration of the
+    /// call - implementations must send/copy it synchronously and not retain it (the engine reuses
+    /// the buffer for the next frame).</summary>
     void UpdateLeds(int deviceIndex, IReadOnlyList<RgbColor> colors);
 }

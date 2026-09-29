@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Porchlight.Core.Elevation;
 using Porchlight.Core.Processes;
 using Porchlight.Core.Settings;
+using Porchlight.Core.Winget;
 
 namespace Porchlight.Core.Components;
 
@@ -74,7 +75,7 @@ public sealed partial class ComponentService : IComponentService
         ComponentStatus status;
         try
         {
-            var result = await _processRunner.RunAsync("winget", arguments, log, progress, CancellationToken.None)
+            var result = await _processRunner.RunAsync(WingetLocator.Resolve(), arguments, log, progress, CancellationToken.None)
                 .ConfigureAwait(false);
 
             if (result.ExitCode == 0 || WingetExitCodes.IsAlreadyInstalled(result.ExitCode))

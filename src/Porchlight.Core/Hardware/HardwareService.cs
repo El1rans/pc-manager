@@ -24,6 +24,10 @@ public sealed class HardwareService : IHardwareService, IDisposable
     /// exists to catch.</summary>
     private readonly Dictionary<string, (double? Value, DateTimeOffset ObservedUtc)> _lastObserved = [];
 
+    // Identifier.ToString() joins path segments into a new string every call; ids never change for a
+    // given sensor/hardware object, so cache them (weakly - entries die with the hardware tree).
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ISensor, string> _sensorIds = new();
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IHardware, string> _hardwareIds = new();
     private readonly IComponentService _componentService;
     private readonly IElevationService _elevationService;
     private readonly ILogger<HardwareService> _logger;
@@ -399,7 +403,7 @@ public sealed class HardwareService : IHardwareService, IDisposable
                 continue;
             }
 
-            var id = sensor.Identifier.ToString();
+            var id = _sensorIds.GetValue(sensor, static s => s.Identifier.ToString());
             var timestamp = StampObservationTime(id, sensor.Value, now, lastObserved);
 
             sensors.Add(new SensorReading(id, sensor.Name, MapSensorType(sensor.SensorType), sensor.Value, sensor.Min, sensor.Max, timestamp));
@@ -408,7 +412,7 @@ public sealed class HardwareService : IHardwareService, IDisposable
         var children = hardware.SubHardware.Select(sub => BuildNode(sub, controllers, lastObserved)).ToList();
 
         return new HardwareNode(
-            hardware.Identifier.ToString(),
+            _hardwareIds.GetValue(hardware, static h => h.Identifier.ToString()),
             hardware.Name,
             nodeType,
             sensors,

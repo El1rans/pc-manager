@@ -1,3 +1,5 @@
+using System.Net;
+using Microsoft.Extensions.Logging;
 using Porchlight.Core.Lighting.Effects;
 
 namespace Porchlight.Core.Settings;
@@ -17,7 +19,29 @@ public sealed class LightingSettings
 
     /// <summary>OpenRGB SDK server host. Defaults to loopback - the server almost always runs on
     /// the same machine as Porchlight.</summary>
-    public string OpenRgbHost { get; set; } = "127.0.0.1";
+    public string OpenRgbHost { get; set; } = DefaultOpenRgbHost;
+
+    /// <summary>Host the OpenRGB SDK server is expected on when the setting is missing or rejected.</summary>
+    public const string DefaultOpenRgbHost = "127.0.0.1";
+
+    /// <summary>
+    /// The host to actually connect to. Porchlight runs elevated and settings.json is user-editable,
+    /// so only loopback ("localhost" or a loopback IP literal) is honoured; anything else falls back
+    /// to <see cref="DefaultOpenRgbHost"/> (with a warning when a logger is supplied).
+    /// </summary>
+    public string ResolveOpenRgbHost(ILogger? logger = null)
+    {
+        var host = OpenRgbHost?.Trim();
+        if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
+            || (IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address)))
+        {
+            return host!;
+        }
+
+        logger?.LogWarning(
+            "Ignoring non-loopback OpenRGB host '{Host}'; using {Default} instead.", OpenRgbHost, DefaultOpenRgbHost);
+        return DefaultOpenRgbHost;
+    }
 
     /// <summary>OpenRGB SDK server port (OpenRGB's own default is 6742).</summary>
     public int OpenRgbPort { get; set; } = 6742;

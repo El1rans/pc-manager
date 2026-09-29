@@ -16,6 +16,7 @@ public sealed class OpenRgbEffectDeviceClient : IEffectDeviceClient
     private readonly string _host;
     private readonly int _port;
     private readonly int _timeoutMs;
+    private readonly Dictionary<int, NativeColor[]> _nativeBuffers = [];
     private OpenRGB.NET.OpenRgbClient? _client;
 
     public OpenRgbEffectDeviceClient(string host, int port, int timeoutMs)
@@ -47,7 +48,17 @@ public sealed class OpenRgbEffectDeviceClient : IEffectDeviceClient
 
     public void UpdateLeds(int deviceIndex, IReadOnlyList<RgbColor> colors)
     {
-        var native = new NativeColor[colors.Count];
+        // OpenRgbClient.UpdateLeds sends synchronously, so a per-device buffer is safe to reuse.
+        NativeColor[] native;
+        lock (_nativeBuffers)
+        {
+            if (!_nativeBuffers.TryGetValue(deviceIndex, out native!) || native.Length != colors.Count)
+            {
+                native = new NativeColor[colors.Count];
+                _nativeBuffers[deviceIndex] = native;
+            }
+        }
+
         for (var i = 0; i < colors.Count; i++)
         {
             native[i] = new NativeColor(colors[i].R, colors[i].G, colors[i].B);

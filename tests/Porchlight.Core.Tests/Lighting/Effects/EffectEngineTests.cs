@@ -58,6 +58,40 @@ public sealed class EffectEngineTests
     }
 
     [Fact]
+    public async Task Tick_WhilePreviousTickStillSending_IsSkipped()
+    {
+        var device = MakeDevice(0, "Keyboard", 10);
+        var (engine, client, timeProvider) = CreateEngine(device);
+        engine.SetAssignments([new EffectAssignment { DeviceKey = "Keyboard", EffectName = "Rainbow wave" }]);
+        using var sendStarted = new ManualResetEventSlim(false);
+        using var releaseSend = new ManualResetEventSlim(false);
+        client.OnUpdateLeds = () =>
+        {
+            sendStarted.Set();
+            releaseSend.Wait(TimeSpan.FromSeconds(10));
+        };
+        engine.Start(fps: 10);
+        var period = TimeSpan.FromSeconds(0.1);
+
+        var firstTick = Task.Run(() => timeProvider.Advance(period), TestContext.Current.CancellationToken);
+        Assert.True(sendStarted.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+        client.OnUpdateLeds = null;
+
+        // The first tick is still blocked inside UpdateLeds, so this one must be skipped outright.
+        timeProvider.Advance(period);
+        Assert.Empty(client.UpdateLedsCalls);
+
+        releaseSend.Set();
+        await firstTick;
+        Assert.Single(client.UpdateLedsCalls);
+
+        // Once the slow tick finishes, ticking resumes.
+        timeProvider.Advance(period);
+        Assert.Equal(2, client.UpdateLedsCalls.Count);
+        engine.Stop();
+    }
+
+    [Fact]
     public void Start_SwitchesAssignedDeviceToDirectMode()
     {
         var device = MakeDevice(0, "Keyboard", 10, activeModeIndex: 1);
