@@ -111,10 +111,11 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
         IUrlLauncher urlLauncher,
         IWindowsVersionReader windowsVersionReader,
         ISettingsStore settingsStore,
-        ILogger<RemoteSupportViewModel> logger)
+        ILogger<RemoteSupportViewModel> logger,
+        CheckupCardViewModel checkup)
         : this(
             anyDeskService, componentService, cardFactory, clipboard, urlLauncher, windowsVersionReader,
-            settingsStore, logger, DefaultCopyConfirmationDuration, DefaultWaitingForIdPollInterval,
+            settingsStore, logger, checkup, DefaultCopyConfirmationDuration, DefaultWaitingForIdPollInterval,
             DefaultRunningStatusPollInterval, DefaultIdWaitTimeout, TimeProvider.System)
     {
     }
@@ -133,6 +134,7 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
         IWindowsVersionReader windowsVersionReader,
         ISettingsStore settingsStore,
         ILogger<RemoteSupportViewModel> logger,
+        CheckupCardViewModel checkup,
         TimeSpan copyConfirmationDuration,
         TimeSpan waitingForIdPollInterval,
         TimeSpan runningStatusPollInterval,
@@ -146,6 +148,7 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
         _windowsVersionReader = windowsVersionReader;
         _settingsStore = settingsStore;
         _logger = logger;
+        Checkup = checkup;
         _copyConfirmationDuration = copyConfirmationDuration;
         _waitingForIdPollInterval = waitingForIdPollInterval;
         _runningStatusPollInterval = runningStatusPollInterval;
@@ -161,6 +164,7 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
         _loadingHelperName = true;
         _helperName = settingsStore.Current.RemoteSupport.HelperName;
         _loadingHelperName = false;
+        Checkup.SetHelperName(_helperName);
 
         _componentService.StatusChanged += OnComponentServiceStatusChanged;
     }
@@ -179,6 +183,9 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
     /// <summary>Card for AnyDesk itself; shown (larger, via the view's own styling) while AnyDesk is
     /// not installed or a detection/install error occurred. See <see cref="ShowComponentCard"/>.</summary>
     public ComponentCardViewModel Card { get; }
+
+    /// <summary>The "Send a check-up to your helper" card - see docs/specs/16-checkup-report.md.</summary>
+    public CheckupCardViewModel Checkup { get; }
 
     public bool ShowComponentCard => Card.Status.State is ComponentState.NotInstalled or ComponentState.Error;
 
@@ -498,6 +505,7 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
         OnPropertyChanged(nameof(HasHelperName));
         OnPropertyChanged(nameof(HelperLine));
         OnPropertyChanged(nameof(Step1Text));
+        Checkup.SetHelperName(value);
 
         if (_loadingHelperName)
         {
