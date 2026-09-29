@@ -90,7 +90,7 @@ public sealed partial class WebConsoleViewModel : PageViewModelBase, IDisposable
 
     public bool HasOtherLinks => OtherLinks.Count > 0;
 
-    public string PortHint => string.Create(
+    public string PortHint { get; } = string.Create(
         CultureInfo.InvariantCulture,
         $"A number from {WebConsoleOptions.LowestAllowedPort} to {WebConsoleOptions.HighestAllowedPort}. The default is {WebConsoleOptions.DefaultPort}.");
 
