@@ -37,6 +37,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold"/>
@@ -52,6 +53,10 @@
                              Minimum="0" Maximum="100" Value="{Binding UsedPercent, Mode=OneWay}"/>
                 <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Text="{Binding DetailText}"
                            Style="{StaticResource Secondary}" FontSize="12" Margin="0,6,0,0"/>
+                <Button Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Content="Free up space"
+                        HorizontalAlignment="Left" Margin="0,8,0,0"
+                        Visibility="{Binding IsLow, Converter={StaticResource BoolToVis}}"
+                        Command="{Binding DataContext.FreeUpSpaceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
             </Grid>
         </DataTemplate>
 
