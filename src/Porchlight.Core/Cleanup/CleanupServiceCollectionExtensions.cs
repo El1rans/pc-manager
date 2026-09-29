@@ -33,6 +33,9 @@ public static class CleanupServiceCollectionExtensions
             services.AddSingleton<IInstalledAppsReader, Demo.DemoInstalledAppsReader>();
             services.AddSingleton<IRecycler, Demo.DemoRecycler>();
             services.AddSingleton<IAppUninstaller, Demo.DemoAppUninstaller>();
+            services.AddSingleton<IDiskSpaceMapper, Demo.DemoDiskSpaceMapper>();
+            services.AddSingleton<IDuplicateFinder, Demo.DemoDuplicateFinder>();
+            services.AddSingleton<IDuplicateRemover, Demo.DemoDuplicateRemover>();
             return services;
         }
 #endif
@@ -43,6 +46,10 @@ public static class CleanupServiceCollectionExtensions
         services.AddSingleton<IRecycler, Recycler>();
         services.AddSingleton<IInstalledAppsReader, InstalledAppsReader>();
         services.AddSingleton<IAppUninstaller, AppUninstaller>();
+        services.AddSingleton<IDiskSpaceMapper, DiskSpaceMapper>();
+        services.AddSingleton<IFileContentReader, FileContentReader>();
+        services.AddSingleton<IDuplicateFinder, DuplicateFinder>();
+        services.AddSingleton<IDuplicateRemover, DuplicateRemover>();
         return services;
     }
 }

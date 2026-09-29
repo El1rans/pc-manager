@@ -7,13 +7,6 @@ namespace Porchlight.Core.Cleanup;
 /// (their size would not free any local space).</remarks>
 public sealed partial class LargeFileFinder : ILargeFileFinder
 {
-    private const FileAttributes RecallOnOpen = (FileAttributes)0x00040000;
-    private const FileAttributes RecallOnDataAccess = (FileAttributes)0x00400000;
-
-    private const FileAttributes SkippedAttributes =
-        FileAttributes.ReparsePoint | FileAttributes.Hidden | FileAttributes.System |
-        FileAttributes.Offline | RecallOnOpen | RecallOnDataAccess;
-
     private readonly ICleanupFileSystem _fileSystem;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<LargeFileFinder> _logger;
@@ -73,7 +66,7 @@ public sealed partial class LargeFileFinder : ILargeFileFinder
 
                 foreach (var entry in entries)
                 {
-                    if ((entry.Attributes & SkippedAttributes) != 0)
+                    if (PersonalFileRules.IsSkipped(entry))
                     {
                         continue;
                     }
