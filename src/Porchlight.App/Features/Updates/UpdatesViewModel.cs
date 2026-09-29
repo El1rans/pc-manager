@@ -71,6 +71,8 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     private readonly ReinstallWorkflow _reinstallWorkflow;
     private readonly ISettingsStore _settingsStore;
     private readonly IAppInUseDiagnosticsService _appInUseDiagnostics;
+    private readonly IPendingUpdatesTracker _pendingUpdatesTracker;
+    private readonly IFileDialogService _fileDialogs;
     private readonly ILogger<UpdatesViewModel> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly StringBuilder _log = new();
@@ -187,7 +189,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     }
 
     /// <inheritdoc/>
-    public bool IsBusyWithWork => IsUpdating;
+    public bool IsBusyWithWork => IsUpdating || IsMovingApps;
 
     /// <inheritdoc/>
     public string BusyMessage =>
@@ -196,8 +198,8 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
 
     public UpdatesViewModel(
         IWingetClient wingetClient, ISettingsStore settingsStore, IAppInUseDiagnosticsService appInUseDiagnostics,
-        ILogger<UpdatesViewModel> logger)
-        : this(wingetClient, settingsStore, appInUseDiagnostics, logger, TimeProvider.System)
+        IPendingUpdatesTracker pendingUpdatesTracker, IFileDialogService fileDialogs, ILogger<UpdatesViewModel> logger)
+        : this(wingetClient, settingsStore, appInUseDiagnostics, pendingUpdatesTracker, fileDialogs, logger, TimeProvider.System)
     {
     }
 
@@ -206,8 +208,11 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     /// (<see cref="WaitingHintThreshold"/>) never depends on wall-clock timing.</summary>
     public UpdatesViewModel(
         IWingetClient wingetClient, ISettingsStore settingsStore, IAppInUseDiagnosticsService appInUseDiagnostics,
+        IPendingUpdatesTracker pendingUpdatesTracker, IFileDialogService fileDialogs,
         ILogger<UpdatesViewModel> logger, TimeProvider timeProvider)
     {
+        _pendingUpdatesTracker = pendingUpdatesTracker;
+        _fileDialogs = fileDialogs;
         _wingetClient = wingetClient;
         _reinstallWorkflow = new ReinstallWorkflow(wingetClient);
         _settingsStore = settingsStore;
@@ -390,6 +395,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
 
         UpdateSummary();
         UpdateBadge();
+        _pendingUpdatesTracker.Report(Packages.Count(p => !p.IsHiddenByDefault), _timeProvider.GetLocalNow());
     }
 
     private void UpdateSummary()

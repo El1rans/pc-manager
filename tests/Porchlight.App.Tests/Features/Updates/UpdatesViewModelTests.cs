@@ -15,6 +15,8 @@ public sealed class UpdatesViewModelTests : IDisposable
     private readonly SettingsStore _settingsStore;
     private readonly FakeWingetClient _wingetClient = new();
     private readonly FakeAppInUseDiagnosticsService _appInUseDiagnostics = new();
+    private readonly PendingUpdatesTracker _tracker = new();
+    private readonly FakeFileDialogService _fileDialogs = new();
 
     public UpdatesViewModelTests()
     {
@@ -32,10 +34,10 @@ public sealed class UpdatesViewModelTests : IDisposable
     }
 
     private UpdatesViewModel CreateViewModel() =>
-        new(_wingetClient, _settingsStore, _appInUseDiagnostics, NullLogger<UpdatesViewModel>.Instance);
+        new(_wingetClient, _settingsStore, _appInUseDiagnostics, _tracker, _fileDialogs, NullLogger<UpdatesViewModel>.Instance);
 
     private UpdatesViewModel CreateViewModel(TimeProvider timeProvider) =>
-        new(_wingetClient, _settingsStore, _appInUseDiagnostics, NullLogger<UpdatesViewModel>.Instance, timeProvider);
+        new(_wingetClient, _settingsStore, _appInUseDiagnostics, _tracker, _fileDialogs, NullLogger<UpdatesViewModel>.Instance, timeProvider);
 
     private static WingetPackage Package(
         string id, bool requiresExplicit = false, string name = "", string installedVersion = "1.0", string availableVersion = "2.0") =>
