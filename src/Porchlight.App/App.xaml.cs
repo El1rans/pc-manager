@@ -10,6 +10,7 @@ using Porchlight.App.Controls;
 using Porchlight.App.Features.Cleanup;
 using Porchlight.App.Features.Dashboard;
 using Porchlight.App.Features.Hardware;
+using Porchlight.App.Features.Health;
 using Porchlight.App.Features.Lighting;
 using Porchlight.App.Features.RemoteSupport;
 using Porchlight.App.Features.Setup;
@@ -243,6 +244,7 @@ public partial class App : System.Windows.Application, IDisposable
         services.AddRemoteSupportFeature();
         services.AddCleanupFeature();
         services.AddStartupFeature();
+        services.AddHealthFeature();
     }
 
     /// <summary>Applies every feature's <see cref="PageRegistration"/> to the view locator. Runs

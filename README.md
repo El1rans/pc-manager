@@ -163,12 +163,20 @@ milestone specs.
   `StartupApproved` value): nothing is ever deleted, so it is always reversible, and no startup
   program is ever launched. Items for all users need administrator rights. No startup-impact rating
   and no scheduled tasks are shown (see `docs/specs/13-startup-apps.md`).
+- Health check: a plain-language page with five cards - disk health (per physical disk: Healthy /
+  Warning - back up your files soon / Unknown, from Windows' storage and failure-prediction data);
+  Windows repair (`sfc /scannow`, then `DISM /RestoreHealth` offered only if SFC couldn't fix everything;
+  needs administrator rights, takes 10-30 minutes, and can't be cancelled once started); restore point
+  (create one, see the most recent ones, explains Windows' 24-hour limit and detects System Protection
+  being off, with a link to open it); recent problems from the last 30 days of the Event Log (app
+  crashes, blue screens, unexpected shutdowns, disk errors, failed updates - grouped and counted); and,
+  on a laptop, battery wear. Any check that can't run shows "Couldn't check" instead of failing. See
+  `docs/specs/14-system-health.md`.
 
 ## Planned modules
 
 ### Dashboard
 - CPU/GPU temperatures (where the hardware exposes them)
-- Battery health (laptops)
 
 ### App updates (winget)
 - Choose which apps to update, ignore list, silent mode (from the prototype)
@@ -180,11 +188,6 @@ milestone specs.
 - Process list with CPU/RAM, kill or open file location
 - Windows services viewer
 - Startup impact ratings and logon scheduled tasks for the Startup apps page
-
-### System health
-- Run SFC / DISM, check disk (SMART) status
-- Create a restore point before risky changes
-- Recent crashes and errors from the Event Log in plain language
 
 ### Network
 - Current IP, DNS, Wi-Fi signal, speed test
