@@ -357,4 +357,5 @@ jobs:
             "$exe" "$exe.sha256" \
             --title "Porchlight $VERSION" \
             --notes-file "release-assets/release-notes.md" \
-            --verify-tag
+            --verify-tag \
+            --repo "$GITHUB_REPOSITORY"
