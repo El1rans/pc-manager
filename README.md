@@ -156,6 +156,13 @@ milestone specs.
   temperature between a min/max °C), and, for a device with a matrix (per-key) zone, Pac-Man and
   Rain - plus a global "updates pending" overlay and a "Pause effects" button. See
   `docs/specs/11-led-effects.md`.
+- Startup apps: lists everything that starts when you sign in - the per-user and all-users `Run`
+  registry keys and both Startup folders - with a friendly name, publisher, On/Off status and a plain
+  "What is this?" line, and marks Windows/Microsoft items and Porchlight's own tools (AnyDesk,
+  OpenRGB) as "Recommended to keep". Turn items off and on exactly like Task Manager (the
+  `StartupApproved` value): nothing is ever deleted, so it is always reversible, and no startup
+  program is ever launched. Items for all users need administrator rights. No startup-impact rating
+  and no scheduled tasks are shown (see `docs/specs/13-startup-apps.md`).
 
 ## Planned modules
 
@@ -169,10 +176,10 @@ milestone specs.
 - Update history
 - Install new apps from a search box; export/import an app list to set up a new PC
 
-### Startup and processes
-- Startup apps: see and disable what runs at boot, with startup impact
+### Processes and services
 - Process list with CPU/RAM, kill or open file location
 - Windows services viewer
+- Startup impact ratings and logon scheduled tasks for the Startup apps page
 
 ### System health
 - Run SFC / DISM, check disk (SMART) status
