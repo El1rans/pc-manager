@@ -158,6 +158,18 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public async Task InitializeAsync_KeepsAnEarlierSelection_SoATrayStartCanNavigateFirst()
+    {
+        var s = CreateStandard();
+        s.Vm.SelectedCategory = s.Vm.Categories[1];
+
+        await s.Vm.InitializeAsync(CancellationToken.None);
+
+        Assert.Same(s.Vm.Categories[1], s.Vm.SelectedCategory);
+        Assert.Same(s.Updates, s.Vm.SelectedPage);
+    }
+
+    [Fact]
     public void SelectingACategory_SelectsItsFirstPage_AndLoadsIt()
     {
         var s = CreateStandard();

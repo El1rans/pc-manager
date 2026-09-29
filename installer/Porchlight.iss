@@ -148,6 +148,14 @@ Name: "{commonstartup}\Porchlight"; Filename: "{app}\{#MyAppExeName}"; Tasks: st
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch Porchlight"; Flags: nowait postinstall skipifsilent
 
+; Removes the "start when I sign in" scheduled task Porchlight can register itself
+; (docs/specs/24-start-at-login.md). The task name must match LoginLaunchTaskXml.TaskName. Setup
+; already runs elevated (PrivilegesRequired=admin), which deleting a HighestAvailable task needs;
+; a missing task just makes schtasks exit non-zero, which is harmless. Independent of the optional
+; {commonstartup} shortcut above, which is removed by Inno itself.
+[UninstallRun]
+Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""Porchlight"" /F"; Flags: runhidden; RunOnceId: "DeletePorchlightSignInTask"
+
 [Code]
 const
   { winget's own hex exit codes for "the package/an equivalent version is already installed",

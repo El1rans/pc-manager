@@ -136,7 +136,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        SelectedCategory = Categories.FirstOrDefault();
+
+        // Idempotent: a tray start (--tray) can navigate (e.g. tray "Get help") before the window's
+        // first Loaded runs this, and that choice must not be reset to the first category.
+        SelectedCategory ??= Categories.FirstOrDefault();
         await _currentNavigation.ConfigureAwait(true);
     }
 
