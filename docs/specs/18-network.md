@@ -93,14 +93,14 @@ Speed test
 - Persisted as `AppSettings.Network.LastSpeedTest` (`NetworkSettings`).
 
 Apps using the network
-- `TcpTableParser` (pure): parses the byte buffers returned by `GetExtendedTcpTable` /
-  `GetExtendedUdpTable` (IPv4 and IPv6, owner-PID variants) into `NetworkConnection(Pid,
-  Protocol)`. Only established TCP connections whose remote end is not loopback are kept.
+- `TcpTableParser` (pure): parses the byte buffers returned by `GetExtendedTcpTable` (IPv4 and
+  IPv6, owner-PID variants) into `NetworkConnection(Pid)`. Only established TCP connections whose
+  remote end is not loopback are kept.
 - `INetworkConnectionReader` / `NativeNetworkConnectionReader` (the P/Invoke, with the standard
   grow-and-retry on `ERROR_INSUFFICIENT_BUFFER`), `IProcessNameResolver`, and
   `NetworkAppUsageAggregator` (pure): group by friendly process name, sort by connection count.
-  UDP has no connection state, so a program with only UDP sockets is listed as "uses the network
-  in the background" rather than given a number.
+  UDP (`GetExtendedUdpTable`) is deliberately not read: a bound UDP socket says nothing about
+  actual traffic and would only list nearly every program.
 - `INetworkAppUsageService.GetUsage()` ties the three together. Unreadable processes are
   skipped; failures are logged at Debug.
 

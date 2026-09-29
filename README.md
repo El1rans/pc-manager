@@ -87,6 +87,7 @@ milestone specs.
 ## Features
 
 - App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Free up space, Get help), following
+- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Internet, Get help), following
   Windows light/dark theme, with the app version shown in the sidebar footer.
 - Settings persisted as JSON under `%APPDATA%\Porchlight\settings.json`, atomic writes, corrupt-file
   recovery.
@@ -173,6 +174,14 @@ milestone specs.
   on a laptop, battery wear. Any check that can't run shows "Couldn't check" instead of failing. See
   `docs/specs/14-system-health.md`.
 
+- Internet: connection status (Wi-Fi name and signal as bars and words, local IP, router, DNS),
+  a guided "Fix my internet" check (network connection, router, website names, the internet) that
+  suggests only matching fixes - clear saved website addresses, get a fresh connection, switch the
+  connection off and on (administrator, with confirmation) - and only *offers* Windows' Network
+  settings as a last resort; a Cloudflare speed test that only runs when you press the button (the
+  last result is remembered); and a read-only list of programs using the internet, refreshed only
+  while the page is open. The public IP address is never fetched. See `docs/specs/18-network.md`.
+
 ## Planned modules
 
 ### Dashboard
@@ -188,11 +197,6 @@ milestone specs.
 - Process list with CPU/RAM, kill or open file location
 - Windows services viewer
 - Startup impact ratings and logon scheduled tasks for the Startup apps page
-
-### Network
-- Current IP, DNS, Wi-Fi signal, speed test
-- Flush DNS, reset network adapter
-- See which apps are using the network
 
 ### Quality of life
 - System tray icon with quick stats
