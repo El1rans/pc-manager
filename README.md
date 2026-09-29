@@ -10,6 +10,45 @@ so you can help before a small problem turns into a phone call.
 
 Built with C# / .NET (WPF).
 
+## A quick tour
+
+Porchlight has a left-hand menu with a few plain-named sections; some have tabs across the top for
+related pages. (These screenshots use made-up demo data, not a real PC.)
+
+**Overview - how is the PC doing right now?**
+The Dashboard shows live tiles for CPU, memory, graphics, disk and network speed, how full each
+drive is (with a "Low space" warning), and which programs are using the most resources. It's the
+first thing you look at when someone says "the computer feels slow".
+
+![Dashboard showing live CPU, memory, GPU, disk and network tiles, drive space bars with a low-space warning, and a list of the busiest programs](docs/screenshots/dashboard.png)
+
+**Tune-up > Updates - keep programs up to date**
+Lists the programs that have a newer version available. Tick the ones you want and press
+**Update selected**; Porchlight does the rest. Programs whose version can't be read, or that are
+pinned, are flagged in the Notes column so nothing surprising gets installed.
+
+![Updates page listing programs with an installed and an available version, checkboxes to pick which to update, and an Update selected button](docs/screenshots/updates.png)
+
+**Hardware > Sensors & fans - is it running hot?**
+The big tiles at the top give the headline numbers (CPU and graphics temperature, power draw,
+hottest fan) in plain units. Below them, each part of the PC has a collapsed card you can open for
+the full list of readings.
+
+![Hardware page with tiles for CPU temperature, GPU temperature, CPU power and hottest fan, above collapsed cards for the processor, graphics card and other components](docs/screenshots/hardware.png)
+
+**Hardware > Lighting - RGB lights in one place**
+Pick a colour and brightness for every RGB device at once, or set each device (motherboard,
+keyboard, ...) on its own. There is also a section for animated effects.
+
+![Lighting page with a colour wheel, quick colour swatches, a brightness slider and a list of RGB devices](docs/screenshots/lighting.png)
+
+**Get help - let family connect in two clicks**
+Shows a short address to read out over the phone, plain step-by-step instructions, and a reminder
+to only accept a connection from someone you are talking to right now. It uses AnyDesk to make
+the connection.
+
+![Get help page showing the PC's remote-help address, a three-step how-it-works list and a safety warning about unexpected callers](docs/screenshots/get-help.png)
+
 ## Status
 
 Foundation stage: a production-shaped app shell (solution layout, host + DI, logging, settings,
