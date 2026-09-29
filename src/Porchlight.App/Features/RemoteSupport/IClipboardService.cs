@@ -12,4 +12,8 @@ public interface IClipboardService
     /// <see langword="false"/> instead, so the caller can tell the user to try again rather than
     /// claiming success.</summary>
     bool SetText(string text);
+
+    /// <summary>The clipboard's current plain text, or null when it holds no text (or couldn't be
+    /// read). Never throws - see <see cref="SetText"/>.</summary>
+    string? GetText();
 }

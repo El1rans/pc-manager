@@ -15,6 +15,8 @@ public static class LightingFeature
         // generic OS-URL-launcher the RemoteSupport feature already has - see its own registration
         // for why this is TryAdd, not AddSingleton.
         services.TryAddSingleton<IUrlLauncher, UrlLauncher>();
+        services.TryAddSingleton<IClipboardService, ClipboardService>();
+        services.AddSingleton<IAnimationFilePicker, AnimationFilePicker>();
         return services.AddPage<LightingViewModel, LightingView>();
     }
 }

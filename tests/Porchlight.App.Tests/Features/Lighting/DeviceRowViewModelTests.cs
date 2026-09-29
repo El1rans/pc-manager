@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Porchlight.Core.Lighting;
+using Porchlight.Core.Lighting.Effects;
 using Xunit;
 
 namespace Porchlight.App.Tests.Features.Lighting;
@@ -204,5 +205,66 @@ public sealed class DeviceRowViewModelTests
 
         Assert.Equal("None", row.SelectedEffectName);
         Assert.Empty(effectCallbacks);
+    }
+
+    [Fact]
+    public void AvailableEffects_AnyDevice_IncludesCustomAnimation()
+    {
+        var (row, _, _, _) = CreateRow();
+
+        Assert.Contains(EffectRegistry.CustomAnimationEffectName, row.AvailableEffects);
+    }
+
+    [Fact]
+    public void CustomAnimation_LoadAndSave_RoundTripsIdAndSpeed()
+    {
+        var (row, _, _, callbacks) = CreateRow();
+        var assignment = new EffectAssignment
+        {
+            DeviceKey = "Keyboard",
+            EffectName = EffectRegistry.CustomAnimationEffectName,
+            Settings = new() { [EffectRegistry.CustomAnimationIdSetting] = "sunset", ["speed"] = "2" },
+        };
+
+        row.LoadEffectAssignment(assignment);
+
+        Assert.Empty(callbacks);
+        Assert.True(row.ShowCustomAnimationSetting);
+        Assert.True(row.ShowSpeedSetting);
+        Assert.Equal("sunset", row.SelectedCustomAnimationId);
+        Assert.Equal(2, row.EffectSpeed);
+        var saved = row.ToEffectAssignment(showUpdatesAlert: false)!;
+        Assert.Equal("sunset", saved.Settings[EffectRegistry.CustomAnimationIdSetting]);
+        Assert.Equal("2", saved.Settings["speed"]);
+    }
+
+    [Fact]
+    public void SelectedCustomAnimationId_SetToNullByPicker_IsIgnored()
+    {
+        var (row, _, _, callbacks) = CreateRow();
+        row.SelectedEffectName = EffectRegistry.CustomAnimationEffectName;
+        row.SelectedCustomAnimationId = "sunset";
+        callbacks.Clear();
+
+        row.SelectedCustomAnimationId = null;
+
+        Assert.Equal("sunset", row.SelectedCustomAnimationId);
+        Assert.Empty(callbacks);
+    }
+
+    [Fact]
+    public void ForgetCustomAnimation_OnlyClearsMatchingId_WithoutCallback()
+    {
+        var (row, _, _, callbacks) = CreateRow();
+        row.SelectedEffectName = EffectRegistry.CustomAnimationEffectName;
+        row.SelectedCustomAnimationId = "sunset";
+        callbacks.Clear();
+
+        row.ForgetCustomAnimation("other");
+        Assert.Equal("sunset", row.SelectedCustomAnimationId);
+
+        row.ForgetCustomAnimation("sunset");
+        Assert.Null(row.SelectedCustomAnimationId);
+        Assert.Empty(callbacks);
     }
 }

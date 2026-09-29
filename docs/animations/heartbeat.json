@@ -1,0 +1,30 @@
+{
+  "format": "porchlight-animation",
+  "version": 1,
+  "name": "Heartbeat",
+  "description": "A red double-beat pulse, like a heartbeat. Works on any device.",
+  "loop": true,
+  "transition": "fade",
+  "frames": [
+    {
+      "fill": "#200000",
+      "duration": 0.08
+    },
+    {
+      "fill": "#FF0000",
+      "duration": 0.12
+    },
+    {
+      "fill": "#300000",
+      "duration": 0.1
+    },
+    {
+      "fill": "#C00000",
+      "duration": 0.12
+    },
+    {
+      "fill": "#200000",
+      "duration": 0.9
+    }
+  ]
+}
