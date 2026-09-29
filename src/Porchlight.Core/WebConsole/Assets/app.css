@@ -182,6 +182,8 @@ h2 { font-size: 16px; margin: 0 0 12px; font-weight: 600; }
   white-space: nowrap;
 }
 
-footer { font-size: 12px; padding: 8px 0 24px; }
+/* margin repeated here (and more specific than .secondary's) so the footer stays centered in line
+   with the cards above it, rather than .secondary's margin pinning it to the page's left edge. */
+footer.secondary { font-size: 12px; margin: 16px auto 0; padding: 0 0 24px; }
 
 [hidden] { display: none !important; }

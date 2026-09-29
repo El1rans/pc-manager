@@ -91,6 +91,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Dashboard: stats appear almost immediately on opening instead of after ~2 s (5 s+ right after a
+  reboot). The first sample no longer waits a full interval, and the slow one-time performance-counter
+  setup runs in the background, so memory, network, processes and drives show at once while CPU, GPU
+  and disk join when it finishes; busiest-app CPU% is real a second sooner. OpenRGB auto-start no
+  longer delays the main window.
+- Hardware: CPU temperature and package power no longer show "0 °C / 0 W - Normal" when the sensor
+  cannot be read (an AMD CPU with Porchlight not running as administrator); a zero reading is treated
+  as no reading, so the tile is hidden, and alerts, checkup and the CPU temperature effect ignore it.
+- Lighting: in the Pac-Man effect, Pac-Man now chases the ghost (it flees ahead of him and is caught
+  at the end of the path) instead of the ghost chasing Pac-Man.
+- Web console: the footer line sits under the cards instead of at the far left on wide screens.
 - Updates: five fixes from manual testing of the friendly-outcomes/Reinstall work
   (`docs/specs/09-friendly-update-outcomes.md`'s addendum):
   - A row's last failed outcome (and its Reinstall.../Hide/Try again actions) now survives an app
