@@ -8,5 +8,12 @@ namespace Porchlight.Core.Cleanup;
 /// vanished since the scan.</param>
 /// <param name="GroupsKeptOne">Groups where every copy was selected and the newest was spared.</param>
 /// <param name="WasCancelled">True if the user stopped part-way.</param>
+/// <param name="RemovedPaths">The paths that were moved to the Recycle Bin.</param>
 public sealed record DuplicateRemoveResult(
-    int FilesRemoved, long BytesFreed, int FilesFailed, int FilesChanged, int GroupsKeptOne, bool WasCancelled);
+    int FilesRemoved,
+    long BytesFreed,
+    int FilesFailed,
+    int FilesChanged,
+    int GroupsKeptOne,
+    bool WasCancelled,
+    IReadOnlyList<string> RemovedPaths);

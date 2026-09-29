@@ -40,7 +40,15 @@ public sealed class CleanupViewModelTests
 
     private CleanupViewModel Create() =>
         new(new FakePaths(), _catalog, _scanner, _runner, _finder, _recycler, _apps, _uninstaller, new FakeDrives(),
-            _elevation, _processRunner, _urls, _confirmation, _settings, NullLogger<CleanupViewModel>.Instance);
+            _elevation, _processRunner, _urls, _confirmation, _settings,
+            new DiskMapViewModel(
+                new FakeDiskMapper(), new FakeInsightsDrives(), new FakeInsightsPaths(), new FakeInsightsRecycler(),
+                new FakeInsightsProcessRunner(), new FakeFolderPicker(), new FakeInsightsConfirmation(),
+                NullLogger<DiskMapViewModel>.Instance),
+            new DuplicatesViewModel(
+                new FakeDuplicateFinder(), new FakeDuplicateRemover(), new FakeInsightsPaths(),
+                new FakeInsightsProcessRunner(), new FakeInsightsConfirmation(), NullLogger<DuplicatesViewModel>.Instance),
+            NullLogger<CleanupViewModel>.Instance);
 
     private async Task<CleanupViewModel> CreateScanned()
     {

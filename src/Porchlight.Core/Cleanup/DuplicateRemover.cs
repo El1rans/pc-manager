@@ -29,7 +29,8 @@ public sealed partial class DuplicateRemover : IDuplicateRemover
     {
         var selected = new HashSet<string>(selectedPaths, StringComparer.OrdinalIgnoreCase);
         var folderCache = new Dictionary<string, IReadOnlyList<CleanupEntry>?>(StringComparer.OrdinalIgnoreCase);
-        int removed = 0, failed = 0, changed = 0, keptOne = 0;
+        int failed = 0, changed = 0, keptOne = 0;
+        var removedPaths = new List<string>();
         long freed = 0;
 
         foreach (var group in groups)
@@ -67,7 +68,7 @@ public sealed partial class DuplicateRemover : IDuplicateRemover
             {
                 if (cancellationToken.IsCancellationRequested)
                 {
-                    return new DuplicateRemoveResult(removed, freed, failed, changed, keptOne, WasCancelled: true);
+                    return new DuplicateRemoveResult(removedPaths.Count, freed, failed, changed, keptOne, WasCancelled: true, removedPaths);
                 }
 
                 // Rule 4: a copy that changed since the scan may no longer be a duplicate.
@@ -80,7 +81,7 @@ public sealed partial class DuplicateRemover : IDuplicateRemover
                 // Rule 5: Recycle Bin only; a refusal is final.
                 if (_recycler.MoveToRecycleBin(file.FullPath))
                 {
-                    removed++;
+                    removedPaths.Add(file.FullPath);
                     freed += group.FileBytes;
                 }
                 else
@@ -90,7 +91,7 @@ public sealed partial class DuplicateRemover : IDuplicateRemover
             }
         }
 
-        return new DuplicateRemoveResult(removed, freed, failed, changed, keptOne, WasCancelled: false);
+        return new DuplicateRemoveResult(removedPaths.Count, freed, failed, changed, keptOne, WasCancelled: false, removedPaths);
     }
 
     private bool IsUnchanged(DuplicateFile file, long bytes, Dictionary<string, IReadOnlyList<CleanupEntry>?> cache)
