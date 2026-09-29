@@ -8,15 +8,16 @@ namespace Porchlight.Core.Network;
 public sealed class NetworkRemedyService : INetworkRemedyService
 {
     private const string IpConfig = "ipconfig";
-    private const string Netsh = "netsh";
 
     private readonly IProcessRunner _runner;
+    private readonly INetworkAdapterController _adapters;
     private readonly IElevationService _elevation;
     private readonly ILogger<NetworkRemedyService> _logger;
 
-    public NetworkRemedyService(IProcessRunner runner, IElevationService elevation, ILogger<NetworkRemedyService> logger)
+    public NetworkRemedyService(IProcessRunner runner, INetworkAdapterController adapters, IElevationService elevation, ILogger<NetworkRemedyService> logger)
     {
         _runner = runner;
+        _adapters = adapters;
         _elevation = elevation;
         _logger = logger;
     }
@@ -52,9 +53,9 @@ public sealed class NetworkRemedyService : INetworkRemedyService
                 "Windows needs administrator rights to do this. Restart Porchlight as administrator and try again.");
     }
 
-    public async Task<RemedyResult> ResetAdapterAsync(string adapterName, CancellationToken cancellationToken)
+    public async Task<RemedyResult> ResetAdapterAsync(string adapterId, CancellationToken cancellationToken)
     {
-        if (!IsSafeAdapterName(adapterName))
+        if (!Guid.TryParse(adapterId, out _))
         {
             return Failed("Porchlight couldn't tell which network connection to reset.");
         }
@@ -66,29 +67,46 @@ public sealed class NetworkRemedyService : INetworkRemedyService
                 "Resetting the network connection needs administrator rights. Restart Porchlight as administrator and try again.");
         }
 
-        var nameArgument = $"name={adapterName}";
-        var disable = await _runner.RunAsync(
-            Netsh, ["interface", "set", "interface", nameArgument, "admin=disabled"], null, null, cancellationToken)
-            .ConfigureAwait(false);
+        var disabled = false;
+        var enabled = false;
+        try
+        {
+            disabled = await _adapters.DisableAsync(adapterId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+        {
+            // Treated as "did not switch off"; Enable below still runs.
+            _logger.LogDebug(ex, "Disabling the network adapter failed.");
+        }
+        finally
+        {
+            // Whatever happened to the disable (error, timeout, cancel), always switch it back on.
+            enabled = await EnableAlwaysAsync(adapterId).ConfigureAwait(false);
+        }
 
-        // Whatever happened to the disable, always switch it back on - never leave it off.
-        var enable = await _runner.RunAsync(
-            Netsh, ["interface", "set", "interface", nameArgument, "admin=enabled"], null, null, CancellationToken.None)
-            .ConfigureAwait(false);
-
-        if (disable.ExitCode == 0 && enable.ExitCode == 0)
+        if (disabled && enabled)
         {
             return new RemedyResult(RemedyOutcome.Done, "Done. Your network connection was switched off and on again.");
         }
 
-        if (_logger.IsEnabled(LogLevel.Debug)) { _logger.LogDebug("Adapter reset exit codes: disable {Disable}, enable {Enable}.", disable.ExitCode, enable.ExitCode); }
-        return enable.ExitCode == 0
+        return enabled
             ? Failed("Windows wouldn't switch the network connection off. Nothing was changed.")
             : Failed("Windows couldn't switch the network connection back on. Open Windows network settings and turn it on.");
     }
 
-    private static bool IsSafeAdapterName(string name) =>
-        !string.IsNullOrWhiteSpace(name) && name.All(c => !char.IsControl(c) && c != '"');
+    private async Task<bool> EnableAlwaysAsync(string adapterId)
+    {
+        try
+        {
+            return await _adapters.EnableAsync(adapterId, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _logger.LogWarning(ex, "Enabling the network adapter failed.");
+            return false;
+        }
+    }
+
 
     private static RemedyResult Failed(string message) => new(RemedyOutcome.Failed, message);
 }

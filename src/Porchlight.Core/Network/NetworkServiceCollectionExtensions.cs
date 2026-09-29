@@ -28,6 +28,7 @@ public static class NetworkServiceCollectionExtensions
             new SocketsHttpHandler { AllowAutoRedirect = false },
             sp.GetRequiredService<ILogger<NetworkProbe>>()));
         services.AddSingleton<INetworkTroubleshooter, NetworkTroubleshooter>();
+        services.AddSingleton<INetworkAdapterController, WmiNetworkAdapterController>();
         services.AddSingleton<INetworkRemedyService, NetworkRemedyService>();
         services.AddSingleton<ISpeedTestService>(sp => new SpeedTestService(
             new SocketsHttpHandler(), TimeProvider.System, sp.GetRequiredService<ILogger<SpeedTestService>>()));

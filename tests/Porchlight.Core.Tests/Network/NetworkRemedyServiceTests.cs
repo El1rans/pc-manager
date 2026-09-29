@@ -34,8 +34,33 @@ public class NetworkRemedyServiceTests
         public bool RestartElevated() => false;
     }
 
-    private static NetworkRemedyService Create(FakeRunner runner, bool elevated) =>
-        new(runner, new FakeElevation(elevated), NullLogger<NetworkRemedyService>.Instance);
+    private sealed class FakeAdapters : INetworkAdapterController
+    {
+        public List<string> Calls { get; } = [];
+
+        public bool DisableResult { get; set; } = true;
+
+        public Exception? DisableThrows { get; set; }
+
+        public bool EnableResult { get; set; } = true;
+
+        public Task<bool> DisableAsync(string adapterId, CancellationToken cancellationToken)
+        {
+            Calls.Add("disable " + adapterId);
+            return DisableThrows is null ? Task.FromResult(DisableResult) : Task.FromException<bool>(DisableThrows);
+        }
+
+        public Task<bool> EnableAsync(string adapterId, CancellationToken cancellationToken)
+        {
+            Calls.Add("enable " + adapterId);
+            return Task.FromResult(EnableResult);
+        }
+    }
+
+    private const string Guid1 = "{6b7a2f0e-1d0c-4a55-9d3e-2f6f7c0a1b11}";
+
+    private static NetworkRemedyService Create(FakeRunner runner, bool elevated, FakeAdapters? adapters = null) =>
+        new(runner, adapters ?? new FakeAdapters(), new FakeElevation(elevated), NullLogger<NetworkRemedyService>.Instance);
 
     [Fact]
     public async Task Flush_dns_runs_ipconfig_flushdns()
@@ -67,48 +92,75 @@ public class NetworkRemedyServiceTests
     }
 
     [Fact]
-    public async Task Reset_without_admin_runs_nothing()
+    public async Task Reset_without_admin_touches_nothing()
     {
-        var runner = new FakeRunner();
-        var result = await Create(runner, false).ResetAdapterAsync("Wi-Fi", TestContext.Current.CancellationToken);
+        var adapters = new FakeAdapters();
+        var result = await Create(new FakeRunner(), false, adapters).ResetAdapterAsync(Guid1, TestContext.Current.CancellationToken);
 
         Assert.Equal(RemedyOutcome.NeedsAdmin, result.Outcome);
-        Assert.Empty(runner.Commands);
+        Assert.Empty(adapters.Calls);
     }
 
     [Fact]
-    public async Task Reset_disables_then_enables()
+    public async Task Reset_disables_then_enables_by_adapter_id()
     {
-        var runner = new FakeRunner();
-        var result = await Create(runner, true).ResetAdapterAsync("Wi-Fi 2", TestContext.Current.CancellationToken);
+        var adapters = new FakeAdapters();
+        var result = await Create(new FakeRunner(), true, adapters).ResetAdapterAsync(Guid1, TestContext.Current.CancellationToken);
 
         Assert.Equal(RemedyOutcome.Done, result.Outcome);
-        Assert.Equal(
-            ["netsh interface set interface name=Wi-Fi 2 admin=disabled",
-             "netsh interface set interface name=Wi-Fi 2 admin=enabled"],
-            runner.Commands);
+        Assert.Equal(["disable " + Guid1, "enable " + Guid1], adapters.Calls);
     }
 
     [Fact]
-    public async Task Reset_always_re_enables_even_when_disable_fails()
+    public async Task Reset_enables_even_when_disable_fails()
     {
-        var runner = new FakeRunner { ExitCodeFor = c => c.EndsWith("disabled", StringComparison.Ordinal) ? 1 : 0 };
-        var result = await Create(runner, true).ResetAdapterAsync("Ethernet", TestContext.Current.CancellationToken);
+        var adapters = new FakeAdapters { DisableResult = false };
+        var result = await Create(new FakeRunner(), true, adapters).ResetAdapterAsync(Guid1, TestContext.Current.CancellationToken);
 
         Assert.Equal(RemedyOutcome.Failed, result.Outcome);
-        Assert.EndsWith("admin=enabled", runner.Commands[^1], StringComparison.Ordinal);
+        Assert.Equal("enable " + Guid1, adapters.Calls[^1]);
+    }
+
+    [Fact]
+    public async Task Reset_enables_even_when_disable_throws_or_times_out()
+    {
+        var adapters = new FakeAdapters { DisableThrows = new TimeoutException() };
+        var result = await Create(new FakeRunner(), true, adapters).ResetAdapterAsync(Guid1, TestContext.Current.CancellationToken);
+
+        Assert.Equal(RemedyOutcome.Failed, result.Outcome);
+        Assert.Equal(["disable " + Guid1, "enable " + Guid1], adapters.Calls);
+    }
+
+    [Fact]
+    public async Task Reset_enables_even_when_cancelled_during_disable()
+    {
+        var adapters = new FakeAdapters { DisableThrows = new OperationCanceledException() };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            Create(new FakeRunner(), true, adapters).ResetAdapterAsync(Guid1, TestContext.Current.CancellationToken));
+        Assert.Equal("enable " + Guid1, adapters.Calls[^1]);
+    }
+
+    [Fact]
+    public async Task Reset_reports_when_enable_fails()
+    {
+        var adapters = new FakeAdapters { EnableResult = false };
+        var result = await Create(new FakeRunner(), true, adapters).ResetAdapterAsync(Guid1, TestContext.Current.CancellationToken);
+
+        Assert.Equal(RemedyOutcome.Failed, result.Outcome);
+        Assert.Contains("back on", result.Message, StringComparison.Ordinal);
     }
 
     [Theory]
     [InlineData("")]
-    [InlineData("Wi\"Fi")]
-    [InlineData("Wi\nFi")]
-    public async Task Reset_rejects_unsafe_names(string name)
+    [InlineData("Wi-Fi")]
+    [InlineData("x' OR 1=1 --")]
+    public async Task Reset_rejects_ids_that_are_not_guids(string id)
     {
-        var runner = new FakeRunner();
-        var result = await Create(runner, true).ResetAdapterAsync(name, TestContext.Current.CancellationToken);
+        var adapters = new FakeAdapters();
+        var result = await Create(new FakeRunner(), true, adapters).ResetAdapterAsync(id, TestContext.Current.CancellationToken);
 
         Assert.Equal(RemedyOutcome.Failed, result.Outcome);
-        Assert.Empty(runner.Commands);
+        Assert.Empty(adapters.Calls);
     }
 }

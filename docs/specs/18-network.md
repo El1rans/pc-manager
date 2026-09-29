@@ -73,12 +73,15 @@ Troubleshooter
 - `INetworkTroubleshooter.RunAsync(IProgress<TroubleshootStepUpdate>, ct)` runs the probes
   in order and returns a `TroubleshootReport` (per-step results + diagnosis).
 - `INetworkRemedyService`: `FlushDnsAsync`, `RenewIpAsync`, `ResetAdapterAsync(adapterName)`,
-  returning `RemedyResult(Outcome, Message)` (`Done`, `NeedsAdmin`, `Failed`). All processes via
-  `IProcessRunner` (`ipconfig /flushdns`; `ipconfig /release` then `/renew`; `netsh interface
-  set interface name=<n> admin=disabled` then `admin=enabled`). Reset refuses when not elevated
-  and rejects adapter names with quotes/control characters; the "enabled" call always runs
-  (with `CancellationToken.None`) once the adapter has been disabled, so a failure can never
-  leave the adapter off.
+  returning `RemedyResult(Outcome, Message)` (`Done`, `NeedsAdmin`, `Failed`). Flush and renew run
+  `ipconfig /flushdns` and `ipconfig /release` then `/renew` through `IProcessRunner`. Reset adapter
+  does **not** use `netsh` (it fails for adapter names containing spaces): it goes through
+  `INetworkAdapterController`, implemented by `WmiNetworkAdapterController`, which calls `Disable()`
+  and `Enable()` on the `MSFT_NetAdapter` instance in `root\StandardCimv2` matched by
+  `InterfaceGuid` (`NetworkStatus.AdapterId`, so no name is involved; only a well-formed GUID is
+  ever put in the query). Each call has a 20 s timeout. Reset refuses when not elevated, and
+  `Enable` always runs in a `finally` after `Disable` - whether it failed, threw, timed out or was
+  cancelled - so a failure can never leave the adapter off (unit-tested with a fake controller).
 
 Speed test
 - `ISpeedTestService.RunAsync(IProgress<SpeedTestProgress>, ct)` -> `SpeedTestResult(Latency,
@@ -135,6 +138,6 @@ Apps using the network
 5. Speed test only runs on button press, says it contacts Cloudflare, can be cancelled, finishes
    in about 10 s, shows Mbps and a plain verdict, and the last result is shown after restart.
 6. Throughput math, verdict text, TCP table parsing, aggregation and the speed-test flow (fake
-   handler, fake clock) have unit tests; no test touches the network or runs ipconfig/netsh.
+   handler, fake clock) have unit tests; no test touches the network, runs ipconfig, or calls WMI.
 7. The apps list groups connections by program, refreshes only while visible, and is read-only.
 8. `dotnet build -c Release` has zero warnings; `dotnet test -c Release` passes; README updated.

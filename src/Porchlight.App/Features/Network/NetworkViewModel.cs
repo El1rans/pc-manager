@@ -395,7 +395,7 @@ public sealed partial class NetworkViewModel : PageViewModelBase, IBusyGuard, ID
                 RemedyKind.FlushDns => await _remedies.FlushDnsAsync(token).ConfigureAwait(true),
                 RemedyKind.RenewIp => await _remedies.RenewIpAsync(token).ConfigureAwait(true),
                 _ => await _remedies.ResetAdapterAsync(
-                    (await Task.Run(_statusProvider.GetStatus, token).ConfigureAwait(true)).AdapterName ?? string.Empty,
+                    (await Task.Run(_statusProvider.GetStatus, token).ConfigureAwait(true)).AdapterId ?? string.Empty,
                     token).ConfigureAwait(true),
             };
 

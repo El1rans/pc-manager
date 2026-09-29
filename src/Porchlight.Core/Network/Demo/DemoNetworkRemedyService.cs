@@ -10,7 +10,7 @@ internal sealed class DemoNetworkRemedyService : INetworkRemedyService
 
     public Task<RemedyResult> RenewIpAsync(CancellationToken cancellationToken) => Pretend(cancellationToken);
 
-    public Task<RemedyResult> ResetAdapterAsync(string adapterName, CancellationToken cancellationToken) =>
+    public Task<RemedyResult> ResetAdapterAsync(string adapterId, CancellationToken cancellationToken) =>
         Pretend(cancellationToken);
 
     private static async Task<RemedyResult> Pretend(CancellationToken cancellationToken)

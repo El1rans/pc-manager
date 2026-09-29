@@ -51,7 +51,7 @@ public sealed class NetworkStatusProvider : INetworkStatusProvider
             var type = MapType(best.Nic.NetworkInterfaceType);
             var wifi = type == ConnectionType.WiFi ? _wifiInfoReader.Read() : null;
 
-            return new NetworkStatus(gateway is not null, type, best.Nic.Name, wifi, localIp, gateway, dns);
+            return new NetworkStatus(gateway is not null, type, best.Nic.Name, wifi, localIp, gateway, dns, best.Nic.Id);
         }
         catch (Exception ex) when (ex is NetworkInformationException or InvalidOperationException
                                        or PlatformNotSupportedException)

@@ -10,6 +10,6 @@ public interface INetworkRemedyService
     /// <summary>Gets a fresh address from the router. The connection drops for a few seconds.</summary>
     Task<RemedyResult> RenewIpAsync(CancellationToken cancellationToken);
 
-    /// <summary>Switches the named adapter off and on. Needs administrator rights.</summary>
-    Task<RemedyResult> ResetAdapterAsync(string adapterName, CancellationToken cancellationToken);
+    /// <summary>Switches the adapter with the given interface GUID off and on. Needs administrator rights.</summary>
+    Task<RemedyResult> ResetAdapterAsync(string adapterId, CancellationToken cancellationToken);
 }
