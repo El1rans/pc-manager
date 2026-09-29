@@ -275,8 +275,26 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     /// rows keep their last status/state (a row that no longer appears means it updated
     /// successfully) instead of resetting, and the "Checking for updates..." step message is not
     /// shown.</param>
-    public async Task RefreshAsync(bool quiet)
+    public async Task RefreshAsync(bool quiet) => await RunRefreshAsync(quiet).ConfigureAwait(true);
+
+    /// <summary>
+    /// For the scheduled/tray update check: runs a full (non-quiet) check unless one is already
+    /// running or an update run is in progress, and reports what happened as a typed
+    /// <see cref="UpdateCheckResult"/> instead of the caller inferring it from status text.
+    /// </summary>
+    public async Task<UpdateCheckResult> CheckForUpdatesAsync()
     {
+        if (IsBusy || IsUpdating)
+        {
+            return UpdateCheckResult.Skipped;
+        }
+
+        return await RunRefreshAsync(quiet: false).ConfigureAwait(true);
+    }
+
+    private async Task<UpdateCheckResult> RunRefreshAsync(bool quiet)
+    {
+        var result = UpdateCheckResult.Failed;
         _refreshCts.Cancel();
         _refreshCts.Dispose();
         var cts = new CancellationTokenSource();
@@ -298,9 +316,11 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
             var packages = await _wingetClient.GetUpgradesAsync(IncludeUnknown, progress, cancellationToken)
                 .ConfigureAwait(true);
             MergePackages(packages, quiet);
+            result = UpdateCheckResult.Succeeded(Packages.Count(p => !p.IsHiddenByDefault));
         }
         catch (OperationCanceledException)
         {
+            result = UpdateCheckResult.Skipped;
             // Superseded by a newer refresh (or the app is shutting down); expected, not an error.
         }
         catch (WingetNotFoundException ex)
@@ -332,6 +352,8 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
                 }
             }
         }
+
+        return result;
     }
 
     private void MergePackages(IReadOnlyList<WingetPackage> packages, bool quiet)

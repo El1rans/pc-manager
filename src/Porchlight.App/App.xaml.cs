@@ -14,11 +14,13 @@ using Porchlight.App.Features.Hardware;
 using Porchlight.App.Features.Health;
 using Porchlight.App.Features.Lighting;
 using Porchlight.App.Features.Network;
+using Porchlight.App.Features.Notifications;
 using Porchlight.App.Features.RemoteSupport;
 using Porchlight.App.Features.Setup;
 using Porchlight.App.Features.Startup;
 using Porchlight.App.Features.Updates;
 using Porchlight.App.Shell;
+using Porchlight.App.Tray;
 using Porchlight.Core.Components;
 using Porchlight.Core.Elevation;
 using Porchlight.Core.Hardware;
@@ -58,6 +60,7 @@ public partial class App : System.Windows.Application, IDisposable
     private IHost? _host;
     private Mutex? _appMutex;
     private Mutex? _globalAppMutex;
+    private SingleInstanceGuard? _singleInstance;
 
     /// <summary>
     /// Lets controls created outside DI (e.g. a <see cref="System.Windows.FrameworkElement"/>
@@ -101,6 +104,15 @@ public partial class App : System.Windows.Application, IDisposable
             AppDataMigrator.MigrateIfNeeded(migrationLoggerFactory.CreateLogger(nameof(AppDataMigrator)));
         }
 
+        // A second launch (e.g. while Porchlight is hidden in the tray) asks the running instance to
+        // show itself, then exits. Runs before anything else is set up so the duplicate does no work.
+        _singleInstance = SingleInstanceGuard.TryAcquire();
+        if (!_singleInstance.IsPrimary)
+        {
+            Shutdown(0);
+            return;
+        }
+
         AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         DispatcherUnhandledException += OnDispatcherUnhandledException;
@@ -139,6 +151,10 @@ public partial class App : System.Windows.Application, IDisposable
             MainWindow = mainWindow;
             mainWindow.Show();
 
+            var shellWindows = _host.Services.GetRequiredService<IShellWindowService>();
+            _singleInstance.StartListening(shellWindows.ShowMainWindow);
+            _host.Services.GetRequiredService<TrayService>().Start();
+
             if (!settingsStore.Current.Setup.FirstRunCompleted)
             {
                 _host.Services.GetRequiredService<ISetupLauncher>().ShowSetup();
@@ -159,8 +175,18 @@ public partial class App : System.Windows.Application, IDisposable
         }
     }
 
+    protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+    {
+        // Windows is signing out or shutting down: the main window must close, not hide to the tray.
+        AppExitState.MarkExiting();
+        base.OnSessionEnding(e);
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
+        // First, so the tray icon never outlives the app (NIM_DELETE) even if host shutdown hangs.
+        RemoveTrayIconBestEffort();
+
         if (_host is not null)
         {
             try
@@ -193,6 +219,7 @@ public partial class App : System.Windows.Application, IDisposable
     /// disposable) rather than being invoked by the WPF framework itself.</summary>
     public void Dispose()
     {
+        _singleInstance?.Dispose();
         _appMutex?.Dispose();
         _globalAppMutex?.Dispose();
         GC.SuppressFinalize(this);
@@ -249,6 +276,7 @@ public partial class App : System.Windows.Application, IDisposable
         services.AddHealthFeature();
         services.AddNetworkFeature();
         services.AddBrowsersFeature();
+        services.AddNotificationsFeature();
     }
 
     /// <summary>Applies every feature's <see cref="PageRegistration"/> to the view locator. Runs
@@ -280,9 +308,24 @@ public partial class App : System.Windows.Application, IDisposable
     private void OnAppDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
         SuspendFansBestEffort();
+        RemoveTrayIconBestEffort();
         if (e.ExceptionObject is Exception ex)
         {
             LogUnhandledException(ex, "Unhandled AppDomain exception.");
+        }
+    }
+
+    /// <summary>Removes the notification-area icon (NIM_DELETE) so a dying process never leaves a
+    /// ghost icon behind. Best-effort and idempotent; must not throw.</summary>
+    private void RemoveTrayIconBestEffort()
+    {
+        try
+        {
+            _host?.Services.GetService<ITrayIcon>()?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Error(ex, "Could not remove the tray icon.");
         }
     }
 

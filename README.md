@@ -195,6 +195,16 @@ milestone specs.
   settings as a last resort; a Cloudflare speed test that only runs when you press the button (the
   last result is remembered); and a read-only list of programs using the internet, refreshed only
   while the page is open. The public IP address is never fetched. See `docs/specs/18-network.md`.
+- System tray icon and background alerts: a Porchlight icon in the notification area with a
+  quick-stats tooltip (CPU, memory, free space on C:) and a menu (Open, Check for updates, Get help,
+  Notifications settings, Exit). By default closing the window keeps Porchlight running in the
+  tray (Exit really quits); starting it a second time just shows the running window. Plain-language
+  balloon alerts for a nearly full drive, a sustained hot CPU/GPU (only when temperature readings are
+  available), app updates ready, and a restart pending for over 3 days - each type can be turned
+  off, each shown at most once a day, and clicking one opens the relevant page. App updates are
+  checked on a schedule (every day by default, or weekly/never); Porchlight only looks, it never
+  installs by itself. All of it is configured in the small Notifications dialog (tray menu or sidebar
+  footer). See `docs/specs/15-tray-and-alerts.md`.
 
 ## Planned modules
 
@@ -203,7 +213,6 @@ milestone specs.
 
 ### App updates (winget)
 - Choose which apps to update, ignore list, silent mode (from the prototype)
-- Scheduled update checks with a tray notification
 - Update history
 - Install new apps from a search box
 
@@ -213,6 +222,5 @@ milestone specs.
 - Startup impact ratings and logon scheduled tasks for the Startup apps page
 
 ### Quality of life
-- System tray icon with quick stats
 - Dark / light theme
 - Everything logged to `%APPDATA%\Porchlight\logs`

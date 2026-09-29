@@ -18,4 +18,5 @@ public sealed class AppSettings
 
     public CleanupSettings Cleanup { get; set; } = new();
     public NetworkSettings Network { get; set; } = new();
+    public NotificationSettings Notifications { get; set; } = new();
 }

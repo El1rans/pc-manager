@@ -45,6 +45,61 @@ public sealed class UpdatesViewModelTests : IDisposable
             AvailableVersion: availableVersion, Source: "winget", RequiresExplicit: requiresExplicit);
 
     [Fact]
+    public async Task CheckForUpdatesAsync_Success_ReportsCountOfNonIgnoredUpdates()
+    {
+        _settingsStore.Update(s => s.Updates.IgnoredIds.Add("Ignored.Id"));
+        _wingetClient.UpgradeListResults.Enqueue([Package("A.Id"), Package("B.Id"), Package("Ignored.Id")]);
+        var viewModel = CreateViewModel();
+
+        var result = await viewModel.CheckForUpdatesAsync();
+
+        Assert.Equal(UpdateCheckStatus.Succeeded, result.Status);
+        Assert.Equal(2, result.Count);
+    }
+
+    [Fact]
+    public async Task CheckForUpdatesAsync_NoUpdates_SucceedsWithZero()
+    {
+        var viewModel = CreateViewModel();
+
+        var result = await viewModel.CheckForUpdatesAsync();
+
+        Assert.Equal(UpdateCheckResult.Succeeded(0), result);
+    }
+
+    [Fact]
+    public async Task CheckForUpdatesAsync_WingetFailure_ReportsFailed()
+    {
+        _wingetClient.GetUpgradesException = new InvalidOperationException("boom");
+        var viewModel = CreateViewModel();
+
+        var result = await viewModel.CheckForUpdatesAsync();
+
+        Assert.Equal(UpdateCheckStatus.Failed, result.Status);
+    }
+
+    [Fact]
+    public async Task CheckForUpdatesAsync_WingetMissing_ReportsFailed()
+    {
+        _wingetClient.GetUpgradesException = new WingetNotFoundException();
+        var viewModel = CreateViewModel();
+
+        Assert.Equal(UpdateCheckStatus.Failed, (await viewModel.CheckForUpdatesAsync()).Status);
+    }
+
+    [Fact]
+    public async Task CheckForUpdatesAsync_WhileBusy_IsSkippedWithoutCallingWinget()
+    {
+        var viewModel = CreateViewModel();
+        viewModel.IsBusy = true;
+
+        var result = await viewModel.CheckForUpdatesAsync();
+
+        Assert.Equal(UpdateCheckStatus.Skipped, result.Status);
+        Assert.Equal(0, _wingetClient.GetUpgradesCallCount);
+    }
+
+    [Fact]
     public async Task RefreshAsync_DefaultSelection_TicksNonIgnoredNonExplicitOnly()
     {
         _settingsStore.Update(s => s.Updates.IgnoredIds.Add("Ignored.Id"));

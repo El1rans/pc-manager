@@ -47,10 +47,18 @@ internal sealed class FakeWingetClient : IWingetClient
     /// that a refresh did (or, per B1, deliberately did not) happen at some point.</summary>
     public int GetUpgradesCallCount { get; private set; }
 
+    /// <summary>When set, <see cref="GetUpgradesAsync"/> throws this instead of returning a list.</summary>
+    public Exception? GetUpgradesException { get; set; }
+
     public Task<IReadOnlyList<WingetPackage>> GetUpgradesAsync(
         bool includeUnknown, IProgress<string>? progress, CancellationToken cancellationToken)
     {
         GetUpgradesCallCount++;
+        if (GetUpgradesException is not null)
+        {
+            throw GetUpgradesException;
+        }
+
         if (UpgradeListResults.Count > 0)
         {
             _lastUpgradeListResult = UpgradeListResults.Dequeue();

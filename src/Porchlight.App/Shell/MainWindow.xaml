@@ -36,6 +36,10 @@
                         <Button Content="Set up optional features"
                                 Command="{Binding OpenSetupCommand}"
                                 HorizontalAlignment="Stretch"/>
+                        <Button Content="Notifications"
+                                Command="{Binding OpenNotificationsCommand}"
+                                AutomationProperties.Name="Notification settings"
+                                HorizontalAlignment="Stretch" Margin="0,8,0,0"/>
                         <TextBlock Text="{Binding VersionText}" Style="{StaticResource Secondary}"
                                    FontSize="11" Margin="4,8,4,0" HorizontalAlignment="Center"/>
                     </StackPanel>
