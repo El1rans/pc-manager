@@ -23,7 +23,7 @@ public static class StartupCommandParser
         if (text[0] == '"')
         {
             var close = text.IndexOf('"', 1);
-            var quoted = close > 1 ? text[1..close] : text[1..];
+            var quoted = close >= 0 ? text[1..close] : text[1..];
             return string.IsNullOrWhiteSpace(quoted) ? null : quoted.Trim();
         }
 
