@@ -6,7 +6,7 @@ namespace Porchlight.App.Features.WebConsole;
 
 public static class WebConsoleFeature
 {
-    /// <summary>Registers the read-only web console (docs/specs/20-web-console.md). Relies on the
+    /// <summary>Registers the read-only web console (docs/specs/21-web-console.md). Relies on the
     /// Dashboard and Hardware features' Core services (monitoring, hardware) and on the "Get help"
     /// feature's <c>IClipboardService</c>/<c>IUrlLauncher</c>.</summary>
     public static IServiceCollection AddWebConsoleFeature(this IServiceCollection services)

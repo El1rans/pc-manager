@@ -9,7 +9,7 @@ using Xunit;
 namespace Porchlight.App.Tests.Shell;
 
 /// <summary>
-/// View-model coverage for the shell's category rail and tab selection (docs/specs/20-nav-categories.md).
+/// View-model coverage for the shell's category rail and tab selection (docs/specs/22-nav-categories.md).
 /// The nav rail's ListBoxes are bound one-way and driven from <c>MainWindow.xaml.cs</c> (a WPF
 /// Selector/binding issue a view-model-only test cannot reach), but the invariants pinned down here -
 /// <see cref="MainViewModel.SelectedPage"/> is always exactly one page and always agrees with

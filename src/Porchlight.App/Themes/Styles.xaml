@@ -40,7 +40,7 @@
     <Setter Property="VerticalAlignment" Value="Center"/>
   </Style>
 
-  <!-- Tab strip shown above a multi-page category (see docs/specs/20-nav-categories.md): the selected
+  <!-- Tab strip shown above a multi-page category (see docs/specs/22-nav-categories.md): the selected
        tab is bold AND underlined with the accent brush, never colour alone. -->
   <Style x:Key="TabStripList" TargetType="ListBox">
     <Setter Property="Background" Value="Transparent"/>

@@ -217,7 +217,7 @@ milestone specs.
   on the PC from it - and it needs an access key, included in the link the page gives you (make a
   new key any time to lock out old links). Off by default; port 8765 unless you pick another. Use it
   on your home network, or through a VPN such as Tailscale when away - don't forward the port on
-  your router. See `docs/specs/20-web-console.md`.
+  your router. See `docs/specs/21-web-console.md`.
 
 ## Planned modules
 

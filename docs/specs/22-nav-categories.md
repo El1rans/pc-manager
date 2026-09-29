@@ -1,4 +1,4 @@
-# 20 - Navigation categories (branch `feat/nav-categories`)
+# 22 - Navigation categories (branch `feat/nav-categories`)
 
 After milestones 12-19 the navigation rail held 11 pages and needed scrolling at the default window
 size, so the last pages (Browser add-ons, Web console) were easy to miss. That's too cluttered for a
