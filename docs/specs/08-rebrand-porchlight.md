@@ -38,7 +38,7 @@ Palette: navy `#1E2A44`, amber `#F5B942`, window cream `#FFF6DE`, flame `#E86A17
 
 ## Out of scope
 
-Local folder `E:\PCManager` stays as is. No behaviour changes beyond the rename, icon and migration.
+Local folder `E:\PCManager` stayed as is for this milestone (later renamed to `E:\Porchlight`). No behaviour changes beyond the rename, icon and migration.
 
 ## Acceptance criteria
 
