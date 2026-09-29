@@ -48,7 +48,7 @@ browser itself.
 | `BrowserScanResult` | Extensions found, browsers detected, count of files skipped as unreadable |
 | `IBrowserLocations` / `BrowserLocations` | Where the browsers keep their profiles (`%LOCALAPPDATA%` / `%APPDATA%` based) |
 | `IBrowserExtensionScanner` / `BrowserExtensionScanner` | Reads all profiles off the UI thread and assesses each extension |
-| `ChromiumExtensionReader`, `FirefoxExtensionReader` | Per-engine file parsing used by the scanner |
+| `ChromiumExtensionReader`, `FirefoxExtensionReader` (internal) | Per-engine file parsing used by the scanner |
 | `IBrowserExecutableLocator` / `BrowserExecutableLocator` | Finds the browser exe through the `App Paths` registry key |
 | `IBrowserAddOnsOpener` / `BrowserAddOnsOpener` | Starts the exe via `IProcessRunner.StartDetached` with the add-ons URL |
 | `Demo/DemoBrowserExtensionScanner` | DEBUG-only fake list (`PORCHLIGHT_DEMO_DATA=1`) |
@@ -110,8 +110,7 @@ Overall level, evaluated in this order:
 1. **Worth removing**: the add-on is enabled, is not from the official store (source not `Store`),
    and has at least one *powerful* flag - all-sites access, history, proxy, native messaging,
    debugger or manage-add-ons.
-2. **Review**: any flag other than the two "notes" (downloads, installed recently), or the
-   combination all-sites access plus proxy.
+2. **Review**: any flag other than the two "notes" (downloads, installed recently).
 3. **Looks fine**: otherwise (including "notes" only).
 
 A disabled add-on can never be **Worth removing** (capped at Review) because it is not active. All

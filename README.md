@@ -87,7 +87,13 @@ milestone specs.
 ## Features
 
 - App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Free up space, Startup apps, Health check, Internet, Get help), following
+- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Browser add-ons, Get help), following
   Windows light/dark theme, with the app version shown in the sidebar footer.
+- Browser add-ons page: read-only list of the add-ons installed in Edge, Chrome, Brave and Firefox
+  (every profile), each with a plain-language note on what it can do (read all websites, see
+  history, change proxy settings, ...), where it came from and a "Looks fine / Review / Worth
+  removing" level. Porchlight never changes or removes anything in a browser; the page opens the
+  browser's own add-ons page and explains how to remove one. Nothing leaves the PC.
 - Settings persisted as JSON under `%APPDATA%\Porchlight\settings.json`, atomic writes, corrupt-file
   recovery.
 - Free up space: one Scan measures safe junk (temporary files, browser caches, crash reports, Windows Update leftovers, optionally the Recycle Bin), then one Clean up button removes the ticked items. Files in use are left alone, and the page never follows shortcuts or links into other folders. It also suggests big files and old downloads (moved to the Recycle Bin only when you click, so they can be restored) and large apps (opens the app's own uninstaller). Personal files are never deleted automatically.
