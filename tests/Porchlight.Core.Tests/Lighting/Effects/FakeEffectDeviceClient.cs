@@ -20,6 +20,10 @@ public sealed class FakeEffectDeviceClient : IEffectDeviceClient
     /// device's effect/hardware failing, for the per-device isolation tests.</summary>
     public int? FailingDeviceIndex { get; set; }
 
+    /// <summary>Invoked at the start of every <see cref="UpdateLeds"/> call - lets a test block a
+    /// send to simulate a slow TCP write.</summary>
+    public Action? OnUpdateLeds { get; set; }
+
     public void Connect() => Connected = true;
 
     public IReadOnlyList<EffectDeviceInfo> GetAllDevices() => Devices;
@@ -28,6 +32,8 @@ public sealed class FakeEffectDeviceClient : IEffectDeviceClient
 
     public void UpdateLeds(int deviceIndex, IReadOnlyList<RgbColor> colors)
     {
+        OnUpdateLeds?.Invoke();
+
         if (deviceIndex == FailingDeviceIndex)
         {
             throw new InvalidOperationException("Simulated device failure.");

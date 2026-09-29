@@ -26,7 +26,7 @@ public sealed class WingetClientTests
 
         Assert.Single(packages);
         Assert.Equal("Obs.Obs", packages[0].Id);
-        Assert.Equal("winget", runner.RunCalls[0].FileName);
+        Assert.Equal("winget", Path.GetFileNameWithoutExtension(runner.RunCalls[0].FileName));
         Assert.Equal(["upgrade", "--accept-source-agreements", "--disable-interactivity"], runner.RunCalls[0].Arguments);
     }
 

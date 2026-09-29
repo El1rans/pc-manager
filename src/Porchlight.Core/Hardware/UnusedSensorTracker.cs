@@ -43,7 +43,7 @@ public sealed class UnusedSensorTracker
 
     /// <summary>Drops all remembered history for ids no longer present, so a hardware id that
     /// disappears (e.g. the tree re-initializes) does not leak memory forever.</summary>
-    public void PruneTo(IReadOnlyCollection<string> liveIds)
+    public void PruneTo(IReadOnlySet<string> liveIds)
     {
         if (_everReal.Count == 0)
         {

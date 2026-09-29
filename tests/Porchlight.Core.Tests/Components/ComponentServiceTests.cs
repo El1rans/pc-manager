@@ -168,7 +168,7 @@ public sealed class ComponentServiceTests : IDisposable
             ComponentIds.AnyDesk, NullProgress, NullProgress, TestContext.Current.CancellationToken);
 
         var call = Assert.Single(_processRunner.RunCalls);
-        Assert.Equal("winget", call.FileName);
+        Assert.Equal("winget", Path.GetFileNameWithoutExtension(call.FileName));
         Assert.Equal(
             ["install", "--id", "AnyDesk.AnyDesk", "--exact", "--source", "winget", "--silent",
                 "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"],

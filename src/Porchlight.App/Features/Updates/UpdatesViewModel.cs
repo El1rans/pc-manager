@@ -1202,7 +1202,9 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         try
         {
             Directory.CreateDirectory(path);
-            Process.Start(new ProcessStartInfo("explorer.exe", path) { UseShellExecute = true });
+            // Absolute path: never let a same-named exe in the working directory run elevated.
+            var explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+            Process.Start(new ProcessStartInfo(explorer, path) { UseShellExecute = true });
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {

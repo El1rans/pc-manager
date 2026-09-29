@@ -14,6 +14,11 @@ public sealed class PacManEffect : IEffect
     private static readonly RgbColor GhostColor = new(0xFF, 0x30, 0x30);
     private static readonly RgbColor EatenColor = RgbColor.Black;
 
+    /// <summary>Path for the layout last rendered - a layout is immutable and built once per device,
+    /// so this is recomputed only if the layout reference changes. One immutable pair in a single
+    /// field, so a render on another thread can never see a mismatched layout/path.</summary>
+    private (LedLayout Layout, IReadOnlyList<int> Path)? _cachedPath;
+
     /// <param name="cellsPerSecond">How many grid cells Pac-Man advances per second. Must be
     /// positive.</param>
     /// <param name="ghostLagCells">How many cells behind Pac-Man the ghost trails.</param>
@@ -89,7 +94,14 @@ public sealed class PacManEffect : IEffect
             return;
         }
 
-        var path = BuildPath(layout);
+        var cached = _cachedPath;
+        if (cached is null || !ReferenceEquals(cached.Value.Layout, layout))
+        {
+            cached = (layout, BuildPath(layout));
+            _cachedPath = cached;
+        }
+
+        var path = cached.Value.Path;
         if (path.Count == 0)
         {
             return;

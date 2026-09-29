@@ -7,8 +7,6 @@ namespace Porchlight.Core.Winget;
 /// <inheritdoc cref="IWingetClient"/>
 public sealed partial class WingetClient : IWingetClient
 {
-    private const string Executable = "winget";
-
     private readonly IProcessRunner _processRunner;
     private readonly ILogger<WingetClient> _logger;
 
@@ -114,11 +112,12 @@ public sealed partial class WingetClient : IWingetClient
         // as passed, not a hand-written approximation. No secrets ever appear here (package ids and
         // winget's own fixed flags only). Only reported when the caller actually wants a log (a
         // plain listing check passes onLine: null and has no per-run log entry of its own).
-        onLine?.Report("> " + Executable + " " + string.Join(' ', arguments));
+        var executable = WingetLocator.Resolve();
+        onLine?.Report("> winget " + string.Join(' ', arguments));
 
         try
         {
-            return await _processRunner.RunAsync(Executable, arguments, onLine, onProgress, cancellationToken)
+            return await _processRunner.RunAsync(executable, arguments, onLine, onProgress, cancellationToken)
                 .ConfigureAwait(false);
         }
         // NativeErrorCode 2 is ERROR_FILE_NOT_FOUND - winget.exe is not on PATH. Any other Win32

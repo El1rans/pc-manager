@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Porchlight.Core.Settings;
 
 namespace Porchlight.Core.Lighting;
@@ -17,7 +18,8 @@ public static class LightingServiceCollectionExtensions
         services.AddSingleton<IOpenRgbClient>(sp =>
         {
             var lighting = sp.GetRequiredService<ISettingsStore>().Current.Lighting;
-            return new OpenRgbClientAdapter(lighting.OpenRgbHost, lighting.OpenRgbPort, OpenRgbSocketTimeoutMs);
+            return new OpenRgbClientAdapter(
+                lighting.ResolveOpenRgbHost(sp.GetService<ILogger<LightingSettings>>()), lighting.OpenRgbPort, OpenRgbSocketTimeoutMs);
         });
 
         services.AddSingleton<ILightingConflictDetector, LightingConflictDetector>();

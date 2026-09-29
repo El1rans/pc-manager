@@ -32,6 +32,11 @@ public sealed class EffectEngine : IDisposable
     private readonly List<KeyPressEvent> _recentKeyPresses = [];
     private readonly List<RunningDevice> _activeDevices = [];
 
+    private RunningDevice[] _deviceSnapshot = [];
+    private int _tickInProgress;
+    private bool _cpuTemperatureFailing;
+    private bool _pendingUpdateCountFailing;
+
     private ITimer? _timer;
     private long _startTimestamp;
     private bool _running;
@@ -139,6 +144,8 @@ public sealed class EffectEngine : IDisposable
                 }
             }
 
+            _deviceSnapshot = [.. _activeDevices];
+
             _recentKeyPresses.Clear();
             _keyPressSource.KeyPressed += OnKeyPressed;
 
@@ -171,6 +178,7 @@ public sealed class EffectEngine : IDisposable
             }
 
             _activeDevices.Clear();
+            _deviceSnapshot = [];
             _running = false;
         }
     }
@@ -257,31 +265,46 @@ public sealed class EffectEngine : IDisposable
     /// </summary>
     private void OnTick(object? state)
     {
-        List<RunningDevice> devices;
-        TimeSpan elapsed;
-        IEffectContext context;
-
-        lock (_gate)
+        // The timer fires on the thread pool regardless of whether the previous tick has finished,
+        // and UpdateLeds blocks on TCP - skip this tick rather than pile up (and race on the
+        // per-device buffers).
+        if (Interlocked.Exchange(ref _tickInProgress, 1) == 1)
         {
-            if (!_running)
-            {
-                return;
-            }
-
-            elapsed = _timeProvider.GetElapsedTime(_startTimestamp);
-            TrimOldKeyPresses();
-            context = BuildContext();
-            devices = [.. _activeDevices];
+            return;
         }
 
-        foreach (var device in devices)
+        try
         {
-            if (device.Paused)
+            RunningDevice[] devices;
+            TimeSpan elapsed;
+            IEffectContext context;
+
+            lock (_gate)
             {
-                continue;
+                if (!_running)
+                {
+                    return;
+                }
+
+                elapsed = _timeProvider.GetElapsedTime(_startTimestamp);
+                TrimOldKeyPresses();
+                context = BuildContext();
+                devices = _deviceSnapshot;
             }
 
-            RenderAndSend(device, elapsed, context);
+            foreach (var device in devices)
+            {
+                if (device.Paused)
+                {
+                    continue;
+                }
+
+                RenderAndSend(device, elapsed, context);
+            }
+        }
+        finally
+        {
+            Volatile.Write(ref _tickInProgress, 0);
         }
     }
 
@@ -289,7 +312,11 @@ public sealed class EffectEngine : IDisposable
     {
         try
         {
-            var buffer = new RgbColor[device.Layout.Count];
+            // Double-buffered: this frame renders into the spare buffer, which becomes LastSent (and
+            // the old LastSent the next spare) only once actually sent. Cleared first since effects
+            // may rely on a black default.
+            var buffer = device.Scratch ?? new RgbColor[device.Layout.Count];
+            Array.Clear(buffer);
             var frame = new EffectFrame(elapsed, device.Layout, context);
             device.Effect.Render(in frame, buffer);
 
@@ -298,7 +325,10 @@ public sealed class EffectEngine : IDisposable
                 return;
             }
 
-            var fullBuffer = new RgbColor[device.LedCount];
+            // UpdateLeds is synchronous and must not retain the list (see IEffectDeviceClient), so
+            // one full-size buffer per device is reused every send.
+            var fullBuffer = device.FullBuffer ??= new RgbColor[device.LedCount];
+            Array.Clear(fullBuffer);
             for (var i = 0; i < device.Layout.Points.Count; i++)
             {
                 var ledIndex = device.Layout.Points[i].DeviceLedIndex;
@@ -309,6 +339,7 @@ public sealed class EffectEngine : IDisposable
             }
 
             _client.UpdateLeds(device.DeviceIndex, fullBuffer);
+            device.Scratch = device.LastSent;
             device.LastSent = buffer;
         }
         catch (Exception ex)
@@ -323,26 +354,55 @@ public sealed class EffectEngine : IDisposable
         var utcNow = _timeProvider.GetUtcNow();
         double? cpuTemperature = null;
 
+        // The two reads below run every frame, so each logs only the first failure of a streak
+        // (and one line on recovery) instead of once per frame.
         try
         {
             cpuTemperature = CpuTemperatureReader.Read(_hardwareService.Latest);
+            NoteRecovered(ref _cpuTemperatureFailing, "CPU temperature");
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Could not read CPU temperature for LED effects.");
+            NoteFailed(ref _cpuTemperatureFailing, ex, "CPU temperature");
         }
 
         var pendingUpdateCount = 0;
         try
         {
             pendingUpdateCount = _pendingUpdateCountProvider.GetPendingUpdateCount();
+            NoteRecovered(ref _pendingUpdateCountFailing, "pending update count");
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Could not read pending update count for LED effects.");
+            NoteFailed(ref _pendingUpdateCountFailing, ex, "pending update count");
         }
 
-        return new EffectContext(utcNow, cpuTemperature, pendingUpdateCount, [.. _recentKeyPresses]);
+        IReadOnlyList<KeyPressEvent> keyPresses = _recentKeyPresses.Count == 0 ? [] : [.. _recentKeyPresses];
+        return new EffectContext(utcNow, cpuTemperature, pendingUpdateCount, keyPresses);
+    }
+
+    private void NoteFailed(ref bool failing, Exception ex, string what)
+    {
+        if (!failing)
+        {
+            failing = true;
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug(ex, "Could not read {What} for LED effects.", what);
+            }
+        }
+    }
+
+    private void NoteRecovered(ref bool failing, string what)
+    {
+        if (failing)
+        {
+            failing = false;
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("Reading {What} for LED effects recovered.", what);
+            }
+        }
     }
 
     private void OnKeyPressed(object? sender, KeyPressEvent e)
@@ -409,6 +469,12 @@ public sealed class EffectEngine : IDisposable
         public int OriginalModeIndex { get; } = originalModeIndex;
 
         public RgbColor[]? LastSent { get; set; }
+
+        /// <summary>Spare frame buffer swapped with <see cref="LastSent"/> after each send.</summary>
+        public RgbColor[]? Scratch { get; set; }
+
+        /// <summary>Reused device-wide (all LEDs) buffer handed to the client on each send.</summary>
+        public RgbColor[]? FullBuffer { get; set; }
 
         public bool Paused { get; set; }
     }

@@ -189,7 +189,7 @@ function IsWingetAvailable(): Boolean;
 var
   ResultCode: Integer;
 begin
-  Result := Exec('cmd.exe', '/C where winget.exe >nul 2>nul', '', SW_HIDE,
+  Result := Exec(ExpandConstant('{sys}\cmd.exe'), '/C where winget.exe >nul 2>nul', '', SW_HIDE,
     ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
 end;
 
@@ -249,7 +249,11 @@ begin
     PsQuote('--accept-source-agreements') + ',' + PsQuote('--disable-interactivity');
 
   PsCommand :=
-    '$p = Start-Process -FilePath winget.exe -ArgumentList ' + ArgumentList +
+    { Prefer the per-user App Execution Alias by absolute path; fall back to the bare name (as
+      before) if this account has no such alias. }
+    '$w = Join-Path $env:LOCALAPPDATA ''Microsoft\WindowsApps\winget.exe''; ' +
+    'if (-not (Test-Path -LiteralPath $w)) { $w = ''winget.exe'' }; ' +
+    '$p = Start-Process -FilePath $w -ArgumentList ' + ArgumentList +
     ' -PassThru -WindowStyle Hidden; ' +
     'if (-not $p.WaitForExit(' + IntToStr(WINGET_INSTALL_TIMEOUT_MS) + ')) { ' +
     'try { $p.Kill() } catch {}; exit ' + IntToStr(ERROR_TIMEOUT_EXIT_CODE) + ' } ' +
@@ -257,7 +261,7 @@ begin
 
   Params := '-NoProfile -ExecutionPolicy Bypass -Command "' + PsCommand + '"';
 
-  Result := Exec('powershell.exe', Params, '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
+  Result := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
   if not Result then
     ExitCode := -1;
 end;

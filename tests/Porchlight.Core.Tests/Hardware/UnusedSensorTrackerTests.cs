@@ -104,7 +104,7 @@ public sealed class UnusedSensorTrackerTests
     {
         var tracker = new UnusedSensorTracker();
         tracker.Observe(Reading("fan-1", SensorType.Fan, 1000));
-        tracker.PruneTo([]);
+        tracker.PruneTo(new HashSet<string>());
 
         // After pruning, "fan-1" is a fresh id again: a single 0 reading is not (yet) enough to be
         // used.

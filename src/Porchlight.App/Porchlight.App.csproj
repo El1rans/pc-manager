@@ -12,6 +12,24 @@
     <NoWarn>$(NoWarn);WPF0001</NoWarn>
   </PropertyGroup>
 
+  <!-- Size: the UI is English-only, so skip the 13 WPF/runtime satellite resource languages
+       (~9 MB). Deliberately NOT EnableCompressionInSingleFile: it halves the exe on disk, but the
+       LZMA2 installer then grows (~41 -> ~55 MB, since deflated data does not recompress), and it
+       costs ~65 MB extra private memory plus ~200 ms startup to decompress assemblies. Trimming
+       is not an option - WPF does not support it. -->
+  <PropertyGroup>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <!-- LibreHardwareMonitorLib depends on Mono.Posix for its Linux code paths; its native helper
+       libraries are only P/Invoked there and are dead weight in a Windows-only build. -->
+  <Target Name="DropLinuxOnlyNativeLibraries" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(Filename)' == 'libMonoPosixHelper' Or '%(Filename)' == 'MonoPosixHelper'" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
