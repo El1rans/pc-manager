@@ -61,6 +61,8 @@ public sealed partial class CleanupViewModel : PageViewModelBase, IBusyGuard, ID
         IUrlLauncher urlLauncher,
         IConfirmationDialog confirmation,
         ISettingsStore settings,
+        DiskMapViewModel diskMap,
+        DuplicatesViewModel duplicates,
         ILogger<CleanupViewModel> logger)
     {
         _paths = paths;
@@ -77,6 +79,8 @@ public sealed partial class CleanupViewModel : PageViewModelBase, IBusyGuard, ID
         _urlLauncher = urlLauncher;
         _confirmation = confirmation;
         _settings = settings;
+        DiskMap = diskMap;
+        Duplicates = duplicates;
         _logger = logger;
         FreedSoFarText = CleanupTextFormatter.FormatFreedSoFar(settings.Current.Cleanup.TotalBytesFreed);
     }
@@ -94,6 +98,12 @@ public sealed partial class CleanupViewModel : PageViewModelBase, IBusyGuard, ID
     public ObservableCollection<CleanupFileRowViewModel> OldDownloads { get; } = [];
 
     public ObservableCollection<CleanupAppRowViewModel> Apps { get; } = [];
+
+    /// <summary>The "What's using space?" card (disk space map).</summary>
+    public DiskMapViewModel DiskMap { get; }
+
+    /// <summary>The "Duplicate files" card.</summary>
+    public DuplicatesViewModel Duplicates { get; }
 
     [ObservableProperty]
     private DriveRowViewModel? _systemDrive;
@@ -141,7 +151,7 @@ public sealed partial class CleanupViewModel : PageViewModelBase, IBusyGuard, ID
     private bool _canShowAllApps;
 
     /// <inheritdoc/>
-    public bool IsBusyWithWork => IsCleaning;
+    public bool IsBusyWithWork => IsCleaning || Duplicates.IsBusyWithWork;
 
     /// <inheritdoc/>
     public string BusyMessage =>
@@ -515,6 +525,8 @@ public sealed partial class CleanupViewModel : PageViewModelBase, IBusyGuard, ID
 
         _disposed = true;
         _lifetimeCts.Cancel();
+        DiskMap.Dispose();
+        Duplicates.Dispose();
         _cleanCts?.Cancel();
         _scanCts?.Dispose();
         _lifetimeCts.Dispose();

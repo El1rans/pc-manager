@@ -64,7 +64,23 @@ public sealed class MainViewModelTests
         }
     }
 
-    private static MainViewModel CreateViewModel(out FakePage mainPage, out FakePage pinnedPage)
+    private sealed class OtherFakePage(string title, int order) : IPage
+    {
+        public string Title { get; } = title;
+        public string Glyph => "";
+        public string? Badge => null;
+        public int Order { get; } = order;
+        public bool IsPinnedToBottom => false;
+
+        public event PropertyChangedEventHandler? PropertyChanged { add { } remove { } }
+
+        public Task OnNavigatedToAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private static MainViewModel CreateViewModel(out FakePage mainPage, out FakePage pinnedPage) =>
+        CreateViewModel(new PageNavigator(), out mainPage, out pinnedPage);
+
+    private static MainViewModel CreateViewModel(IPageNavigator navigator, out FakePage mainPage, out FakePage pinnedPage)
     {
         mainPage = new FakePage("Lighting", pinned: false, order: 1);
         pinnedPage = new FakePage("Get help", pinned: true, order: 99);
@@ -74,7 +90,53 @@ public sealed class MainViewModelTests
             new FakeShellService(),
             new FakePageViewLocator(),
             new FakeSetupLauncher(),
+            navigator,
             NullLogger<MainViewModel>.Instance);
+    }
+
+    [Fact]
+    public void NavigateTo_SelectsThePageWithThatViewModelType()
+    {
+        var navigator = new PageNavigator();
+        var first = new FakePage("Lighting", pinned: false, order: 1);
+        var target = new OtherFakePage("Free up space", order: 2);
+        var viewModel = new MainViewModel(
+            [first, target],
+            new FakeShellService(),
+            new FakePageViewLocator(),
+            new FakeSetupLauncher(),
+            navigator,
+            NullLogger<MainViewModel>.Instance);
+        viewModel.SelectedPage = first;
+
+        navigator.NavigateTo<OtherFakePage>();
+
+        Assert.Same(target, viewModel.SelectedPage);
+    }
+
+    [Fact]
+    public void NavigateTo_AnUnregisteredPage_KeepsTheCurrentSelection()
+    {
+        var navigator = new PageNavigator();
+        var viewModel = CreateViewModel(navigator, out var mainPage, out _);
+        viewModel.SelectedPage = mainPage;
+
+        navigator.NavigateTo<OtherFakePage>();
+
+        Assert.Same(mainPage, viewModel.SelectedPage);
+    }
+
+    [Fact]
+    public void Dispose_StopsListeningForNavigationRequests()
+    {
+        var navigator = new PageNavigator();
+        var viewModel = CreateViewModel(navigator, out var mainPage, out _);
+        viewModel.SelectedPage = mainPage;
+        viewModel.Dispose();
+
+        navigator.NavigateTo<FakePage>();
+
+        Assert.Same(mainPage, viewModel.SelectedPage);
     }
 
     [Fact]

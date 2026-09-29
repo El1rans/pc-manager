@@ -14,6 +14,9 @@ public static class CleanupFeature
         // TryAdd: shared with the Remote support and Lighting features (opens ms-settings: links too).
         services.TryAddSingleton<IUrlLauncher, UrlLauncher>();
         services.AddSingleton<IConfirmationDialog, MessageBoxConfirmationDialog>();
+        services.AddSingleton<IFolderPicker, FolderPicker>();
+        services.AddSingleton<DiskMapViewModel>();
+        services.AddSingleton<DuplicatesViewModel>();
         return services.AddPage<CleanupViewModel, CleanupView>();
     }
 }

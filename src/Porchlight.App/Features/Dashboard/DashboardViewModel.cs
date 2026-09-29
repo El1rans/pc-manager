@@ -2,7 +2,9 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using Porchlight.App.Features.Cleanup;
 using Porchlight.App.Shell;
 using Porchlight.Core.Monitoring;
 
@@ -37,6 +39,7 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
     private readonly IProcessMonitor _processMonitor;
     private readonly IDriveMonitor _driveMonitor;
     private readonly IRestartDetector _restartDetector;
+    private readonly IPageNavigator _navigator;
     private readonly ILogger<DashboardViewModel> _logger;
     private readonly CancellationTokenSource _cts = new();
     private bool _disposed;
@@ -51,6 +54,7 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
         IProcessMonitor processMonitor,
         IDriveMonitor driveMonitor,
         IRestartDetector restartDetector,
+        IPageNavigator navigator,
         ILogger<DashboardViewModel> logger)
     {
         _performanceSampler = performanceSampler;
@@ -58,6 +62,7 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
         _processMonitor = processMonitor;
         _driveMonitor = driveMonitor;
         _restartDetector = restartDetector;
+        _navigator = navigator;
         _logger = logger;
 
         MetricTiles = [CpuTile, MemoryTile, GpuTile, DiskTile, DownloadTile, UploadTile];
@@ -100,6 +105,10 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
     public IReadOnlyList<MetricTileViewModel> MetricTiles { get; }
 
     public ObservableCollection<DriveRowViewModel> Drives { get; } = [];
+
+    /// <summary>The "Free up space" button on a low-space drive row: opens that page.</summary>
+    [RelayCommand]
+    private void FreeUpSpace() => _navigator.NavigateTo<CleanupViewModel>();
 
     public ObservableCollection<ProcessRowViewModel> TopProcesses { get; } = [];
 

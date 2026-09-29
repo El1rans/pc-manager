@@ -224,6 +224,7 @@ public partial class App : System.Windows.Application, IDisposable
         services.AddSingleton<IElevationService, ElevationService>();
         services.AddSingleton<IAppLifetime, AppLifetime>();
         services.AddSingleton<IShellService, ShellService>();
+        services.AddSingleton<IPageNavigator, PageNavigator>();
         services.AddSingleton<IPageViewLocator, PageViewLocator>();
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();
