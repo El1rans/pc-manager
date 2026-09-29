@@ -70,3 +70,13 @@ follows the viewing device's light/dark setting.
 - [x] Port in use is reported on the page, not a crash.
 - [x] Unit tests for parsing, routing, auth, controller, collector caching and an end-to-end
       loopback server test.
+
+## Addendum: first-start free port
+
+The first time the console starts (no access key yet), if the configured port is busy and the user
+never picked a port themselves (`WebConsoleSettings.PortChosenByUser`, set by `SetPort`),
+`WebConsoleController` asks `IPortAvailability` (binds exactly like the server, via
+`WebConsoleListenerFactory`) and `FreePortFinder.FindNearest` picks the closest free allowed port -
+8766, 8764, 8767, ... up to 100 away - and saves it, so the address stays stable afterwards. Later
+starts never move the port (a bookmarked address keeps working or fails visibly); a user-chosen
+port is never moved. If nothing nearby is free, the usual "port in use" message is shown.

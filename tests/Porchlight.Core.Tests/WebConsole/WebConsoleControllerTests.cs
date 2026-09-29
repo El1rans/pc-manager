@@ -7,11 +7,74 @@ public class WebConsoleControllerTests
 {
     private readonly FakeWebConsoleServer _server = new();
     private readonly FakeWebConsoleSettingsStore _settings = new();
+    private readonly FakePortAvailability _ports = new();
     private readonly WebConsoleController _controller;
 
     public WebConsoleControllerTests()
     {
-        _controller = new WebConsoleController(_server, _settings);
+        _controller = new WebConsoleController(_server, _settings, _ports);
+    }
+
+    [Fact]
+    public void First_start_moves_off_a_busy_default_port_to_the_nearest_free_one()
+    {
+        _ports.BusyPorts.Add(WebConsoleOptions.DefaultPort);
+
+        _controller.SetEnabled(true);
+
+        Assert.Equal(WebConsoleOptions.DefaultPort + 1, _server.Port);
+        Assert.Equal(WebConsoleOptions.DefaultPort + 1, _settings.Current.WebConsole.Port);
+    }
+
+    [Fact]
+    public void First_start_keeps_a_free_default_port()
+    {
+        _controller.SetEnabled(true);
+
+        Assert.Equal(WebConsoleOptions.DefaultPort, _server.Port);
+        Assert.Equal(WebConsoleOptions.DefaultPort, _settings.Current.WebConsole.Port);
+    }
+
+    [Fact]
+    public void Later_starts_never_move_the_port_so_the_address_stays_the_same()
+    {
+        _controller.SetEnabled(true);
+        _controller.SetEnabled(false);
+        _ports.BusyPorts.Add(WebConsoleOptions.DefaultPort);
+        _ports.Checked.Clear();
+
+        _controller.SetEnabled(true);
+
+        Assert.Equal(WebConsoleOptions.DefaultPort, _server.Port);
+        Assert.Empty(_ports.Checked);
+    }
+
+    [Fact]
+    public void A_port_the_user_picked_is_never_moved_even_on_first_start()
+    {
+        _controller.SetPort(9000);
+        _ports.BusyPorts.Add(9000);
+
+        _controller.SetEnabled(true);
+
+        Assert.Equal(9000, _server.Port);
+        Assert.True(_settings.Current.WebConsole.PortChosenByUser);
+        Assert.Empty(_ports.Checked);
+    }
+
+    [Fact]
+    public void First_start_leaves_the_port_alone_when_nothing_nearby_is_free()
+    {
+        for (var port = WebConsoleOptions.DefaultPort - FreePortFinder.MaxSearchDistance;
+             port <= WebConsoleOptions.DefaultPort + FreePortFinder.MaxSearchDistance;
+             port++)
+        {
+            _ports.BusyPorts.Add(port);
+        }
+
+        _controller.SetEnabled(true);
+
+        Assert.Equal(WebConsoleOptions.DefaultPort, _settings.Current.WebConsole.Port);
     }
 
     [Fact]

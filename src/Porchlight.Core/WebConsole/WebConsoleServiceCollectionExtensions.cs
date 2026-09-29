@@ -34,6 +34,7 @@ public static class WebConsoleServiceCollectionExtensions
         services.AddSingleton<WebConsoleRouter>();
         services.AddSingleton<IWebConsoleServer, WebConsoleServer>();
         services.AddSingleton<ILocalAddressProvider, LocalAddressProvider>();
+        services.AddSingleton<IPortAvailability, PortAvailability>();
         services.AddSingleton<WebConsoleController>();
         return services;
     }
