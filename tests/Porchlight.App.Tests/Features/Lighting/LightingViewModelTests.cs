@@ -6,6 +6,7 @@ using Porchlight.Core.Components;
 using Porchlight.Core.Hardware;
 using Porchlight.Core.Lighting;
 using Porchlight.Core.Lighting.Effects;
+using Porchlight.Core.Lighting.Effects.CustomAnimations;
 using Xunit;
 
 namespace Porchlight.App.Tests.Features.Lighting;
@@ -19,7 +20,21 @@ public sealed class LightingViewModelTests
         FakeLightingConflictDetector ConflictDetector,
         FakeUrlLauncher UrlLauncher,
         FakeComponentService ComponentService) CreateViewModelWithDependencies(
-        IEnumerable<string>? seedFavorites = null)
+        IEnumerable<string>? seedFavorites = null) =>
+        CreateViewModelWithDependencies(
+            seedFavorites, new FakeCustomAnimationLibrary(), new FakeClipboardService(), new FakeAnimationFilePicker());
+
+    private static (
+        Porchlight.App.Features.Lighting.LightingViewModel ViewModel,
+        FakeSettingsStore Settings,
+        FakeLightingService LightingService,
+        FakeLightingConflictDetector ConflictDetector,
+        FakeUrlLauncher UrlLauncher,
+        FakeComponentService ComponentService) CreateViewModelWithDependencies(
+        IEnumerable<string>? seedFavorites,
+        FakeCustomAnimationLibrary customAnimations,
+        FakeClipboardService clipboard,
+        FakeAnimationFilePicker filePicker)
     {
         var settings = new FakeSettingsStore();
         if (seedFavorites is not null)
@@ -41,7 +56,16 @@ public sealed class LightingViewModelTests
             NullLogger<EffectEngine>.Instance);
 
         var viewModel = new Porchlight.App.Features.Lighting.LightingViewModel(
-            factory, lightingService, conflictDetector, urlLauncher, settings, effectEngine, NullLoggerFactory.Instance);
+            factory,
+            lightingService,
+            conflictDetector,
+            urlLauncher,
+            settings,
+            effectEngine,
+            customAnimations,
+            clipboard,
+            filePicker,
+            NullLoggerFactory.Instance);
 
         return (viewModel, settings, lightingService, conflictDetector, urlLauncher, componentService);
     }
@@ -373,5 +397,185 @@ public sealed class LightingViewModelTests
         device.IsExcluded = false;
 
         Assert.DoesNotContain("Keyboard", settings.Current.Lighting.ExcludedDeviceNames);
+    }
+
+    private const string PoliceLights = """
+        { "name": "Police lights", "frames": [ { "fill": "#FF0000" }, { "fill": "#0000FF" } ] }
+        """;
+
+    private const string Sunset = """
+        { "name": "Sunset", "frames": [ { "gradient": ["#FF7A00", "#7A2BFF"] } ] }
+        """;
+
+    private sealed record AnimationFixture(
+        Porchlight.App.Features.Lighting.LightingViewModel ViewModel,
+        FakeSettingsStore Settings,
+        FakeLightingService LightingService,
+        FakeComponentService ComponentService,
+        FakeCustomAnimationLibrary Library,
+        FakeClipboardService Clipboard,
+        FakeAnimationFilePicker FilePicker);
+
+    private static AnimationFixture CreateAnimationFixture(params string[] preImported)
+    {
+        var library = new FakeCustomAnimationLibrary();
+        foreach (var json in preImported)
+        {
+            Assert.True(library.ImportText(json).Succeeded);
+        }
+
+        var clipboard = new FakeClipboardService();
+        var filePicker = new FakeAnimationFilePicker();
+        var (viewModel, settings, lightingService, _, _, componentService) =
+            CreateViewModelWithDependencies(null, library, clipboard, filePicker);
+        return new AnimationFixture(viewModel, settings, lightingService, componentService, library, clipboard, filePicker);
+    }
+
+    private static async Task<Porchlight.App.Features.Lighting.DeviceRowViewModel> ConnectOneDeviceAsync(AnimationFixture fixture)
+    {
+        fixture.ComponentService.SetStatus(ComponentIds.OpenRgb, new ComponentStatus(ComponentState.Running));
+        fixture.LightingService.ConnectResult = true;
+        fixture.LightingService.Devices = [new RgbDevice(0, "Keyboard", RgbDeviceType.Keyboard, "Vendor", [], "Direct", 1, [])];
+        await fixture.ViewModel.OnNavigatedToAsync(TestContext.Current.CancellationToken);
+        return Assert.Single(fixture.ViewModel.Devices);
+    }
+
+    [Fact]
+    public void Construction_ListsAlreadyImportedAnimationsByName()
+    {
+        var fixture = CreateAnimationFixture(Sunset, PoliceLights);
+
+        Assert.Equal(["Police lights", "Sunset"], fixture.ViewModel.CustomAnimations.Select(a => a.Name));
+    }
+
+    [Fact]
+    public void CopyAiPrompt_PutsPromptTemplateOnClipboard()
+    {
+        var fixture = CreateAnimationFixture();
+
+        fixture.ViewModel.CopyAiPromptCommand.Execute(null);
+
+        Assert.Equal(CustomAnimationPrompt.Template, fixture.Clipboard.LastText);
+        Assert.StartsWith("AI prompt copied", fixture.ViewModel.AnimationStatusMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CopyAiPrompt_ClipboardBusy_SaysSo()
+    {
+        var fixture = CreateAnimationFixture();
+        fixture.Clipboard.NextResult = false;
+
+        fixture.ViewModel.CopyAiPromptCommand.Execute(null);
+
+        Assert.Equal("Couldn't copy the prompt. Please try again.", fixture.ViewModel.AnimationStatusMessage);
+    }
+
+    [Fact]
+    public void PasteAnimation_ValidAnswer_ImportsAndListsIt()
+    {
+        var fixture = CreateAnimationFixture();
+        fixture.Clipboard.ClipboardText = "```json\n" + PoliceLights + "\n```";
+
+        fixture.ViewModel.PasteAnimationCommand.Execute(null);
+
+        var listed = Assert.Single(fixture.ViewModel.CustomAnimations);
+        Assert.Equal("police-lights", listed.Id);
+        Assert.StartsWith("Imported \"Police lights\"", fixture.ViewModel.AnimationStatusMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PasteAnimation_InvalidAnswer_ShowsParserErrorAndImportsNothing()
+    {
+        var fixture = CreateAnimationFixture();
+        fixture.Clipboard.ClipboardText = """{ "name": "Broken" }""";
+
+        fixture.ViewModel.PasteAnimationCommand.Execute(null);
+
+        Assert.Empty(fixture.ViewModel.CustomAnimations);
+        Assert.Contains("\"frames\" is required", fixture.ViewModel.AnimationStatusMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PasteAnimation_EmptyClipboard_AsksToCopyFirst()
+    {
+        var fixture = CreateAnimationFixture();
+
+        fixture.ViewModel.PasteAnimationCommand.Execute(null);
+
+        Assert.StartsWith("The clipboard is empty", fixture.ViewModel.AnimationStatusMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ImportAnimationFile_Cancelled_DoesNothing()
+    {
+        var fixture = CreateAnimationFixture();
+
+        fixture.ViewModel.ImportAnimationFileCommand.Execute(null);
+
+        Assert.Empty(fixture.ViewModel.CustomAnimations);
+        Assert.Null(fixture.ViewModel.AnimationStatusMessage);
+    }
+
+    [Fact]
+    public void ImportAnimationFile_PickedFile_Imports()
+    {
+        var fixture = CreateAnimationFixture();
+        fixture.Library.Files["C:\\Downloads\\sunset.json"] = Sunset;
+        fixture.FilePicker.NextPath = "C:\\Downloads\\sunset.json";
+
+        fixture.ViewModel.ImportAnimationFileCommand.Execute(null);
+
+        Assert.Equal("Sunset", Assert.Single(fixture.ViewModel.CustomAnimations).Name);
+    }
+
+    [Fact]
+    public async Task SelectingCustomAnimation_DefaultsToFirstAnimationAndPersistsIt()
+    {
+        var fixture = CreateAnimationFixture(PoliceLights, Sunset);
+        var device = await ConnectOneDeviceAsync(fixture);
+
+        device.SelectedEffectName = EffectRegistry.CustomAnimationEffectName;
+
+        Assert.Equal("police-lights", device.SelectedCustomAnimationId);
+        var saved = Assert.Single(fixture.Settings.Current.Lighting.EffectAssignments);
+        Assert.Equal(EffectRegistry.CustomAnimationEffectName, saved.EffectName);
+        Assert.Equal("police-lights", saved.Settings[EffectRegistry.CustomAnimationIdSetting]);
+
+        device.SelectedCustomAnimationId = "sunset";
+
+        Assert.Equal("sunset", Assert.Single(fixture.Settings.Current.Lighting.EffectAssignments)
+            .Settings[EffectRegistry.CustomAnimationIdSetting]);
+    }
+
+    [Fact]
+    public async Task RemoveAnimation_InUse_ClearsDeviceSelectionAndPersists()
+    {
+        var fixture = CreateAnimationFixture(PoliceLights);
+        var device = await ConnectOneDeviceAsync(fixture);
+        device.SelectedEffectName = EffectRegistry.CustomAnimationEffectName;
+
+        fixture.ViewModel.RemoveAnimationCommand.Execute(fixture.ViewModel.CustomAnimations[0]);
+
+        Assert.Empty(fixture.ViewModel.CustomAnimations);
+        Assert.Null(device.SelectedCustomAnimationId);
+        var saved = Assert.Single(fixture.Settings.Current.Lighting.EffectAssignments);
+        Assert.False(saved.Settings.ContainsKey(EffectRegistry.CustomAnimationIdSetting));
+        Assert.Equal("Removed \"Police lights\".", fixture.ViewModel.AnimationStatusMessage);
+    }
+
+    [Fact]
+    public async Task Reimport_SameName_KeepsDeviceSelection()
+    {
+        var fixture = CreateAnimationFixture(PoliceLights);
+        var device = await ConnectOneDeviceAsync(fixture);
+        device.SelectedEffectName = EffectRegistry.CustomAnimationEffectName;
+        fixture.Clipboard.ClipboardText = """
+            { "name": "Police lights", "frames": [ { "fill": "#FFFFFF" } ] }
+            """;
+
+        fixture.ViewModel.PasteAnimationCommand.Execute(null);
+
+        Assert.Equal(1, Assert.Single(fixture.ViewModel.CustomAnimations).FrameCount);
+        Assert.Equal("police-lights", device.SelectedCustomAnimationId);
     }
 }

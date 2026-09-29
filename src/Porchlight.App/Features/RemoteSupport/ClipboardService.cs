@@ -31,6 +31,22 @@ public sealed partial class ClipboardService : IClipboardService
         }
     }
 
+    public string? GetText()
+    {
+        try
+        {
+            return System.Windows.Clipboard.ContainsText() ? System.Windows.Clipboard.GetText() : null;
+        }
+        catch (ExternalException ex)
+        {
+            LogCouldNotGetClipboard(ex);
+            return null;
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not read clipboard text.")]
+    private partial void LogCouldNotGetClipboard(Exception exception);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not set clipboard text.")]
     private partial void LogCouldNotSetClipboard(Exception exception);
 }

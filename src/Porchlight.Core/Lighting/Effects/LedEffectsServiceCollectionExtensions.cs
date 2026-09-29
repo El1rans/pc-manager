@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Porchlight.Core.Lighting.Effects.CustomAnimations;
 using Porchlight.Core.Settings;
 
 namespace Porchlight.Core.Lighting.Effects;
@@ -25,6 +26,7 @@ public static class LedEffectsServiceCollectionExtensions
         services.AddSingleton<IDeviceExclusionProvider, SettingsDeviceExclusionProvider>();
         services.AddSingleton<IPendingUpdateCountProvider, ZeroPendingUpdateCountProvider>();
         services.AddSingleton<IKeyPressSource, NullKeyPressSource>();
+        services.AddSingleton<ICustomAnimationLibrary, CustomAnimationLibrary>();
         services.AddSingleton<EffectEngine>();
 
         return services;

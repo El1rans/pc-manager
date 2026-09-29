@@ -1,4 +1,5 @@
 using System.Globalization;
+using Porchlight.Core.Lighting.Effects.CustomAnimations;
 
 namespace Porchlight.Core.Lighting.Effects;
 
@@ -12,9 +13,18 @@ namespace Porchlight.Core.Lighting.Effects;
 /// </summary>
 public static class EffectRegistry
 {
+    /// <summary>Plays one of the user's imported animations (see docs/custom-animations.md), chosen
+    /// by the assignment's <see cref="CustomAnimationIdSetting"/> setting.</summary>
+    public const string CustomAnimationEffectName = "Custom animation";
+
+    /// <summary>The <see cref="EffectAssignment.Settings"/> key holding a
+    /// <see cref="CustomAnimationEffectName"/> assignment's <see cref="CustomAnimationInfo.Id"/>.</summary>
+    public const string CustomAnimationIdSetting = "animationId";
+
     private static readonly IReadOnlyList<string> KnownNames =
     [
         "Rainbow wave", "Breathing", "CPU temperature", "Pac-Man", "Rain", "Typing ripple",
+        CustomAnimationEffectName,
     ];
 
     /// <summary>Every effect name this registry can build, for a future settings UI's picker.</summary>
@@ -25,9 +35,14 @@ public static class EffectRegistry
     /// applied over its defaults. Returns null for an unknown name - callers (namely
     /// <see cref="EffectEngine"/>) treat that as "no effect assigned" rather than throwing, so a
     /// device's assignment referencing an effect from a future settings UI or a removed effect
-    /// degrades to "no effect" instead of crashing.
+    /// degrades to "no effect" instead of crashing. <see cref="CustomAnimationEffectName"/> also
+    /// returns null when <paramref name="customAnimations"/> is not supplied or the referenced
+    /// animation has since been removed.
     /// </summary>
-    public static IEffect? Create(string effectName, IReadOnlyDictionary<string, string>? settings = null)
+    public static IEffect? Create(
+        string effectName,
+        IReadOnlyDictionary<string, string>? settings = null,
+        ICustomAnimationLibrary? customAnimations = null)
     {
         ArgumentNullException.ThrowIfNull(effectName);
         var s = settings ?? new Dictionary<string, string>();
@@ -61,6 +76,8 @@ public static class EffectRegistry
                 ringWidth: GetDouble(s, "ringWidth", 1.5),
                 maxAgeSeconds: GetDouble(s, "maxAgeSeconds", 1.5)),
 
+            CustomAnimationEffectName => CreateCustomAnimation(s, customAnimations),
+
             _ => null,
         };
     }
@@ -70,15 +87,32 @@ public static class EffectRegistry
     /// docs/specs/11-led-effects.md, applied by <see cref="EffectEngine"/> per-assignment rather
     /// than being its own named effect.</summary>
     public static IEffect? CreateWithOverlay(
-        string effectName, IReadOnlyDictionary<string, string>? settings, bool withUpdatesAlert)
+        string effectName,
+        IReadOnlyDictionary<string, string>? settings,
+        bool withUpdatesAlert,
+        ICustomAnimationLibrary? customAnimations = null)
     {
-        var effect = Create(effectName, settings);
+        var effect = Create(effectName, settings, customAnimations);
         if (effect is null)
         {
             return null;
         }
 
         return withUpdatesAlert ? new UpdatesAlertEffect(effect) : effect;
+    }
+
+    private static CustomAnimationEffect? CreateCustomAnimation(
+        IReadOnlyDictionary<string, string> settings, ICustomAnimationLibrary? customAnimations)
+    {
+        if (customAnimations is null ||
+            !settings.TryGetValue(CustomAnimationIdSetting, out var id) ||
+            customAnimations.Load(id) is not { } animation)
+        {
+            return null;
+        }
+
+        var speed = GetDouble(settings, "speed", 1.0);
+        return new CustomAnimationEffect(animation, speed is > 0 and <= 10 ? speed : 1.0);
     }
 
     private static double GetDouble(IReadOnlyDictionary<string, string> settings, string key, double fallback) =>

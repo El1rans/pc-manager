@@ -22,4 +22,9 @@ internal sealed class FakeClipboardService : IClipboardService
         Texts.Add(text);
         return true;
     }
+
+    /// <summary>What <see cref="GetText"/> returns - the text "on the clipboard" to paste.</summary>
+    public string? ClipboardText { get; set; }
+
+    public string? GetText() => ClipboardText;
 }

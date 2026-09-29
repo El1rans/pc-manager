@@ -1,0 +1,58 @@
+{
+  "format": "porchlight-animation",
+  "version": 1,
+  "name": "Police lights",
+  "description": "Red and blue flashes, left then right. Works on any device.",
+  "loop": true,
+  "transition": "cut",
+  "frameDuration": 0.15,
+  "palette": {
+    ".": "#000000",
+    "R": "#FF0000",
+    "B": "#0000FF"
+  },
+  "frames": [
+    {
+      "rows": [
+        "RRRR........"
+      ]
+    },
+    {
+      "rows": [
+        "............"
+      ]
+    },
+    {
+      "rows": [
+        "RRRR........"
+      ]
+    },
+    {
+      "rows": [
+        "............"
+      ],
+      "duration": 0.3
+    },
+    {
+      "rows": [
+        "........BBBB"
+      ]
+    },
+    {
+      "rows": [
+        "............"
+      ]
+    },
+    {
+      "rows": [
+        "........BBBB"
+      ]
+    },
+    {
+      "rows": [
+        "............"
+      ],
+      "duration": 0.3
+    }
+  ]
+}

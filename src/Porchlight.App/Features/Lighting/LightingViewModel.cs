@@ -11,6 +11,7 @@ using Porchlight.App.Shell;
 using Porchlight.Core.Components;
 using Porchlight.Core.Lighting;
 using Porchlight.Core.Lighting.Effects;
+using Porchlight.Core.Lighting.Effects.CustomAnimations;
 using Porchlight.Core.Settings;
 
 namespace Porchlight.App.Features.Lighting;
@@ -47,6 +48,9 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
     private readonly IUrlLauncher _urlLauncher;
     private readonly ISettingsStore _settingsStore;
     private readonly EffectEngine _effectEngine;
+    private readonly ICustomAnimationLibrary _customAnimationLibrary;
+    private readonly IClipboardService _clipboard;
+    private readonly IAnimationFilePicker _animationFilePicker;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<LightingViewModel> _logger;
     private readonly Dispatcher _dispatcher;
@@ -104,6 +108,11 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
     [ObservableProperty]
     private bool _updatesAlertOverlayEnabled;
 
+    /// <summary>Result of the last custom-animation action (import, paste, remove, copy prompt),
+    /// shown under the "Custom animations" buttons - see docs/custom-animations.md.</summary>
+    [ObservableProperty]
+    private string? _animationStatusMessage;
+
     public LightingViewModel(
         IComponentCardViewModelFactory componentCardFactory,
         ILightingService lightingService,
@@ -111,6 +120,9 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
         IUrlLauncher urlLauncher,
         ISettingsStore settingsStore,
         EffectEngine effectEngine,
+        ICustomAnimationLibrary customAnimationLibrary,
+        IClipboardService clipboard,
+        IAnimationFilePicker animationFilePicker,
         ILoggerFactory loggerFactory)
     {
         _lightingService = lightingService;
@@ -118,6 +130,9 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
         _urlLauncher = urlLauncher;
         _settingsStore = settingsStore;
         _effectEngine = effectEngine;
+        _customAnimationLibrary = customAnimationLibrary;
+        _clipboard = clipboard;
+        _animationFilePicker = animationFilePicker;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<LightingViewModel>();
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
@@ -128,6 +143,7 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
 
         AutoStartOpenRgb = settingsStore.Current.Lighting.AutoStartOpenRgb;
         FavoriteColors = new ObservableCollection<string>(NormalizeFavorites(settingsStore.Current.Lighting.FavoriteColors));
+        ReloadCustomAnimations();
 
         _lightingService.Disconnected += OnLightingServiceDisconnected;
         _lightingService.DevicesChanged += OnLightingServiceDevicesChanged;
@@ -150,6 +166,10 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
     public ObservableCollection<string> Profiles { get; } = [];
 
     public ObservableCollection<string> FavoriteColors { get; }
+
+    /// <summary>Every imported custom animation (see docs/custom-animations.md), shared with each
+    /// <see cref="DeviceRowViewModel"/>'s "Custom animation" picker.</summary>
+    public ObservableCollection<CustomAnimationInfo> CustomAnimations { get; } = [];
 
     public bool CanSaveFavorite => FavoriteColors.Count < MaxFavoriteColors;
 
@@ -351,6 +371,143 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
     }
 
     partial void OnUpdatesAlertOverlayEnabledChanged(bool value) => SyncEffectEngine(persist: true);
+
+    /// <summary>"Import animation file..." - see docs/custom-animations.md.</summary>
+    [RelayCommand]
+    private void ImportAnimationFile()
+    {
+        var path = _animationFilePicker.PickFile();
+        if (path is not null)
+        {
+            ShowImportResult(_customAnimationLibrary.ImportFile(path));
+        }
+    }
+
+    /// <summary>"Paste from clipboard": imports an animation straight from an AI chat's copied
+    /// answer, without saving it to a file first.</summary>
+    [RelayCommand]
+    private void PasteAnimation()
+    {
+        var text = _clipboard.GetText();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            AnimationStatusMessage = "The clipboard is empty. Copy the AI's whole answer first, then try again.";
+            return;
+        }
+
+        ShowImportResult(_customAnimationLibrary.ImportText(text));
+    }
+
+    [RelayCommand]
+    private void RemoveAnimation(CustomAnimationInfo? animation)
+    {
+        if (animation is null)
+        {
+            return;
+        }
+
+        if (!_customAnimationLibrary.Remove(animation.Id))
+        {
+            AnimationStatusMessage = $"Couldn't remove \"{animation.Name}\". Please try again.";
+            return;
+        }
+
+        foreach (var device in Devices)
+        {
+            device.ForgetCustomAnimation(animation.Id);
+        }
+
+        ReloadCustomAnimations();
+        SyncEffectEngine(persist: true);
+        AnimationStatusMessage = $"Removed \"{animation.Name}\".";
+    }
+
+    /// <summary>"Copy AI prompt": puts <see cref="CustomAnimationPrompt.Template"/> on the
+    /// clipboard, ready to paste into any AI chat.</summary>
+    [RelayCommand]
+    private void CopyAiPrompt()
+    {
+        AnimationStatusMessage = _clipboard.SetText(CustomAnimationPrompt.Template)
+            ? "AI prompt copied. Paste it into an AI chat (ChatGPT, Claude, Gemini, ...), replace the parts in [brackets] "
+              + "with your idea and device, then copy the AI's answer and click \"Paste from clipboard\"."
+            : "Couldn't copy the prompt. Please try again.";
+    }
+
+    private int IndexOfCustomAnimation(string id)
+    {
+        for (var i = 0; i < CustomAnimations.Count; i++)
+        {
+            if (CustomAnimations[i].Id == id)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private void ShowImportResult(CustomAnimationImportResult result)
+    {
+        if (result.Imported is not { } imported)
+        {
+            AnimationStatusMessage = $"Couldn't import that animation: {result.Error}";
+            return;
+        }
+
+        ReloadCustomAnimations();
+
+        // Re-importing an animation a device is already playing (e.g. a fixed-up version from the
+        // AI) takes effect immediately.
+        if (Devices.Any(d => d.SelectedEffectName == EffectRegistry.CustomAnimationEffectName &&
+                             d.SelectedCustomAnimationId == imported.Id))
+        {
+            SyncEffectEngine(persist: false);
+        }
+
+        AnimationStatusMessage =
+            $"Imported \"{imported.Name}\". To play it, pick \"{EffectRegistry.CustomAnimationEffectName}\" as a device's effect above.";
+    }
+
+    /// <summary>Brings <see cref="CustomAnimations"/> in line with the library in place (rather
+    /// than clearing and refilling it) so each device's picker keeps its selection.</summary>
+    private void ReloadCustomAnimations()
+    {
+        var latest = _customAnimationLibrary.List();
+        var latestIds = latest.Select(a => a.Id).ToHashSet(StringComparer.Ordinal);
+
+        for (var i = CustomAnimations.Count - 1; i >= 0; i--)
+        {
+            if (!latestIds.Contains(CustomAnimations[i].Id))
+            {
+                CustomAnimations.RemoveAt(i);
+            }
+        }
+
+        for (var i = 0; i < latest.Count; i++)
+        {
+            var index = IndexOfCustomAnimation(latest[i].Id);
+            if (index < 0)
+            {
+                CustomAnimations.Insert(i, latest[i]);
+                continue;
+            }
+
+            if (index != i)
+            {
+                CustomAnimations.Move(index, i);
+            }
+
+            if (CustomAnimations[i] != latest[i])
+            {
+                CustomAnimations[i] = latest[i];
+            }
+        }
+
+        foreach (var device in Devices)
+        {
+            device.RefreshCustomAnimationSelection();
+        }
+    }
 
     /// <summary>Called by a <see cref="DeviceRowViewModel"/> whenever its own effect picker/settings
     /// change - persists the new set of assignments and restarts the engine so the change takes
@@ -574,7 +731,8 @@ public sealed partial class LightingViewModel : PageViewModelBase, IDisposable
                     _loggerFactory.CreateLogger<DeviceRowViewModel>(),
                     isExcluded: excludedDeviceNames.Contains(device.Name),
                     onExclusionChanged: OnDeviceExclusionChanged,
-                    onEffectChanged: OnDeviceEffectChanged);
+                    onEffectChanged: OnDeviceEffectChanged,
+                    customAnimations: CustomAnimations);
 
                 var assignment = effectAssignments.FirstOrDefault(
                     a => string.Equals(a.DeviceKey, device.Name, StringComparison.OrdinalIgnoreCase));

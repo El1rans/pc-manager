@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Porchlight.Core.Lighting;
 using Porchlight.Core.Lighting.Effects;
+using Porchlight.Core.Lighting.Effects.CustomAnimations;
 
 namespace Porchlight.App.Features.Lighting;
 
@@ -67,8 +68,10 @@ public sealed partial class DeviceRowViewModel : ObservableObject
     /// spec.</summary>
     public const string NoneEffectName = "None";
 
+    private const string CustomAnimationEffectName = EffectRegistry.CustomAnimationEffectName;
+
     private static readonly IReadOnlyList<string> AllEffectNames =
-        [NoneEffectName, "Rainbow wave", "Breathing", "CPU temperature", "Pac-Man", "Rain"];
+        [NoneEffectName, "Rainbow wave", "Breathing", "CPU temperature", "Pac-Man", "Rain", CustomAnimationEffectName];
 
     /// <summary>Effects that only render on a matrix (2D grid) zone - see <see cref="PacManEffect"/>
     /// and <see cref="RainEffect"/>'s own doc comments ("Matrix-only: on a non-matrix layout this
@@ -95,6 +98,8 @@ public sealed partial class DeviceRowViewModel : ObservableObject
     [ObservableProperty]
     private double _effectMaxTempC = 85;
 
+    private string? _selectedCustomAnimationId;
+
     public DeviceRowViewModel(
         RgbDevice device,
         ILightingService lightingService,
@@ -102,7 +107,8 @@ public sealed partial class DeviceRowViewModel : ObservableObject
         ILogger logger,
         bool isExcluded,
         Action<DeviceRowViewModel> onExclusionChanged,
-        Action<DeviceRowViewModel> onEffectChanged)
+        Action<DeviceRowViewModel> onEffectChanged,
+        ObservableCollection<CustomAnimationInfo>? customAnimations = null)
     {
         Index = device.Index;
         Name = device.Name;
@@ -116,6 +122,7 @@ public sealed partial class DeviceRowViewModel : ObservableObject
         _logger = logger;
         _onExclusionChanged = onExclusionChanged;
         _onEffectChanged = onEffectChanged;
+        CustomAnimations = customAnimations ?? [];
 
         // Assigning the backing field directly (not the property) so the mode combo box starts on
         // the device's actual active mode, and the exclusion checkbox on its saved state, without
@@ -140,9 +147,16 @@ public sealed partial class DeviceRowViewModel : ObservableObject
     /// matrix-only ones when <see cref="HasMatrixZone"/> is false.</summary>
     public ObservableCollection<string> AvailableEffects { get; }
 
+    /// <summary>Every imported custom animation, shared with (and kept up to date by)
+    /// <c>LightingViewModel</c> - the choices for the "Custom animation" effect's picker.</summary>
+    public ObservableCollection<CustomAnimationInfo> CustomAnimations { get; }
+
     public bool ShowEffectSettings => SelectedEffectName != NoneEffectName;
 
-    public bool ShowSpeedSetting => SelectedEffectName is "Rainbow wave" or "Breathing" or "Pac-Man" or "Rain";
+    public bool ShowSpeedSetting =>
+        SelectedEffectName is "Rainbow wave" or "Breathing" or "Pac-Man" or "Rain" or CustomAnimationEffectName;
+
+    public bool ShowCustomAnimationSetting => SelectedEffectName == CustomAnimationEffectName;
 
     public bool ShowColorSetting => SelectedEffectName == "Breathing";
 
@@ -152,11 +166,70 @@ public sealed partial class DeviceRowViewModel : ObservableObject
 
     partial void OnSelectedEffectNameChanged(string value)
     {
+        RaiseEffectVisibilityChanged();
+
+        // Picking "Custom animation" starts on the first imported animation rather than an empty
+        // picker (which would render nothing until the user also chose one).
+        if (value == CustomAnimationEffectName && !_suppressEffectChangeHandler &&
+            SelectedCustomAnimationId is null && CustomAnimations.Count > 0)
+        {
+            _suppressEffectChangeHandler = true;
+            try
+            {
+                SelectedCustomAnimationId = CustomAnimations[0].Id;
+            }
+            finally
+            {
+                _suppressEffectChangeHandler = false;
+            }
+        }
+
+        RaiseEffectChanged();
+    }
+
+    /// <summary>The imported animation (<see cref="CustomAnimationInfo.Id"/>) played when
+    /// <see cref="SelectedEffectName"/> is "Custom animation" - see docs/custom-animations.md.
+    /// Setting it to null is ignored: the picker has no "nothing" choice, but WPF's ComboBox writes
+    /// null back on its own while its selected item is briefly replaced in
+    /// <see cref="CustomAnimations"/> (re-importing an animation), which must not wipe the saved
+    /// choice. <see cref="ForgetCustomAnimation"/> clears it deliberately.</summary>
+    public string? SelectedCustomAnimationId
+    {
+        get => _selectedCustomAnimationId;
+        set
+        {
+            if (value is not null && SetProperty(ref _selectedCustomAnimationId, value))
+            {
+                RaiseEffectChanged();
+            }
+        }
+    }
+
+    /// <summary>Re-announces <see cref="SelectedCustomAnimationId"/> so the picker re-selects it
+    /// after <see cref="CustomAnimations"/> changed underneath it.</summary>
+    public void RefreshCustomAnimationSelection() => OnPropertyChanged(nameof(SelectedCustomAnimationId));
+
+    /// <summary>Called by <c>LightingViewModel</c> after the animation <paramref name="id"/> was
+    /// removed from the library: clears this row's selection of it (without re-persisting - the
+    /// caller syncs every row once afterwards). The row stays on "Custom animation", which then
+    /// renders nothing until another animation is picked.</summary>
+    public void ForgetCustomAnimation(string id)
+    {
+        if (!string.Equals(SelectedCustomAnimationId, id, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        SetProperty(ref _selectedCustomAnimationId, null, nameof(SelectedCustomAnimationId));
+    }
+
+    private void RaiseEffectVisibilityChanged()
+    {
         OnPropertyChanged(nameof(ShowEffectSettings));
         OnPropertyChanged(nameof(ShowSpeedSetting));
         OnPropertyChanged(nameof(ShowColorSetting));
         OnPropertyChanged(nameof(ShowTemperatureRangeSetting));
-        RaiseEffectChanged();
+        OnPropertyChanged(nameof(ShowCustomAnimationSetting));
     }
 
     partial void OnEffectSpeedChanged(double value) => RaiseEffectChanged();
@@ -195,7 +268,7 @@ public sealed partial class DeviceRowViewModel : ObservableObject
             var settings = assignment?.Settings ?? new Dictionary<string, string>();
             EffectSpeed = effectName switch
             {
-                "Rainbow wave" or "Breathing" => GetDouble(settings, "speed", 1.0),
+                "Rainbow wave" or "Breathing" or CustomAnimationEffectName => GetDouble(settings, "speed", 1.0),
                 "Pac-Man" => GetDouble(settings, "cellsPerSecond", 6.0) / 6.0,
                 "Rain" => GetDouble(settings, "rowsPerSecond", 8.0) / 8.0,
                 _ => 1.0,
@@ -203,16 +276,17 @@ public sealed partial class DeviceRowViewModel : ObservableObject
             EffectColorHex = GetString(settings, "color", "#FFFFFF");
             EffectMinTempC = GetDouble(settings, "minC", 30);
             EffectMaxTempC = GetDouble(settings, "maxC", 85);
+            SetProperty(
+                ref _selectedCustomAnimationId,
+                settings.TryGetValue(EffectRegistry.CustomAnimationIdSetting, out var id) && !string.IsNullOrWhiteSpace(id) ? id : null,
+                nameof(SelectedCustomAnimationId));
         }
         finally
         {
             _suppressEffectChangeHandler = false;
         }
 
-        OnPropertyChanged(nameof(ShowEffectSettings));
-        OnPropertyChanged(nameof(ShowSpeedSetting));
-        OnPropertyChanged(nameof(ShowColorSetting));
-        OnPropertyChanged(nameof(ShowTemperatureRangeSetting));
+        RaiseEffectVisibilityChanged();
     }
 
     /// <summary>Builds the <see cref="EffectAssignment"/> to persist/hand to <c>EffectEngine</c> for
@@ -248,6 +322,15 @@ public sealed partial class DeviceRowViewModel : ObservableObject
 
             case "Rain":
                 settings["rowsPerSecond"] = (EffectSpeed * 8.0).ToString(CultureInfo.InvariantCulture);
+                break;
+
+            case CustomAnimationEffectName:
+                settings["speed"] = EffectSpeed.ToString(CultureInfo.InvariantCulture);
+                if (SelectedCustomAnimationId is { } animationId)
+                {
+                    settings[EffectRegistry.CustomAnimationIdSetting] = animationId;
+                }
+
                 break;
         }
 

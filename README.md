@@ -153,7 +153,11 @@ milestone specs.
   animated effect per device - Rainbow wave, Breathing, CPU temperature (color follows CPU
   temperature between a min/max °C), and, for a device with a matrix (per-key) zone, Pac-Man and
   Rain - plus a global "updates pending" overlay and a "Pause effects" button. See
-  `docs/specs/11-led-effects.md`.
+  `docs/specs/11-led-effects.md`. You can also add your own **custom animations**: click "Copy AI
+  prompt", describe the animation you want to any AI chat, and paste its answer back with "Paste
+  from clipboard" (or import a `.json` animation file) - then pick "Custom animation" for any
+  device. See [`docs/custom-animations.md`](docs/custom-animations.md) for the guide, the prompt
+  template and examples.
 
 ## Planned modules
 
