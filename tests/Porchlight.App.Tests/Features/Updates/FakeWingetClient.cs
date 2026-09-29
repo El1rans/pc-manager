@@ -47,10 +47,18 @@ internal sealed class FakeWingetClient : IWingetClient
     /// that a refresh did (or, per B1, deliberately did not) happen at some point.</summary>
     public int GetUpgradesCallCount { get; private set; }
 
+    /// <summary>When set, <see cref="GetUpgradesAsync"/> throws this instead of returning a list.</summary>
+    public Exception? GetUpgradesException { get; set; }
+
     public Task<IReadOnlyList<WingetPackage>> GetUpgradesAsync(
         bool includeUnknown, IProgress<string>? progress, CancellationToken cancellationToken)
     {
         GetUpgradesCallCount++;
+        if (GetUpgradesException is not null)
+        {
+            throw GetUpgradesException;
+        }
+
         if (UpgradeListResults.Count > 0)
         {
             _lastUpgradeListResult = UpgradeListResults.Dequeue();
@@ -99,5 +107,30 @@ internal sealed class FakeWingetClient : IWingetClient
         }
 
         return InstallResult;
+    }
+
+    /// <summary>Result <see cref="ExportAsync"/> returns.</summary>
+    public WingetResult ExportResult { get; set; } = new(0, []);
+
+    /// <summary>Result <see cref="ImportAsync"/> returns.</summary>
+    public WingetResult ImportResult { get; set; } = new(0, []);
+
+    public List<string> ExportCalls { get; } = [];
+
+    public List<string> ImportCalls { get; } = [];
+
+    public Task<WingetResult> ExportAsync(
+        string filePath, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken)
+    {
+        ExportCalls.Add(filePath);
+        return Task.FromResult(ExportResult);
+    }
+
+    public Task<WingetResult> ImportAsync(
+        string filePath, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken)
+    {
+        ImportCalls.Add(filePath);
+        log?.Report("> winget import");
+        return Task.FromResult(ImportResult);
     }
 }

@@ -1,4 +1,4 @@
-# 12 - Read-only web console (branch `claude/local-web-console-stats-gnf9p9`)
+# 20 - Read-only web console (branch `claude/local-web-console-stats-gnf9p9`)
 
 Goal: let the PC's owner watch this PC's live stats from a browser on another device (phone,
 laptop) - on the same network, or from anywhere through a VPN - **without being able to change

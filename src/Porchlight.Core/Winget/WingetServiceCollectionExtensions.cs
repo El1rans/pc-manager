@@ -9,6 +9,8 @@ public static class WingetServiceCollectionExtensions
 {
     public static IServiceCollection AddWingetClient(this IServiceCollection services)
     {
+        services.AddSingleton<IPendingUpdatesTracker, PendingUpdatesTracker>();
+
 #if DEBUG
         // Non-shipping (DEBUG-only) escape hatch for capturing Updates page documentation
         // screenshots without exposing the real machine's installed apps - see

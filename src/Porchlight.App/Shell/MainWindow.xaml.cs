@@ -1,12 +1,22 @@
 using System.ComponentModel;
 using System.Windows;
+using Porchlight.App.Tray;
+using Porchlight.Core.Settings;
 
 namespace Porchlight.App.Shell;
 
 public partial class MainWindow : Window
 {
-    public MainWindow(MainViewModel viewModel)
+    private readonly ISettingsStore _settingsStore;
+    private readonly ITrayIcon _trayIcon;
+    private readonly IShellWindowService _shellWindowService;
+
+    public MainWindow(
+        MainViewModel viewModel, ISettingsStore settingsStore, ITrayIcon trayIcon, IShellWindowService shellWindowService)
     {
+        _settingsStore = settingsStore;
+        _trayIcon = trayIcon;
+        _shellWindowService = shellWindowService;
         InitializeComponent();
         DataContext = viewModel;
 
@@ -50,42 +60,71 @@ public partial class MainWindow : Window
         };
     }
 
+    /// <summary>Selects <paramref name="page"/> in the navigation rail exactly as a click would
+    /// (the selection handlers above then update the view model and clear the other list).</summary>
+    public void SelectPage(IPage page)
+    {
+        if (MainNavList.Items.Contains(page))
+        {
+            MainNavList.SelectedItem = page;
+        }
+        else if (PinnedNavList.Items.Contains(page))
+        {
+            PinnedNavList.SelectedItem = page;
+        }
+    }
+
+    /// <summary>Asks the user to confirm quitting while <paramref name="busyPage"/> has work in
+    /// flight. Never stops the work itself. Returns true to go ahead.</summary>
+    internal static bool ConfirmClose(IBusyGuard busyPage, Window? owner)
+    {
+        const string title = "Porchlight";
+        var result = owner is null
+            ? MessageBox.Show(busyPage.BusyMessage, title, MessageBoxButton.YesNo, MessageBoxImage.Warning)
+            : MessageBox.Show(owner, busyPage.BusyMessage, title, MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        return result == MessageBoxResult.Yes;
+    }
+
     /// <summary>
-    /// Asks for confirmation before closing if any page reports work in flight via
-    /// <see cref="IBusyGuard"/> (e.g. the Updates page mid-upgrade) - see that interface's remarks.
-    /// Never stops the work itself; declining just cancels the close.
+    /// With "keep running in the tray" on (and the tray icon actually present), closing hides the
+    /// window instead - nothing stops, so no busy warning. Otherwise (setting off, no icon, or the
+    /// app really exiting) it asks for confirmation if any page reports work in flight via
+    /// <see cref="IBusyGuard"/>; declining just cancels the close.
     /// </summary>
     private void OnClosing(object? sender, CancelEventArgs e)
     {
-        if (DataContext is not MainViewModel viewModel)
+        if (AppExitState.IsExiting)
         {
             return;
         }
 
-        IBusyGuard? busyPage = null;
-        foreach (var page in viewModel.Pages)
+        if (_settingsStore.Current.Notifications.KeepRunningInTray && _trayIcon.IsVisible)
         {
-            if (page is IBusyGuard { IsBusyWithWork: true } guard)
-            {
-                busyPage = guard;
-                break;
-            }
-        }
-
-        if (busyPage is null)
-        {
+            e.Cancel = true;
+            Hide();
+            ShowTrayHintOnce();
             return;
         }
 
-        var result = MessageBox.Show(
-            busyPage.BusyMessage,
-            "Porchlight",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning);
-
-        if (result != MessageBoxResult.Yes)
+        if (DataContext is MainViewModel viewModel
+            && viewModel.FindBusyPage() is { } busyPage
+            && !ConfirmClose(busyPage, this))
         {
             e.Cancel = true;
         }
+    }
+
+    private void ShowTrayHintOnce()
+    {
+        if (_settingsStore.Current.Notifications.TrayHintShown)
+        {
+            return;
+        }
+
+        _settingsStore.Update(s => s.Notifications.TrayHintShown = true);
+        _trayIcon.ShowBalloon(
+            "Porchlight is still running here",
+            "Right-click this icon to open it or quit.",
+            _shellWindowService.ShowMainWindow);
     }
 }

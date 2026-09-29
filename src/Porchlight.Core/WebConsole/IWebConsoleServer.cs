@@ -2,7 +2,7 @@ namespace Porchlight.Core.WebConsole;
 
 /// <summary>
 /// The read-only web console's HTTP listener: serves a small stats page and <c>/api/stats</c> to a
-/// browser on another device (see docs/specs/12-web-console.md). There is no route that changes
+/// browser on another device (see docs/specs/20-web-console.md). There is no route that changes
 /// anything on the PC - see <see cref="WebConsoleRouter"/>.
 /// </summary>
 public interface IWebConsoleServer

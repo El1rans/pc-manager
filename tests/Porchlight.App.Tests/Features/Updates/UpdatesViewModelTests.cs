@@ -15,6 +15,8 @@ public sealed class UpdatesViewModelTests : IDisposable
     private readonly SettingsStore _settingsStore;
     private readonly FakeWingetClient _wingetClient = new();
     private readonly FakeAppInUseDiagnosticsService _appInUseDiagnostics = new();
+    private readonly PendingUpdatesTracker _tracker = new();
+    private readonly FakeFileDialogService _fileDialogs = new();
 
     public UpdatesViewModelTests()
     {
@@ -32,15 +34,70 @@ public sealed class UpdatesViewModelTests : IDisposable
     }
 
     private UpdatesViewModel CreateViewModel() =>
-        new(_wingetClient, _settingsStore, _appInUseDiagnostics, NullLogger<UpdatesViewModel>.Instance);
+        new(_wingetClient, _settingsStore, _appInUseDiagnostics, _tracker, _fileDialogs, NullLogger<UpdatesViewModel>.Instance);
 
     private UpdatesViewModel CreateViewModel(TimeProvider timeProvider) =>
-        new(_wingetClient, _settingsStore, _appInUseDiagnostics, NullLogger<UpdatesViewModel>.Instance, timeProvider);
+        new(_wingetClient, _settingsStore, _appInUseDiagnostics, _tracker, _fileDialogs, NullLogger<UpdatesViewModel>.Instance, timeProvider);
 
     private static WingetPackage Package(
         string id, bool requiresExplicit = false, string name = "", string installedVersion = "1.0", string availableVersion = "2.0") =>
         new(Name: string.IsNullOrEmpty(name) ? id : name, Id: id, InstalledVersion: installedVersion,
             AvailableVersion: availableVersion, Source: "winget", RequiresExplicit: requiresExplicit);
+
+    [Fact]
+    public async Task CheckForUpdatesAsync_Success_ReportsCountOfNonIgnoredUpdates()
+    {
+        _settingsStore.Update(s => s.Updates.IgnoredIds.Add("Ignored.Id"));
+        _wingetClient.UpgradeListResults.Enqueue([Package("A.Id"), Package("B.Id"), Package("Ignored.Id")]);
+        var viewModel = CreateViewModel();
+
+        var result = await viewModel.CheckForUpdatesAsync();
+
+        Assert.Equal(UpdateCheckStatus.Succeeded, result.Status);
+        Assert.Equal(2, result.Count);
+    }
+
+    [Fact]
+    public async Task CheckForUpdatesAsync_NoUpdates_SucceedsWithZero()
+    {
+        var viewModel = CreateViewModel();
+
+        var result = await viewModel.CheckForUpdatesAsync();
+
+        Assert.Equal(UpdateCheckResult.Succeeded(0), result);
+    }
+
+    [Fact]
+    public async Task CheckForUpdatesAsync_WingetFailure_ReportsFailed()
+    {
+        _wingetClient.GetUpgradesException = new InvalidOperationException("boom");
+        var viewModel = CreateViewModel();
+
+        var result = await viewModel.CheckForUpdatesAsync();
+
+        Assert.Equal(UpdateCheckStatus.Failed, result.Status);
+    }
+
+    [Fact]
+    public async Task CheckForUpdatesAsync_WingetMissing_ReportsFailed()
+    {
+        _wingetClient.GetUpgradesException = new WingetNotFoundException();
+        var viewModel = CreateViewModel();
+
+        Assert.Equal(UpdateCheckStatus.Failed, (await viewModel.CheckForUpdatesAsync()).Status);
+    }
+
+    [Fact]
+    public async Task CheckForUpdatesAsync_WhileBusy_IsSkippedWithoutCallingWinget()
+    {
+        var viewModel = CreateViewModel();
+        viewModel.IsBusy = true;
+
+        var result = await viewModel.CheckForUpdatesAsync();
+
+        Assert.Equal(UpdateCheckStatus.Skipped, result.Status);
+        Assert.Equal(0, _wingetClient.GetUpgradesCallCount);
+    }
 
     [Fact]
     public async Task RefreshAsync_DefaultSelection_TicksNonIgnoredNonExplicitOnly()

@@ -50,6 +50,10 @@ public sealed class PageServiceCollectionExtensionsTests
         services.AddSingleton<IUrlLauncher, FakeUrlLauncher>();
         services.AddSingleton<IWindowsVersionReader, FakeWindowsVersionReader>();
         services.AddSingleton<ISettingsStore, FakeSettingsStore>();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<Porchlight.Core.Checkup.ICheckupReportBuilder, FakeCheckupReportBuilder>();
+        services.AddSingleton<IFileDialogService, Porchlight.App.Tests.Features.Updates.FakeFileDialogService>();
+        services.AddSingleton<CheckupCardViewModel>();
         services.AddPage<RemoteSupportViewModel, Border>();
         var provider = services.BuildServiceProvider();
         _ = provider.GetServices<IPage>().ToList();

@@ -86,10 +86,17 @@ milestone specs.
 
 ## Features
 
-- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Web console, Get help), following
+- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Free up space, Startup apps, Health check, Internet, Browser add-ons, Web console, Get help), following
   Windows light/dark theme, with the app version shown in the sidebar footer.
+- Browser add-ons page: read-only list of the add-ons installed in Edge, Chrome, Brave and Firefox
+  (every profile), each with a plain-language note on what it can do (read all websites, see
+  history, change proxy settings, ...), where it came from and a "Looks fine / Review / Worth
+  removing" level. Porchlight never changes or removes anything in a browser; the page opens the
+  browser's own add-ons page and explains how to remove one. Nothing leaves the PC.
 - Settings persisted as JSON under `%APPDATA%\Porchlight\settings.json`, atomic writes, corrupt-file
   recovery.
+- Free up space: one Scan measures safe junk (temporary files, browser caches, crash reports, Windows Update leftovers, optionally the Recycle Bin), then one Clean up button removes the ticked items. Files in use are left alone, and the page never follows shortcuts or links into other folders. It also suggests big files and old downloads (moved to the Recycle Bin only when you click, so they can be restored) and large apps (opens the app's own uninstaller). Personal files are never deleted automatically.
+  The same page has "What's using space?", a disk space map: pick your files, a drive or any folder, and Porchlight measures it in the background (never following shortcuts, and counting folders Windows won't let it read) and shows the biggest folders and files as a sorted list with proportional bars, sizes and percentages, with a breadcrumb to go back up and "Show in folder". Only files in your own folders can be moved to the Recycle Bin. "Duplicate files" finds identical copies of files 1 MB or bigger in your own folders (comparing sizes first, then the start and end of each file, then a full SHA-256 only where needed), shows how much space each set wastes and suggests "Keep newest"; you tick the copies to move to the Recycle Bin, and one copy of every set always stays. On the Dashboard, a drive that is low on space gets a "Free up space" button that opens this page. See `docs/specs/19-disk-insights.md`.
 - Logs written to `%APPDATA%\Porchlight\logs`.
 - Admin elevation: the sidebar shows whether the app is running as administrator and can relaunch
   elevated.
@@ -118,6 +125,16 @@ milestone specs.
   running/not-running status with a "Start AnyDesk" button, step-by-step instructions, a
   scam-safety warning, and "Copy support info" for sharing computer name/Windows version/address by
   message. Porchlight never changes any AnyDesk security setting.
+- Check-up report (Get help page): "Send a check-up to <your helper>" builds a plain-language
+  summary of this PC (computer and Windows, restarts, drive space, pending app updates,
+  temperatures, remote help), shows exactly what it contains, and lets you copy it, save it as an
+  HTML or text file, or open it in your mail program addressed to your helper (optional email
+  setting). Porchlight never sends or uploads anything itself, and the report never includes your
+  user name, files, installed apps, IP addresses or serial numbers. Other features add their own
+  sections by registering an `ICheckupSection`; see `docs/specs/16-checkup-report.md`.
+- Move to a new PC (Updates page): "Save my app list..." exports installed apps with
+  `winget export`; "Install apps from a list..." validates the file, shows the apps for
+  confirmation, then runs `winget import` with the live log and progress.
 - Hardware: a sensors tab with an "At a glance" summary strip (CPU/GPU temperature, CPU package
   power, hottest fan) above one card per device (CPU, GPU, motherboard, memory, storage, network -
   CPU/GPU expanded by default), each grouped into sections (temperatures, fans, load, power,
@@ -154,6 +171,40 @@ milestone specs.
   temperature between a min/max °C), and, for a device with a matrix (per-key) zone, Pac-Man and
   Rain - plus a global "updates pending" overlay and a "Pause effects" button. See
   `docs/specs/11-led-effects.md`.
+- Startup apps: lists everything that starts when you sign in - the per-user and all-users `Run`
+  registry keys and both Startup folders - with a friendly name, publisher, On/Off status and a plain
+  "What is this?" line, and marks Windows/Microsoft items and Porchlight's own tools (AnyDesk,
+  OpenRGB) as "Recommended to keep". Turn items off and on exactly like Task Manager (the
+  `StartupApproved` value): nothing is ever deleted, so it is always reversible, and no startup
+  program is ever launched. Items for all users need administrator rights. No startup-impact rating
+  and no scheduled tasks are shown (see `docs/specs/13-startup-apps.md`).
+- Health check: a plain-language page with five cards - disk health (per physical disk: Healthy /
+  Warning - back up your files soon / Unknown, from Windows' storage and failure-prediction data);
+  Windows repair (`sfc /scannow`, then `DISM /RestoreHealth` offered only if SFC couldn't fix everything;
+  needs administrator rights, takes 10-30 minutes, and can't be cancelled once started); restore point
+  (create one, see the most recent ones, explains Windows' 24-hour limit and detects System Protection
+  being off, with a link to open it); recent problems from the last 30 days of the Event Log (app
+  crashes, blue screens, unexpected shutdowns, disk errors, failed updates - grouped and counted); and,
+  on a laptop, battery wear. Any check that can't run shows "Couldn't check" instead of failing. See
+  `docs/specs/14-system-health.md`.
+
+- Internet: connection status (Wi-Fi name and signal as bars and words, local IP, router, DNS),
+  a guided "Fix my internet" check (network connection, router, website names, the internet) that
+  suggests only matching fixes - clear saved website addresses, get a fresh connection, switch the
+  connection off and on (administrator, with confirmation) - and only *offers* Windows' Network
+  settings as a last resort; a Cloudflare speed test that only runs when you press the button (the
+  last result is remembered); and a read-only list of programs using the internet, refreshed only
+  while the page is open. The public IP address is never fetched. See `docs/specs/18-network.md`.
+- System tray icon and background alerts: a Porchlight icon in the notification area with a
+  quick-stats tooltip (CPU, memory, free space on C:) and a menu (Open, Check for updates, Get help,
+  Notifications settings, Exit). By default closing the window keeps Porchlight running in the
+  tray (Exit really quits); starting it a second time just shows the running window. Plain-language
+  balloon alerts for a nearly full drive, a sustained hot CPU/GPU (only when temperature readings are
+  available), app updates ready, and a restart pending for over 3 days - each type can be turned
+  off, each shown at most once a day, and clicking one opens the relevant page. App updates are
+  checked on a schedule (every day by default, or weekly/never); Porchlight only looks, it never
+  installs by itself. All of it is configured in the small Notifications dialog (tray menu or sidebar
+  footer). See `docs/specs/15-tray-and-alerts.md`.
 
 - Web console (read-only): turn it on from the "Web console" page to watch this PC's live stats
   (CPU, memory, GPU, disk, network, temperatures, busiest apps, drives, system info) from a browser
@@ -161,41 +212,23 @@ milestone specs.
   on the PC from it - and it needs an access key, included in the link the page gives you (make a
   new key any time to lock out old links). Off by default; port 8765 unless you pick another. Use it
   on your home network, or through a VPN such as Tailscale when away - don't forward the port on
-  your router. See `docs/specs/12-web-console.md`.
+  your router. See `docs/specs/20-web-console.md`.
 
 ## Planned modules
 
 ### Dashboard
 - CPU/GPU temperatures (where the hardware exposes them)
-- Battery health (laptops)
 
 ### App updates (winget)
 - Choose which apps to update, ignore list, silent mode (from the prototype)
-- Scheduled update checks with a tray notification
 - Update history
-- Install new apps from a search box; export/import an app list to set up a new PC
+- Install new apps from a search box
 
-### Startup and processes
-- Startup apps: see and disable what runs at boot, with startup impact
+### Processes and services
 - Process list with CPU/RAM, kill or open file location
 - Windows services viewer
-
-### Cleanup and storage
-- Temp files, Windows Update cache, recycle bin, browser caches
-- Disk space map: find the biggest folders and files
-- Duplicate file finder
-
-### System health
-- Run SFC / DISM, check disk (SMART) status
-- Create a restore point before risky changes
-- Recent crashes and errors from the Event Log in plain language
-
-### Network
-- Current IP, DNS, Wi-Fi signal, speed test
-- Flush DNS, reset network adapter
-- See which apps are using the network
+- Startup impact ratings and logon scheduled tasks for the Startup apps page
 
 ### Quality of life
-- System tray icon with quick stats
 - Dark / light theme
 - Everything logged to `%APPDATA%\Porchlight\logs`

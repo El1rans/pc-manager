@@ -60,4 +60,20 @@ public interface IWingetClient
     /// </param>
     Task<WingetResult> InstallAsync(
         string id, bool silent, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Runs <c>winget export -o &lt;filePath&gt; --accept-source-agreements --disable-interactivity</c>,
+    /// saving the list of installed apps to a file (used by the Updates page's "Move to a new PC").
+    /// </summary>
+    Task<WingetResult> ExportAsync(
+        string filePath, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Runs <c>winget import -i &lt;filePath&gt; --accept-package-agreements --accept-source-agreements
+    /// --ignore-unavailable --disable-interactivity</c>, installing every app in an export file.
+    /// </summary>
+    /// <param name="cancellationToken">Same rule as <see cref="InstallAsync"/>: once winget has
+    /// started installing, never kill it - pass <see cref="CancellationToken.None"/>.</param>
+    Task<WingetResult> ImportAsync(
+        string filePath, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken);
 }

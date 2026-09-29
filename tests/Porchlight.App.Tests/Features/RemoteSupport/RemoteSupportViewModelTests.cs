@@ -5,6 +5,7 @@ using Microsoft.Extensions.Time.Testing;
 using Porchlight.App.Controls;
 using Porchlight.App.Features.RemoteSupport;
 using Porchlight.App.Tests.Features.Setup;
+using Porchlight.App.Tests.Features.Updates;
 using Porchlight.Core.Components;
 using Porchlight.Core.RemoteSupport;
 using Porchlight.Core.Settings;
@@ -48,12 +49,16 @@ public sealed class RemoteSupportViewModelTests : IDisposable
         }
     }
 
+    private CheckupCardViewModel CreateCheckup() =>
+        new(new FakeCheckupReportBuilder(), _clipboard, _urlLauncher, new FakeFileDialogService(), _settingsStore, _timeProvider,
+            NullLogger<CheckupCardViewModel>.Instance);
+
     private RemoteSupportViewModel CreateViewModel()
     {
         var cardFactory = new ComponentCardViewModelFactory(_componentService, NullLoggerFactory.Instance);
         return new RemoteSupportViewModel(
             _anyDeskService, _componentService, cardFactory, _clipboard, _urlLauncher, _windowsVersionReader,
-            _settingsStore, NullLogger<RemoteSupportViewModel>.Instance,
+            _settingsStore, NullLogger<RemoteSupportViewModel>.Instance, CreateCheckup(),
             copyConfirmationDuration: TestPollInterval, waitingForIdPollInterval: TestPollInterval,
             runningStatusPollInterval: TestPollInterval, idWaitTimeout: TestIdWaitTimeout, _timeProvider);
     }
@@ -373,7 +378,7 @@ public sealed class RemoteSupportViewModelTests : IDisposable
         var cardFactory = new ComponentCardViewModelFactory(_componentService, NullLoggerFactory.Instance);
         var viewModel = new RemoteSupportViewModel(
             throwingAnyDeskService, _componentService, cardFactory, _clipboard, _urlLauncher, _windowsVersionReader,
-            _settingsStore, NullLogger<RemoteSupportViewModel>.Instance,
+            _settingsStore, NullLogger<RemoteSupportViewModel>.Instance, CreateCheckup(),
             copyConfirmationDuration: TestPollInterval, waitingForIdPollInterval: TestPollInterval,
             runningStatusPollInterval: TestPollInterval, idWaitTimeout: TestIdWaitTimeout, _timeProvider);
 

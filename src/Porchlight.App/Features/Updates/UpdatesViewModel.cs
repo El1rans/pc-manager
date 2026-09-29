@@ -71,6 +71,8 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     private readonly ReinstallWorkflow _reinstallWorkflow;
     private readonly ISettingsStore _settingsStore;
     private readonly IAppInUseDiagnosticsService _appInUseDiagnostics;
+    private readonly IPendingUpdatesTracker _pendingUpdatesTracker;
+    private readonly IFileDialogService _fileDialogs;
     private readonly ILogger<UpdatesViewModel> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly StringBuilder _log = new();
@@ -187,7 +189,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     }
 
     /// <inheritdoc/>
-    public bool IsBusyWithWork => IsUpdating;
+    public bool IsBusyWithWork => IsUpdating || IsMovingApps;
 
     /// <inheritdoc/>
     public string BusyMessage =>
@@ -196,8 +198,8 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
 
     public UpdatesViewModel(
         IWingetClient wingetClient, ISettingsStore settingsStore, IAppInUseDiagnosticsService appInUseDiagnostics,
-        ILogger<UpdatesViewModel> logger)
-        : this(wingetClient, settingsStore, appInUseDiagnostics, logger, TimeProvider.System)
+        IPendingUpdatesTracker pendingUpdatesTracker, IFileDialogService fileDialogs, ILogger<UpdatesViewModel> logger)
+        : this(wingetClient, settingsStore, appInUseDiagnostics, pendingUpdatesTracker, fileDialogs, logger, TimeProvider.System)
     {
     }
 
@@ -206,8 +208,11 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     /// (<see cref="WaitingHintThreshold"/>) never depends on wall-clock timing.</summary>
     public UpdatesViewModel(
         IWingetClient wingetClient, ISettingsStore settingsStore, IAppInUseDiagnosticsService appInUseDiagnostics,
+        IPendingUpdatesTracker pendingUpdatesTracker, IFileDialogService fileDialogs,
         ILogger<UpdatesViewModel> logger, TimeProvider timeProvider)
     {
+        _pendingUpdatesTracker = pendingUpdatesTracker;
+        _fileDialogs = fileDialogs;
         _wingetClient = wingetClient;
         _reinstallWorkflow = new ReinstallWorkflow(wingetClient);
         _settingsStore = settingsStore;
@@ -270,8 +275,26 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     /// rows keep their last status/state (a row that no longer appears means it updated
     /// successfully) instead of resetting, and the "Checking for updates..." step message is not
     /// shown.</param>
-    public async Task RefreshAsync(bool quiet)
+    public async Task RefreshAsync(bool quiet) => await RunRefreshAsync(quiet).ConfigureAwait(true);
+
+    /// <summary>
+    /// For the scheduled/tray update check: runs a full (non-quiet) check unless one is already
+    /// running or an update run is in progress, and reports what happened as a typed
+    /// <see cref="UpdateCheckResult"/> instead of the caller inferring it from status text.
+    /// </summary>
+    public async Task<UpdateCheckResult> CheckForUpdatesAsync()
     {
+        if (IsBusy || IsUpdating)
+        {
+            return UpdateCheckResult.Skipped;
+        }
+
+        return await RunRefreshAsync(quiet: false).ConfigureAwait(true);
+    }
+
+    private async Task<UpdateCheckResult> RunRefreshAsync(bool quiet)
+    {
+        var result = UpdateCheckResult.Failed;
         _refreshCts.Cancel();
         _refreshCts.Dispose();
         var cts = new CancellationTokenSource();
@@ -293,9 +316,11 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
             var packages = await _wingetClient.GetUpgradesAsync(IncludeUnknown, progress, cancellationToken)
                 .ConfigureAwait(true);
             MergePackages(packages, quiet);
+            result = UpdateCheckResult.Succeeded(Packages.Count(p => !p.IsHiddenByDefault));
         }
         catch (OperationCanceledException)
         {
+            result = UpdateCheckResult.Skipped;
             // Superseded by a newer refresh (or the app is shutting down); expected, not an error.
         }
         catch (WingetNotFoundException ex)
@@ -327,6 +352,8 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
                 }
             }
         }
+
+        return result;
     }
 
     private void MergePackages(IReadOnlyList<WingetPackage> packages, bool quiet)
@@ -390,6 +417,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
 
         UpdateSummary();
         UpdateBadge();
+        _pendingUpdatesTracker.Report(Packages.Count(p => !p.IsHiddenByDefault), _timeProvider.GetLocalNow());
     }
 
     private void UpdateSummary()

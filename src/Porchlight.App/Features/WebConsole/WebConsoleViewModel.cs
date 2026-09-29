@@ -13,7 +13,7 @@ namespace Porchlight.App.Features.WebConsole;
 /// <summary>
 /// "Web console" page: turns the read-only web console on or off, and shows the link (with its
 /// access key) to open on a phone or another computer to watch this PC's stats. See
-/// docs/specs/12-web-console.md.
+/// docs/specs/20-web-console.md.
 /// </summary>
 public sealed partial class WebConsoleViewModel : PageViewModelBase, IDisposable
 {
@@ -82,7 +82,7 @@ public sealed partial class WebConsoleViewModel : PageViewModelBase, IDisposable
     // Segoe Fluent Icons "Globe".
     public override string Glyph => "";
 
-    public override int Order => 4;
+    public override int Order => 9;
 
     /// <summary>Other addresses this PC answers on (e.g. Wi-Fi and Ethernet both connected), for
     /// when the first link does not work from the viewing device's network.</summary>
