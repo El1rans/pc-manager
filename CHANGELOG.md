@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Web console: a new, read-only way to watch this PC's live stats from a browser on another device
+  (`docs/specs/20-web-console.md`). Turned on from the new "Web console" page (off by default), it
+  serves a small stats page - CPU, memory, GPU, disk and network with sparklines, hardware
+  temperatures, busiest apps, drives, pending restart and system info - on a chosen port (default
+  8765). Only GET/HEAD requests are accepted and no endpoint can change anything on the PC; stats
+  require a random access key carried in the link's #fragment, which can be regenerated to lock out
+  old links. Built on a minimal `TcpListener` server with strict request limits, so it needs no admin
+  rights and adds no dependencies; stats are sampled only while a browser is watching.
+
 - Lighting: custom animations. A new "Custom animations" card on the Lighting page imports your own
   LED animations - "Import animation file..." for a `.json` file, or "Paste from clipboard" for an
   animation an AI chat wrote - and "Copy AI prompt" copies a ready-made prompt template that teaches

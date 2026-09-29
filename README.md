@@ -86,7 +86,7 @@ milestone specs.
 
 ## Features
 
-- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Free up space, Startup apps, Health check, Internet, Browser add-ons, Get help), following
+- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Free up space, Startup apps, Health check, Internet, Browser add-ons, Web console, Get help), following
   Windows light/dark theme, with the app version shown in the sidebar footer.
 - Browser add-ons page: read-only list of the add-ons installed in Edge, Chrome, Brave and Firefox
   (every profile), each with a plain-language note on what it can do (read all websites, see
@@ -209,6 +209,14 @@ milestone specs.
   checked on a schedule (every day by default, or weekly/never); Porchlight only looks, it never
   installs by itself. All of it is configured in the small Notifications dialog (tray menu or sidebar
   footer). See `docs/specs/15-tray-and-alerts.md`.
+
+- Web console (read-only): turn it on from the "Web console" page to watch this PC's live stats
+  (CPU, memory, GPU, disk, network, temperatures, busiest apps, drives, system info) from a browser
+  on your phone or another computer. It only shows information - there is no way to change anything
+  on the PC from it - and it needs an access key, included in the link the page gives you (make a
+  new key any time to lock out old links). Off by default; port 8765 unless you pick another. Use it
+  on your home network, or through a VPN such as Tailscale when away - don't forward the port on
+  your router. See `docs/specs/20-web-console.md`.
 
 ## Planned modules
 

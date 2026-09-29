@@ -1,0 +1,153 @@
+<UserControl x:Class="Porchlight.App.Features.WebConsole.WebConsoleView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:wc="clr-namespace:Porchlight.App.Features.WebConsole"
+             d:DataContext="{d:DesignInstance wc:WebConsoleViewModel}"
+             mc:Ignorable="d">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="720" HorizontalAlignment="Left" Margin="24,24,24,24">
+            <TextBlock Text="Web console" Style="{StaticResource PageTitle}"/>
+            <TextBlock Style="{StaticResource Secondary}" Margin="0,4,0,20" TextWrapping="Wrap"
+                       Text="Watch this PC's stats from a browser on your phone or another computer. The web console is read-only: it only shows information and cannot change anything on this PC."/>
+
+            <!-- On/off and status. -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                <StackPanel>
+                    <CheckBox Content="Turn on the web console" IsChecked="{Binding IsEnabled}" FontSize="16"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <TextBlock FontSize="16" Margin="0,0,8,0" VerticalAlignment="Top">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                                    <Setter Property="Text" Value="&#xE711;"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                            <Setter Property="Text" Value="&#xE73E;"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding HasFailed}" Value="True">
+                                            <Setter Property="Text" Value="&#xE7BA;"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" MaxWidth="620" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- The link to open on the other device (only while running). -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,16"
+                    Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <TextBlock Text="Open this on your other device" Style="{StaticResource CardTitle}"/>
+                    <TextBox Text="{Binding PrimaryLink, Mode=OneWay}" IsReadOnly="True" IsReadOnlyCaretVisible="True"
+                             FontSize="16" TextWrapping="Wrap"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Copy link" Command="{Binding CopyLinkCommand}"
+                                Style="{DynamicResource AccentButtonStyle}" Margin="0,0,8,0"/>
+                        <Button Content="Open on this PC" Command="{Binding OpenHereCommand}" Margin="0,0,12,0"/>
+                        <TextBlock Text="{Binding CopyResult}" VerticalAlignment="Center"
+                                   Visibility="{Binding CopyResult, Converter={StaticResource StringToVis}}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding CopyFailed}" Value="True">
+                                            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+
+                    <StackPanel Margin="0,16,0,0" Visibility="{Binding HasOtherLinks, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Style="{StaticResource Secondary}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                   Text="If that link doesn't open, try one of these instead:"/>
+                        <ItemsControl ItemsSource="{Binding OtherLinks}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Grid.Column="0" Text="{Binding Mode=OneWay}" IsReadOnly="True"
+                                                 IsReadOnlyCaretVisible="True" BorderThickness="0" Background="Transparent"
+                                                 VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1" Content="Copy" Margin="8,0,0,0"
+                                                Command="{Binding DataContext.CopyLinkCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <TextBlock Style="{StaticResource Secondary}" TextWrapping="Wrap" Margin="0,16,0,0"
+                               Text="The first time, Windows may ask whether Porchlight can use your network. Choose Allow for private networks."/>
+                </StackPanel>
+            </Border>
+
+            <!-- Access key. -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,16"
+                    Visibility="{Binding AccessKey, Converter={StaticResource StringToVis}}">
+                <StackPanel>
+                    <TextBlock Text="Access key" Style="{StaticResource CardTitle}"/>
+                    <TextBlock Style="{StaticResource Secondary}" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Text="The link above already includes it. A browser without the key sees nothing. Make a new key to lock out every device that has the old link."/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Text="{Binding AccessKey, Mode=OneWay}" IsReadOnly="True"
+                                 IsReadOnlyCaretVisible="True" FontFamily="Consolas" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0,0,0">
+                            <Button Content="Copy key" Command="{Binding CopyAccessKeyCommand}" Margin="0,0,8,0"/>
+                            <Button Content="Make a new key" Command="{Binding NewAccessKeyCommand}"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Port. -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="Port" Style="{StaticResource CardTitle}"/>
+                    <TextBlock Style="{StaticResource Secondary}" Text="{Binding PortHint}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBox Text="{Binding PortText, UpdateSourceTrigger=PropertyChanged}" Width="120" MaxLength="5"
+                                 VerticalAlignment="Center"/>
+                        <Button Content="Apply" Command="{Binding ApplyPortCommand}" Margin="8,0,0,0"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding PortError}" Foreground="{DynamicResource SystemFillColorCriticalBrush}"
+                               TextWrapping="Wrap" Margin="0,8,0,0"
+                               Visibility="{Binding PortError, Converter={StaticResource StringToVis}}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Safety note: status is never color alone - icon plus text. -->
+            <Border Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
+                    BorderBrush="{DynamicResource SystemFillColorCautionBrush}"
+                    BorderThickness="1" CornerRadius="6" Padding="12">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" Style="{StaticResource Icon}"
+                               Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                               FontSize="18" Margin="0,0,12,0" VerticalAlignment="Top"/>
+                    <TextBlock TextWrapping="Wrap">
+                        <Run FontWeight="Bold" Text="Keep it private: "/>
+                        <Run Text="anyone with the link can see this PC's stats (though never change anything). Use it on your home network. To check in from elsewhere, connect through a VPN such as Tailscale rather than opening the port on your router."/>
+                    </TextBlock>
+                </DockPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
