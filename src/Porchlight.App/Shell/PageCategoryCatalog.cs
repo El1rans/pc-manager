@@ -1,7 +1,7 @@
 namespace Porchlight.App.Shell;
 
 /// <summary>The single place mapping each <see cref="PageCategory"/> to its title, glyph, order and
-/// pinning. See docs/specs/20-nav-categories.md.</summary>
+/// pinning. See docs/specs/22-nav-categories.md.</summary>
 public static class PageCategoryCatalog
 {
     // Segoe Fluent Icons: Home, Repair, Globe, TVMonitor, People.

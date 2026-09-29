@@ -13,7 +13,7 @@ namespace Porchlight.App.Features.WebConsole;
 /// <summary>
 /// "Web console" page: turns the read-only web console on or off, and shows the link (with its
 /// access key) to open on a phone or another computer to watch this PC's stats. See
-/// docs/specs/20-web-console.md.
+/// docs/specs/21-web-console.md.
 /// </summary>
 public sealed partial class WebConsoleViewModel : PageViewModelBase, IDisposable
 {

@@ -1,7 +1,7 @@
 namespace Porchlight.Core.WebConsole;
 
 /// <summary>Fixed limits and defaults for the read-only web console (see
-/// docs/specs/20-web-console.md). Kept deliberately small: the console only ever serves a handful
+/// docs/specs/21-web-console.md). Kept deliberately small: the console only ever serves a handful
 /// of tiny GET requests to one person's browser.</summary>
 public static class WebConsoleOptions
 {

@@ -3,7 +3,7 @@ using Porchlight.Core.WebConsole;
 namespace Porchlight.Core.Settings;
 
 /// <summary>Settings owned by the read-only web console feature (see
-/// docs/specs/20-web-console.md).</summary>
+/// docs/specs/21-web-console.md).</summary>
 public sealed class WebConsoleSettings
 {
     /// <summary>Whether the web console is served. Off by default: it only listens on the network
