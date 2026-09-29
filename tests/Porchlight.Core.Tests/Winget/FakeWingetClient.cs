@@ -37,4 +37,12 @@ internal sealed class FakeWingetClient : IWingetClient
         log?.Report($"> winget install --id {id}");
         return Task.FromResult(InstallResult);
     }
+
+    public Task<WingetResult> ExportAsync(
+        string filePath, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken) =>
+        Task.FromResult(new WingetResult(0, []));
+
+    public Task<WingetResult> ImportAsync(
+        string filePath, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken) =>
+        Task.FromResult(new WingetResult(0, []));
 }

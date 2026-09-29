@@ -100,4 +100,29 @@ internal sealed class FakeWingetClient : IWingetClient
 
         return InstallResult;
     }
+
+    /// <summary>Result <see cref="ExportAsync"/> returns.</summary>
+    public WingetResult ExportResult { get; set; } = new(0, []);
+
+    /// <summary>Result <see cref="ImportAsync"/> returns.</summary>
+    public WingetResult ImportResult { get; set; } = new(0, []);
+
+    public List<string> ExportCalls { get; } = [];
+
+    public List<string> ImportCalls { get; } = [];
+
+    public Task<WingetResult> ExportAsync(
+        string filePath, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken)
+    {
+        ExportCalls.Add(filePath);
+        return Task.FromResult(ExportResult);
+    }
+
+    public Task<WingetResult> ImportAsync(
+        string filePath, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken)
+    {
+        ImportCalls.Add(filePath);
+        log?.Report("> winget import");
+        return Task.FromResult(ImportResult);
+    }
 }
