@@ -125,6 +125,16 @@ milestone specs.
   running/not-running status with a "Start AnyDesk" button, step-by-step instructions, a
   scam-safety warning, and "Copy support info" for sharing computer name/Windows version/address by
   message. Porchlight never changes any AnyDesk security setting.
+- Check-up report (Get help page): "Send a check-up to <your helper>" builds a plain-language
+  summary of this PC (computer and Windows, restarts, drive space, pending app updates,
+  temperatures, remote help), shows exactly what it contains, and lets you copy it, save it as an
+  HTML or text file, or open it in your mail program addressed to your helper (optional email
+  setting). Porchlight never sends or uploads anything itself, and the report never includes your
+  user name, files, installed apps, IP addresses or serial numbers. Other features add their own
+  sections by registering an `ICheckupSection`; see `docs/specs/16-checkup-report.md`.
+- Move to a new PC (Updates page): "Save my app list..." exports installed apps with
+  `winget export`; "Install apps from a list..." validates the file, shows the apps for
+  confirmation, then runs `winget import` with the live log and progress.
 - Hardware: a sensors tab with an "At a glance" summary strip (CPU/GPU temperature, CPU package
   power, hottest fan) above one card per device (CPU, GPU, motherboard, memory, storage, network -
   CPU/GPU expanded by default), each grouped into sections (temperatures, fans, load, power,
@@ -195,7 +205,7 @@ milestone specs.
 - Choose which apps to update, ignore list, silent mode (from the prototype)
 - Scheduled update checks with a tray notification
 - Update history
-- Install new apps from a search box; export/import an app list to set up a new PC
+- Install new apps from a search box
 
 ### Processes and services
 - Process list with CPU/RAM, kill or open file location
