@@ -1,0 +1,53 @@
+#if DEBUG
+namespace Porchlight.Core.Startup.Demo;
+
+/// <summary>
+/// DEBUG-only fake <see cref="IStartupService"/> for the "demo data" mode (see
+/// <c>Monitoring.Demo.DemoDataMode</c>): a made-up list held in memory, so a documentation
+/// screenshot never shows the real machine's software and toggling never touches the registry.
+/// </summary>
+internal sealed class DemoStartupService : IStartupService
+{
+    private readonly object _gate = new();
+
+    private readonly List<StartupEntry> _entries =
+    [
+        Make(StartupSource.MachineRun, "SecurityHealth", "Windows Security notification icon", "Microsoft Corporation", true, true),
+        Make(StartupSource.CurrentUserRun, "AnyDesk", "AnyDesk", "philandro Software GmbH", true, true),
+        Make(StartupSource.CurrentUserRun, "OneDrive", "Microsoft OneDrive", "Microsoft Corporation", false, true),
+        Make(StartupSource.CurrentUserRun, "Spotify", "Spotify", "Spotify AB", false, true),
+        Make(StartupSource.MachineRun32, "AdobeGCInvoker", "Adobe Genuine Software Integrity", "Adobe Inc.", false, true),
+        Make(StartupSource.CurrentUserFolder, "Photo Frame.lnk", "Photo Frame", null, false, false),
+    ];
+
+    public Task<IReadOnlyList<StartupEntry>> ListAsync(CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            return Task.FromResult<IReadOnlyList<StartupEntry>>([.. _entries]);
+        }
+    }
+
+    public Task<StartupChangeResult> SetEnabledAsync(string entryId, bool enabled, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            var index = _entries.FindIndex(e => e.Id == entryId);
+            if (index < 0)
+            {
+                return Task.FromResult(StartupChangeResult.NotFound);
+            }
+
+            _entries[index] = _entries[index] with { IsEnabled = enabled };
+            return Task.FromResult(StartupChangeResult.Changed);
+        }
+    }
+
+    private static StartupEntry Make(
+        StartupSource source, string itemName, string displayName, string? publisher, bool keep, bool enabled) =>
+        new($"{source}|{itemName}", source, itemName, displayName, publisher, null,
+            keep ? "Part of Windows or a tool Porchlight sets up. It's best to leave this on."
+                 : "Starts by itself when you sign in to Windows. Turning it off doesn't remove the program.",
+            keep, enabled);
+}
+#endif
