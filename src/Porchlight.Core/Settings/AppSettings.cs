@@ -15,4 +15,6 @@ public sealed class AppSettings
     public RemoteSupportSettings RemoteSupport { get; set; } = new();
 
     public SetupSettings Setup { get; set; } = new();
+
+    public CleanupSettings Cleanup { get; set; } = new();
 }

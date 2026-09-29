@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Porchlight.App.Controls;
+using Porchlight.App.Features.Cleanup;
 using Porchlight.App.Features.Dashboard;
 using Porchlight.App.Features.Hardware;
 using Porchlight.App.Features.Lighting;
@@ -238,6 +239,7 @@ public partial class App : System.Windows.Application, IDisposable
         services.AddLedEffectsCore();
         services.AddHostedService<Features.Lighting.OpenRgbAutoStartHostedService>();
         services.AddRemoteSupportFeature();
+        services.AddCleanupFeature();
     }
 
     /// <summary>Applies every feature's <see cref="PageRegistration"/> to the view locator. Runs

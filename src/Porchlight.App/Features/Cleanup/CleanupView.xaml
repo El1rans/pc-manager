@@ -1,0 +1,204 @@
+<UserControl x:Class="Porchlight.App.Features.Cleanup.CleanupView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="clr-namespace:Porchlight.App.Controls"
+             xmlns:cleanup="clr-namespace:Porchlight.App.Features.Cleanup"
+             d:DataContext="{d:DesignInstance cleanup:CleanupViewModel}"
+             mc:Ignorable="d">
+  <UserControl.Resources>
+
+    <DataTemplate x:Key="CategoryRowTemplate" DataType="{x:Type cleanup:CleanupCategoryRowViewModel}">
+      <Grid Margin="0,0,0,12">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected, Mode=TwoWay}" IsEnabled="{Binding IsEnabled}">
+          <StackPanel>
+            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding Description}" Style="{StaticResource Secondary}" FontSize="12" TextWrapping="Wrap"/>
+            <StackPanel Orientation="Horizontal" Margin="0,2,0,0"
+                        Visibility="{Binding Note, Converter={StaticResource StringToVis}}">
+              <TextBlock Text="&#xE7BA;" Style="{StaticResource Icon}" FontSize="12" Margin="0,0,6,0"
+                         Foreground="{DynamicResource SystemFillColorCautionBrush}"/>
+              <TextBlock Text="{Binding Note}" FontSize="12" TextWrapping="Wrap"/>
+            </StackPanel>
+          </StackPanel>
+        </CheckBox>
+        <TextBlock Grid.Column="1" Text="{Binding SizeText}" FontWeight="SemiBold"
+                   VerticalAlignment="Top" Margin="12,0,0,0"/>
+      </Grid>
+    </DataTemplate>
+
+    <DataTemplate x:Key="FileRowTemplate" DataType="{x:Type cleanup:CleanupFileRowViewModel}">
+      <Grid Margin="0,0,0,12">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <StackPanel Grid.Column="0">
+          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+          <TextBlock Text="{Binding Folder}" Style="{StaticResource Secondary}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+          <TextBlock Style="{StaticResource Secondary}" FontSize="12">
+            <Run Text="{Binding SizeText, Mode=OneWay}"/>
+            <Run Text=" - "/>
+            <Run Text="{Binding ModifiedText, Mode=OneWay}"/>
+          </TextBlock>
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+          <Button Content="Show in folder" Margin="0,0,8,0"
+                  Command="{Binding DataContext.ShowInFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                  CommandParameter="{Binding}"/>
+          <Button Content="Move to Recycle Bin"
+                  Command="{Binding DataContext.MoveToRecycleBinCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                  CommandParameter="{Binding}"/>
+        </StackPanel>
+      </Grid>
+    </DataTemplate>
+
+    <DataTemplate x:Key="AppRowTemplate" DataType="{x:Type cleanup:CleanupAppRowViewModel}">
+      <Grid Margin="0,0,0,12">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <StackPanel Grid.Column="0">
+          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+          <TextBlock Text="{Binding Publisher}" Style="{StaticResource Secondary}" FontSize="12"
+                     Visibility="{Binding Publisher, Converter={StaticResource StringToVis}}"/>
+          <TextBlock Style="{StaticResource Secondary}" FontSize="12">
+            <Run Text="{Binding SizeText, Mode=OneWay}"/>
+            <Run Text=" "/>
+            <Run Text="{Binding InstalledText, Mode=OneWay}"/>
+          </TextBlock>
+        </StackPanel>
+        <Button Grid.Column="1" Content="Uninstall..." VerticalAlignment="Center" Margin="12,0,0,0"
+                Visibility="{Binding CanUninstall, Converter={StaticResource BoolToVis}}"
+                Command="{Binding DataContext.UninstallCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                CommandParameter="{Binding}"/>
+        <Button Grid.Column="1" Content="Open Installed apps" VerticalAlignment="Center" Margin="12,0,0,0"
+                Visibility="{Binding CannotUninstall, Converter={StaticResource BoolToVis}}"
+                Command="{Binding DataContext.OpenInstalledAppsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+      </Grid>
+    </DataTemplate>
+
+  </UserControl.Resources>
+
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel MaxWidth="820" HorizontalAlignment="Left" Margin="24">
+      <TextBlock Text="Free up space" Style="{StaticResource PageTitle}"/>
+      <TextBlock Text="Clear out things your PC no longer needs. Your own files are never deleted without you choosing them."
+                 Style="{StaticResource Secondary}" Margin="0,4,0,16" TextWrapping="Wrap"/>
+
+      <controls:AdminRequiredBanner
+          Message="Some cleanups need administrator rights. Restart as administrator to include them."
+          Visibility="{Binding ShowAdminBanner, Converter={StaticResource BoolToVis}}"/>
+
+      <!-- Header: system drive and running total. -->
+      <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+        <StackPanel>
+          <StackPanel DataContext="{Binding SystemDrive}">
+            <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+            <ProgressBar Height="6" Margin="0,6,0,4" Minimum="0" Maximum="100" Value="{Binding UsedPercent, Mode=OneWay}"/>
+            <TextBlock Text="{Binding DetailText}" Style="{StaticResource Secondary}" FontSize="12"/>
+          </StackPanel>
+          <TextBlock Text="{Binding FreedSoFarText}" Margin="0,8,0,0"
+                     Visibility="{Binding FreedSoFarText, Converter={StaticResource StringToVis}}"/>
+          <TextBlock Margin="0,8,0,0">
+            <Hyperlink Command="{Binding OpenStorageSettingsCommand}">Open Windows Storage settings</Hyperlink>
+          </TextBlock>
+        </StackPanel>
+      </Border>
+
+      <!-- Clean up card. -->
+      <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+        <StackPanel>
+          <Grid Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Clean up" Style="{StaticResource CardTitle}" Margin="0"/>
+            <Button Grid.Column="1" Content="Scan again" Command="{Binding ScanCommand}"/>
+          </Grid>
+
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,12"
+                      Visibility="{Binding IsScanning, Converter={StaticResource BoolToVis}}">
+            <TextBlock Text="&#xE895;" Style="{StaticResource Icon}" Margin="0,0,8,0"/>
+            <TextBlock Text="Checking your PC. This can take a minute..." VerticalAlignment="Center"/>
+          </StackPanel>
+          <ProgressBar IsIndeterminate="True" Height="4" Margin="0,0,0,12"
+                       Visibility="{Binding IsScanning, Converter={StaticResource BoolToVis}}"/>
+
+          <ItemsControl ItemsSource="{Binding Categories}" ItemTemplate="{StaticResource CategoryRowTemplate}"/>
+
+          <TextBlock Text="{Binding SelectedTotalText}" FontWeight="SemiBold" Margin="0,4,0,8"
+                     Visibility="{Binding SelectedTotalText, Converter={StaticResource StringToVis}}"/>
+
+          <StackPanel Orientation="Horizontal">
+            <Button Content="Clean up" Command="{Binding CleanCommand}"
+                    Style="{DynamicResource AccentButtonStyle}" Padding="24,8"/>
+            <Button Content="Stop" Command="{Binding StopCommand}" Margin="8,0,0,0" Padding="16,8"
+                    Visibility="{Binding IsCleaning, Converter={StaticResource BoolToVis}}"/>
+          </StackPanel>
+
+          <ProgressBar IsIndeterminate="True" Height="4" Margin="0,12,0,4"
+                       Visibility="{Binding IsCleaning, Converter={StaticResource BoolToVis}}"/>
+          <TextBlock Text="{Binding ProgressText}" Style="{StaticResource Secondary}"
+                     Visibility="{Binding ProgressText, Converter={StaticResource StringToVis}}"/>
+
+          <StackPanel Orientation="Horizontal" Margin="0,12,0,0" AutomationProperties.LiveSetting="Polite"
+                      Visibility="{Binding ResultText, Converter={StaticResource StringToVis}}">
+            <TextBlock Text="&#xE73E;" Style="{StaticResource Icon}" Margin="0,0,8,0"
+                       Foreground="{DynamicResource SystemFillColorSuccessBrush}" VerticalAlignment="Top"/>
+            <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" MaxWidth="700"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <!-- Big files. -->
+      <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+        <StackPanel>
+          <TextBlock Text="Big files" Style="{StaticResource CardTitle}" Margin="0,0,0,4"/>
+          <TextBlock Text="The largest files in your own folders. Nothing is removed unless you choose it, and removed files go to the Recycle Bin."
+                     Style="{StaticResource Secondary}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
+          <ItemsControl ItemsSource="{Binding BigFiles}" ItemTemplate="{StaticResource FileRowTemplate}"/>
+          <TextBlock Text="No big files found." Style="{StaticResource Secondary}"
+                     Visibility="{Binding BigFiles.Count, Converter={StaticResource InverseCountToVis}}"/>
+          <TextBlock Text="{Binding FilesMessage}" TextWrapping="Wrap" Margin="0,8,0,0"
+                     Visibility="{Binding FilesMessage, Converter={StaticResource StringToVis}}"/>
+        </StackPanel>
+      </Border>
+
+      <!-- Old downloads. -->
+      <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+        <StackPanel>
+          <TextBlock Text="Old downloads" Style="{StaticResource CardTitle}" Margin="0,0,0,4"/>
+          <TextBlock Text="Installers and archives in Downloads that you have not touched for over 30 days."
+                     Style="{StaticResource Secondary}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
+          <ItemsControl ItemsSource="{Binding OldDownloads}" ItemTemplate="{StaticResource FileRowTemplate}"/>
+          <TextBlock Text="Nothing to suggest." Style="{StaticResource Secondary}"
+                     Visibility="{Binding OldDownloads.Count, Converter={StaticResource InverseCountToVis}}"/>
+        </StackPanel>
+      </Border>
+
+      <!-- Large apps. -->
+      <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+        <StackPanel>
+          <TextBlock Text="Large apps" Style="{StaticResource CardTitle}" Margin="0,0,0,4"/>
+          <TextBlock Text="Programs that take the most room. Uninstalling opens the program's own uninstaller."
+                     Style="{StaticResource Secondary}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
+          <ItemsControl ItemsSource="{Binding Apps}" ItemTemplate="{StaticResource AppRowTemplate}"/>
+          <TextBlock Text="No apps found." Style="{StaticResource Secondary}"
+                     Visibility="{Binding Apps.Count, Converter={StaticResource InverseCountToVis}}"/>
+          <Button Content="Show all" Command="{Binding ShowAllAppsCommand}" HorizontalAlignment="Left"
+                  Visibility="{Binding CanShowAllApps, Converter={StaticResource BoolToVis}}"/>
+          <TextBlock Text="{Binding AppsMessage}" TextWrapping="Wrap" Margin="0,8,0,0"
+                     Visibility="{Binding AppsMessage, Converter={StaticResource StringToVis}}"/>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

@@ -86,10 +86,11 @@ milestone specs.
 
 ## Features
 
-- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Get help), following
+- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Free up space, Get help), following
   Windows light/dark theme, with the app version shown in the sidebar footer.
 - Settings persisted as JSON under `%APPDATA%\Porchlight\settings.json`, atomic writes, corrupt-file
   recovery.
+- Free up space: one Scan measures safe junk (temporary files, browser caches, crash reports, Windows Update leftovers, optionally the Recycle Bin), then one Clean up button removes the ticked items. Files in use are left alone, and the page never follows shortcuts or links into other folders. It also suggests big files and old downloads (moved to the Recycle Bin only when you click, so they can be restored) and large apps (opens the app's own uninstaller). Personal files are never deleted automatically.
 - Logs written to `%APPDATA%\Porchlight\logs`.
 - Admin elevation: the sidebar shows whether the app is running as administrator and can relaunch
   elevated.
@@ -173,7 +174,6 @@ milestone specs.
 - Windows services viewer
 
 ### Cleanup and storage
-- Temp files, Windows Update cache, recycle bin, browser caches
 - Disk space map: find the biggest folders and files
 - Duplicate file finder
 
