@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Porchlight.App.Features.Updates;
 using Porchlight.Core.Alerts;
 using Porchlight.Core.Settings;
 
@@ -87,16 +88,16 @@ public sealed class ScheduledUpdateCheckHostedService(
                 return;
             }
 
-            var count = await updateChecker.CheckAsync(cancellationToken).ConfigureAwait(false);
-            if (count is null)
+            var result = await updateChecker.CheckAsync(cancellationToken).ConfigureAwait(false);
+            if (result.Status != UpdateCheckStatus.Succeeded)
             {
-                // Could not run (busy, no winget, failure): not recorded, so the next hour retries.
+                // Busy, no winget or a failure: not recorded, so the next hour retries.
                 logger.LogInformation("Scheduled update check did not complete; will retry later.");
                 return;
             }
 
             settingsStore.Update(s => s.Notifications.LastScheduledUpdateCheckUtc = now);
-            var alert = evaluator.EvaluateUpdates(count.Value, AlertPreferences.FromSettings(settingsStore.Current.Notifications));
+            var alert = evaluator.EvaluateUpdates(result.Count, AlertPreferences.FromSettings(settingsStore.Current.Notifications));
             if (alert is not null)
             {
                 notifier.Show(alert);
