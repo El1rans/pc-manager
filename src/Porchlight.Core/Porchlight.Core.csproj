@@ -22,4 +22,10 @@
     <ProjectReference Include="..\ThirdParty\OpenRGB.NET\OpenRGB.NET.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The read-only web console's browser page (see WebConsole/WebConsoleRouter.cs), served from
+         memory so nothing needs to be installed next to the exe. -->
+    <EmbeddedResource Include="WebConsole\Assets\*" LogicalName="Porchlight.WebConsole.%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

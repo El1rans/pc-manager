@@ -86,7 +86,7 @@ milestone specs.
 
 ## Features
 
-- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Get help), following
+- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Web console, Get help), following
   Windows light/dark theme, with the app version shown in the sidebar footer.
 - Settings persisted as JSON under `%APPDATA%\Porchlight\settings.json`, atomic writes, corrupt-file
   recovery.
@@ -154,6 +154,14 @@ milestone specs.
   temperature between a min/max °C), and, for a device with a matrix (per-key) zone, Pac-Man and
   Rain - plus a global "updates pending" overlay and a "Pause effects" button. See
   `docs/specs/11-led-effects.md`.
+
+- Web console (read-only): turn it on from the "Web console" page to watch this PC's live stats
+  (CPU, memory, GPU, disk, network, temperatures, busiest apps, drives, system info) from a browser
+  on your phone or another computer. It only shows information - there is no way to change anything
+  on the PC from it - and it needs an access key, included in the link the page gives you (make a
+  new key any time to lock out old links). Off by default; port 8765 unless you pick another. Use it
+  on your home network, or through a VPN such as Tailscale when away - don't forward the port on
+  your router. See `docs/specs/12-web-console.md`.
 
 ## Planned modules
 

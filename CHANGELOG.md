@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Web console: a new, read-only way to watch this PC's live stats from a browser on another device
+  (`docs/specs/12-web-console.md`). Turned on from the new "Web console" page (off by default), it
+  serves a small stats page - CPU, memory, GPU, disk and network with sparklines, hardware
+  temperatures, busiest apps, drives, pending restart and system info - on a chosen port (default
+  8765). Only GET/HEAD requests are accepted and no endpoint can change anything on the PC; stats
+  require a random access key carried in the link's #fragment, which can be regenerated to lock out
+  old links. Built on a minimal `TcpListener` server with strict request limits, so it needs no admin
+  rights and adds no dependencies; stats are sampled only while a browser is watching.
+
 - Hardware: Fans tab polish from maintainer testing on an ASUS ROG STRIX B550-F with Armoury Crate
   (`docs/specs/04-hardware-fans.md` addendum). Empty motherboard fan headers (never once reported
   RPM > 0) are now hidden when "Hide unused sensors" is on, reusing the Sensors tab's existing

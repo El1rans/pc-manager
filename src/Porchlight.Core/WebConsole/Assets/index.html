@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Porchlight</title>
+  <link rel="stylesheet" href="app.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="top-title">
+      <h1 id="computer-name">Porchlight</h1>
+      <span class="badge" title="This page can only show information. Nothing here can change the PC.">Read-only</span>
+    </div>
+    <p id="subtitle" class="secondary">Connecting...</p>
+    <p id="connection" class="connection" role="status" aria-live="polite"></p>
+  </header>
+
+  <main>
+    <section id="key-panel" class="card key-panel" hidden>
+      <h2>Enter access key</h2>
+      <p class="secondary">Find the access key on the PC, in Porchlight's Web console page.</p>
+      <div class="key-row">
+        <label for="key-input" class="visually-hidden">Access key</label>
+        <input id="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="Access key">
+        <button id="key-button" type="button">Connect</button>
+      </div>
+      <p id="key-error" class="error" hidden>That key did not work. Check it and try again.</p>
+    </section>
+
+    <div id="content" hidden>
+      <section id="restart" class="notice" hidden>
+        <span class="notice-icon" aria-hidden="true">!</span>
+        <span>Windows is waiting for a restart to finish installing updates.</span>
+      </section>
+
+      <section class="tiles" id="metric-tiles" aria-label="Live usage"></section>
+
+      <section class="card" id="hardware-card" hidden>
+        <h2>Hardware at a glance</h2>
+        <div class="tiles small" id="hardware-tiles"></div>
+      </section>
+
+      <div class="columns">
+        <section class="card">
+          <h2>Busiest apps</h2>
+          <table class="table">
+            <thead><tr><th scope="col">App</th><th scope="col" class="num">CPU</th><th scope="col" class="num">Memory</th></tr></thead>
+            <tbody id="processes"></tbody>
+          </table>
+        </section>
+
+        <section class="card">
+          <h2>Drives</h2>
+          <div id="drives"></div>
+        </section>
+      </div>
+
+      <section class="card">
+        <h2>System</h2>
+        <table class="table info">
+          <tbody id="system"></tbody>
+        </table>
+      </section>
+    </div>
+  </main>
+
+  <footer class="secondary">Porchlight web console. Read-only: this page cannot change anything on the PC.</footer>
+</body>
+</html>
