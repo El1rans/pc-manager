@@ -1,0 +1,281 @@
+<UserControl x:Class="Porchlight.App.Features.Network.NetworkView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="clr-namespace:Porchlight.App.Controls"
+             xmlns:net="clr-namespace:Porchlight.App.Features.Network"
+             d:DataContext="{d:DesignInstance net:NetworkViewModel}"
+             mc:Ignorable="d">
+  <UserControl.Resources>
+    <Style x:Key="SignalBar" TargetType="Border">
+      <Setter Property="Width" Value="7"/>
+      <Setter Property="Margin" Value="0,0,3,0"/>
+      <Setter Property="VerticalAlignment" Value="Bottom"/>
+      <Setter Property="CornerRadius" Value="1"/>
+    </Style>
+  </UserControl.Resources>
+
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel MaxWidth="720" HorizontalAlignment="Left" Margin="24">
+      <TextBlock Text="Internet" Style="{StaticResource PageTitle}"/>
+      <TextBlock Text="See how your connection is doing, and fix it if it isn't."
+                 Style="{StaticResource Secondary}" Margin="0,4,0,16" TextWrapping="Wrap"/>
+
+      <!-- Status -->
+      <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Your connection" Style="{StaticResource CardTitle}"/>
+            <Button Grid.Column="1" Content="Refresh" Command="{Binding RefreshStatusCommand}"
+                    AutomationProperties.Name="Refresh connection details"/>
+          </Grid>
+
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+            <TextBlock FontSize="22" Margin="0,0,8,0">
+              <TextBlock.Style>
+                <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                  <Setter Property="Text" Value="&#xEA39;"/>
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                      <Setter Property="Text" Value="&#xE73E;"/>
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+            <TextBlock FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center">
+              <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                  <Setter Property="Text" Value="Not connected"/>
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                      <Setter Property="Text" Value="Connected"/>
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+          </StackPanel>
+
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="170"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="Connected by" Style="{StaticResource Secondary}" Margin="0,0,0,6"/>
+            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ConnectionTypeText}" Margin="0,0,0,6"/>
+
+            <TextBlock Grid.Row="1" Text="Wi-Fi name" Style="{StaticResource Secondary}" Margin="0,0,0,6"
+                       Visibility="{Binding ShowWifi, Converter={StaticResource BoolToVis}}"/>
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding WifiName}" Margin="0,0,0,6"
+                       Visibility="{Binding ShowWifi, Converter={StaticResource BoolToVis}}"/>
+
+            <TextBlock Grid.Row="2" Text="Wi-Fi signal" Style="{StaticResource Secondary}" Margin="0,0,0,6"
+                       Visibility="{Binding ShowWifi, Converter={StaticResource BoolToVis}}"/>
+            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,6"
+                        Visibility="{Binding ShowWifi, Converter={StaticResource BoolToVis}}">
+              <StackPanel Orientation="Horizontal" Height="20" Margin="0,0,10,0"
+                          AutomationProperties.Name="{Binding SignalLabel}">
+                <Grid Width="7" Margin="0,0,3,0">
+                  <Border Style="{StaticResource SignalBar}" Height="7" Margin="0" Background="{DynamicResource ControlStrongStrokeColorDefaultBrush}"/>
+                  <Border Style="{StaticResource SignalBar}" Height="7" Margin="0" Background="{DynamicResource TextFillColorPrimaryBrush}"
+                          Visibility="{Binding HasBar1, Converter={StaticResource BoolToVis}}"/>
+                </Grid>
+                <Grid Width="7" Margin="0,0,3,0">
+                  <Border Style="{StaticResource SignalBar}" Height="11" Margin="0" Background="{DynamicResource ControlStrongStrokeColorDefaultBrush}"/>
+                  <Border Style="{StaticResource SignalBar}" Height="11" Margin="0" Background="{DynamicResource TextFillColorPrimaryBrush}"
+                          Visibility="{Binding HasBar2, Converter={StaticResource BoolToVis}}"/>
+                </Grid>
+                <Grid Width="7" Margin="0,0,3,0">
+                  <Border Style="{StaticResource SignalBar}" Height="15" Margin="0" Background="{DynamicResource ControlStrongStrokeColorDefaultBrush}"/>
+                  <Border Style="{StaticResource SignalBar}" Height="15" Margin="0" Background="{DynamicResource TextFillColorPrimaryBrush}"
+                          Visibility="{Binding HasBar3, Converter={StaticResource BoolToVis}}"/>
+                </Grid>
+                <Grid Width="7">
+                  <Border Style="{StaticResource SignalBar}" Height="19" Margin="0" Background="{DynamicResource ControlStrongStrokeColorDefaultBrush}"/>
+                  <Border Style="{StaticResource SignalBar}" Height="19" Margin="0" Background="{DynamicResource TextFillColorPrimaryBrush}"
+                          Visibility="{Binding HasBar4, Converter={StaticResource BoolToVis}}"/>
+                </Grid>
+              </StackPanel>
+              <TextBlock Text="{Binding SignalLabel}" VerticalAlignment="Center"/>
+            </StackPanel>
+
+            <TextBlock Grid.Row="3" Text="This computer's address" Style="{StaticResource Secondary}" Margin="0,0,0,6"/>
+            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding LocalIp, Mode=OneWay}" IsReadOnly="True"
+                     BorderThickness="0" Background="Transparent" Padding="0" Margin="0,0,0,6"/>
+
+            <TextBlock Grid.Row="4" Text="Your router" Style="{StaticResource Secondary}" Margin="0,0,0,6"/>
+            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding Gateway, Mode=OneWay}" IsReadOnly="True"
+                     BorderThickness="0" Background="Transparent" Padding="0" Margin="0,0,0,6"/>
+
+            <TextBlock Grid.Row="5" Text="Name servers (DNS)" Style="{StaticResource Secondary}"/>
+            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding DnsServers, Mode=OneWay}" IsReadOnly="True"
+                     BorderThickness="0" Background="Transparent" Padding="0" TextWrapping="Wrap"/>
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <!-- Fix my internet -->
+      <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+        <StackPanel>
+          <TextBlock Text="Fix my internet" Style="{StaticResource CardTitle}"/>
+          <TextBlock Text="Porchlight checks each part of your connection, one at a time, and tells you what it finds."
+                     Style="{StaticResource Secondary}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+          <Button Content="Check my internet" Command="{Binding RunTroubleshooterCommand}"
+                  Style="{DynamicResource AccentButtonStyle}" Padding="20,10" HorizontalAlignment="Left"/>
+
+          <ItemsControl ItemsSource="{Binding Steps}" Margin="0,16,0,0">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="{x:Type net:TroubleshootStepViewModel}">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                  <TextBlock Text="{Binding Glyph}" Style="{StaticResource Icon}" FontSize="18" Width="28"/>
+                  <TextBlock Text="{Binding Title}" Width="170" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                  <TextBlock Text="{Binding ResultText}" VerticalAlignment="Center">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding IsPassed}" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding IsProblem}" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <StackPanel Visibility="{Binding HasDiagnosis, Converter={StaticResource BoolToVis}}" Margin="0,8,0,0">
+            <TextBlock Text="{Binding DiagnosisHeadline}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding DiagnosisAdvice}" TextWrapping="Wrap" Margin="0,4,0,12"/>
+
+            <controls:AdminRequiredBanner
+                Message="Switching the connection off and on needs administrator rights."
+                Visibility="{Binding ShowAdminBanner, Converter={StaticResource BoolToVis}}"/>
+
+            <ItemsControl ItemsSource="{Binding SuggestedRemedies}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type net:RemedyViewModel}">
+                  <StackPanel Margin="0,0,0,10">
+                    <Button Content="{Binding Title}" HorizontalAlignment="Left" Padding="16,8"
+                            Command="{Binding DataContext.RequestRemedyCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                            CommandParameter="{Binding}"
+                            IsEnabled="{Binding DataContext.IsRemedyRunning, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource InverseBool}}"/>
+                    <TextBlock Text="{Binding Description}" Style="{StaticResource Secondary}"
+                               TextWrapping="Wrap" Margin="0,4,0,0"/>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Border Style="{StaticResource Card}" Margin="0,4,0,0"
+                    Visibility="{Binding HasPendingRemedy, Converter={StaticResource BoolToVis}}">
+              <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="&#xE7BA;" Style="{StaticResource Icon}" FontSize="18" Margin="0,0,8,0"
+                             Foreground="{DynamicResource SystemFillColorCautionBrush}"/>
+                  <TextBlock Text="{Binding PendingRemedyWarning}" TextWrapping="Wrap" MaxWidth="560" VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                  <Button Content="Yes, continue" Command="{Binding ConfirmRemedyCommand}"
+                          Style="{DynamicResource AccentButtonStyle}" Padding="16,8" Margin="0,0,8,0"/>
+                  <Button Content="Cancel" Command="{Binding CancelRemedyCommand}" Padding="16,8"/>
+                </StackPanel>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+
+          <TextBlock Text="Working on it..." Margin="0,8,0,0"
+                     Visibility="{Binding IsRemedyRunning, Converter={StaticResource BoolToVis}}"/>
+          <TextBlock Text="{Binding RemedyMessage}" TextWrapping="Wrap" Margin="0,8,0,0"
+                     Visibility="{Binding RemedyMessage, Converter={StaticResource StringToVis}}"/>
+        </StackPanel>
+      </Border>
+
+      <!-- Speed test -->
+      <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+        <StackPanel>
+          <TextBlock Text="Speed test" Style="{StaticResource CardTitle}"/>
+          <TextBlock TextWrapping="Wrap" Style="{StaticResource Secondary}" Margin="0,0,0,12"
+                     Text="The test takes about 10 seconds. It sends data to and from Cloudflare (speed.cloudflare.com), so it uses some of your internet allowance."/>
+          <StackPanel Orientation="Horizontal">
+            <Button Content="Start speed test" Command="{Binding StartSpeedTestCommand}"
+                    Style="{DynamicResource AccentButtonStyle}" Padding="20,10"/>
+            <Button Content="Stop" Command="{Binding CancelSpeedTestCommand}" Padding="16,10" Margin="8,0,0,0"
+                    Visibility="{Binding IsSpeedTesting, Converter={StaticResource BoolToVis}}"/>
+            <TextBlock Text="{Binding SpeedProgressText}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+          </StackPanel>
+          <TextBlock Text="{Binding SpeedMessage}" TextWrapping="Wrap" Margin="0,8,0,0"
+                     Visibility="{Binding SpeedMessage, Converter={StaticResource StringToVis}}"/>
+
+          <StackPanel Margin="0,16,0,0" Visibility="{Binding HasSpeedResult, Converter={StaticResource BoolToVis}}">
+            <StackPanel Orientation="Horizontal">
+              <StackPanel Margin="0,0,32,0">
+                <TextBlock Text="Download" Style="{StaticResource Secondary}"/>
+                <TextBlock Text="{Binding DownloadText}" FontSize="24" FontWeight="SemiBold"/>
+              </StackPanel>
+              <StackPanel Margin="0,0,32,0">
+                <TextBlock Text="Upload" Style="{StaticResource Secondary}"/>
+                <TextBlock Text="{Binding UploadText}" FontSize="24" FontWeight="SemiBold"/>
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="Delay" Style="{StaticResource Secondary}"/>
+                <TextBlock Text="{Binding LatencyText}" FontSize="24" FontWeight="SemiBold"/>
+              </StackPanel>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+              <TextBlock Text="{Binding VerdictGlyph}" Style="{StaticResource Icon}" FontSize="18" Margin="0,0,8,0"/>
+              <TextBlock Text="{Binding VerdictHeadline}" FontWeight="SemiBold" FontSize="16" VerticalAlignment="Center"/>
+            </StackPanel>
+            <TextBlock Text="{Binding VerdictDetail}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+            <TextBlock Text="{Binding LastTestedText}" Style="{StaticResource Secondary}" Margin="0,8,0,0"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <!-- Apps -->
+      <Border Style="{StaticResource Card}">
+        <StackPanel>
+          <TextBlock Text="Programs using the internet" Style="{StaticResource CardTitle}"/>
+          <TextBlock Text="This list only looks. It updates every few seconds while this page is open."
+                     Style="{StaticResource Secondary}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+          <TextBlock Text="No programs are using the internet right now." Style="{StaticResource Secondary}"
+                     Visibility="{Binding HasApps, Converter={StaticResource InverseBoolToVis}}"/>
+          <ItemsControl ItemsSource="{Binding Apps}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="{x:Type net:NetworkAppRow}">
+                <Grid Margin="0,0,0,6">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock Grid.Column="1" Text="{Binding CountText}" Style="{StaticResource Secondary}" Margin="12,0,0,0"/>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

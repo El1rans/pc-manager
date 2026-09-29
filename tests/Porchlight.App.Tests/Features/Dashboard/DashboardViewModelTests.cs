@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Porchlight.App.Features.Cleanup;
 using Porchlight.App.Features.Dashboard;
+using Porchlight.App.Shell;
 using Porchlight.Core.Monitoring;
 using Xunit;
 
@@ -7,21 +9,49 @@ namespace Porchlight.App.Tests.Features.Dashboard;
 
 public sealed class DashboardViewModelTests
 {
-    [Fact]
-    public void Dispose_Twice_DoesNotThrow()
-    {
-        var viewModel = new DashboardViewModel(
+    private static DashboardViewModel Create(IPageNavigator navigator) =>
+        new(
             new FakePerformanceSampler(),
             new FakeSystemInfoProvider(),
             new FakeProcessMonitor(),
             new FakeDriveMonitor(),
             new FakeRestartDetector(),
+            navigator,
             NullLogger<DashboardViewModel>.Instance);
+
+    [Fact]
+    public void Dispose_Twice_DoesNotThrow()
+    {
+        var viewModel = Create(new PageNavigator());
 
         viewModel.Dispose();
         var exception = Record.Exception(viewModel.Dispose);
 
         Assert.Null(exception);
+    }
+
+    [Fact]
+    public void FreeUpSpaceCommand_OpensTheFreeUpSpacePage()
+    {
+        var navigator = new PageNavigator();
+        Type? requested = null;
+        navigator.NavigationRequested += type => requested = type;
+        var viewModel = Create(navigator);
+
+        viewModel.FreeUpSpaceCommand.Execute(null);
+        viewModel.Dispose();
+
+        Assert.Equal(typeof(CleanupViewModel), requested);
+    }
+
+    [Fact]
+    public void DriveRow_FlagsALowSpaceDrive_SoTheButtonShows()
+    {
+        var low = new DriveRowViewModel(new DriveSnapshot(@"C:\", "Windows", "NTFS", 100L << 30, 5L << 30, IsLow: true));
+        var fine = new DriveRowViewModel(new DriveSnapshot(@"D:\", null, "NTFS", 100L << 30, 90L << 30, IsLow: false));
+
+        Assert.True(low.IsLow);
+        Assert.False(fine.IsLow);
     }
 
     private sealed class FakePerformanceSampler : IPerformanceSampler

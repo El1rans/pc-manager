@@ -7,11 +7,16 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Porchlight.App.Controls;
+using Porchlight.App.Features.Browsers;
+using Porchlight.App.Features.Cleanup;
 using Porchlight.App.Features.Dashboard;
 using Porchlight.App.Features.Hardware;
+using Porchlight.App.Features.Health;
 using Porchlight.App.Features.Lighting;
+using Porchlight.App.Features.Network;
 using Porchlight.App.Features.RemoteSupport;
 using Porchlight.App.Features.Setup;
+using Porchlight.App.Features.Startup;
 using Porchlight.App.Features.Updates;
 using Porchlight.App.Shell;
 using Porchlight.Core.Components;
@@ -223,6 +228,7 @@ public partial class App : System.Windows.Application, IDisposable
         services.AddSingleton<IElevationService, ElevationService>();
         services.AddSingleton<IAppLifetime, AppLifetime>();
         services.AddSingleton<IShellService, ShellService>();
+        services.AddSingleton<IPageNavigator, PageNavigator>();
         services.AddSingleton<IPageViewLocator, PageViewLocator>();
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();
@@ -238,6 +244,11 @@ public partial class App : System.Windows.Application, IDisposable
         services.AddLedEffectsCore();
         services.AddHostedService<Features.Lighting.OpenRgbAutoStartHostedService>();
         services.AddRemoteSupportFeature();
+        services.AddCleanupFeature();
+        services.AddStartupFeature();
+        services.AddHealthFeature();
+        services.AddNetworkFeature();
+        services.AddBrowsersFeature();
     }
 
     /// <summary>Applies every feature's <see cref="PageRegistration"/> to the view locator. Runs

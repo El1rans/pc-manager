@@ -86,10 +86,17 @@ milestone specs.
 
 ## Features
 
-- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Get help), following
+- App shell with a navigation rail (Dashboard, Updates, Hardware, Lighting, Free up space, Startup apps, Health check, Internet, Browser add-ons, Get help), following
   Windows light/dark theme, with the app version shown in the sidebar footer.
+- Browser add-ons page: read-only list of the add-ons installed in Edge, Chrome, Brave and Firefox
+  (every profile), each with a plain-language note on what it can do (read all websites, see
+  history, change proxy settings, ...), where it came from and a "Looks fine / Review / Worth
+  removing" level. Porchlight never changes or removes anything in a browser; the page opens the
+  browser's own add-ons page and explains how to remove one. Nothing leaves the PC.
 - Settings persisted as JSON under `%APPDATA%\Porchlight\settings.json`, atomic writes, corrupt-file
   recovery.
+- Free up space: one Scan measures safe junk (temporary files, browser caches, crash reports, Windows Update leftovers, optionally the Recycle Bin), then one Clean up button removes the ticked items. Files in use are left alone, and the page never follows shortcuts or links into other folders. It also suggests big files and old downloads (moved to the Recycle Bin only when you click, so they can be restored) and large apps (opens the app's own uninstaller). Personal files are never deleted automatically.
+  The same page has "What's using space?", a disk space map: pick your files, a drive or any folder, and Porchlight measures it in the background (never following shortcuts, and counting folders Windows won't let it read) and shows the biggest folders and files as a sorted list with proportional bars, sizes and percentages, with a breadcrumb to go back up and "Show in folder". Only files in your own folders can be moved to the Recycle Bin. "Duplicate files" finds identical copies of files 1 MB or bigger in your own folders (comparing sizes first, then the start and end of each file, then a full SHA-256 only where needed), shows how much space each set wastes and suggests "Keep newest"; you tick the copies to move to the Recycle Bin, and one copy of every set always stays. On the Dashboard, a drive that is low on space gets a "Free up space" button that opens this page. See `docs/specs/19-disk-insights.md`.
 - Logs written to `%APPDATA%\Porchlight\logs`.
 - Admin elevation: the sidebar shows whether the app is running as administrator and can relaunch
   elevated.
@@ -158,12 +165,35 @@ milestone specs.
   from clipboard" (or import a `.json` animation file) - then pick "Custom animation" for any
   device. See [`docs/custom-animations.md`](docs/custom-animations.md) for the guide, the prompt
   template and examples.
+- Startup apps: lists everything that starts when you sign in - the per-user and all-users `Run`
+  registry keys and both Startup folders - with a friendly name, publisher, On/Off status and a plain
+  "What is this?" line, and marks Windows/Microsoft items and Porchlight's own tools (AnyDesk,
+  OpenRGB) as "Recommended to keep". Turn items off and on exactly like Task Manager (the
+  `StartupApproved` value): nothing is ever deleted, so it is always reversible, and no startup
+  program is ever launched. Items for all users need administrator rights. No startup-impact rating
+  and no scheduled tasks are shown (see `docs/specs/13-startup-apps.md`).
+- Health check: a plain-language page with five cards - disk health (per physical disk: Healthy /
+  Warning - back up your files soon / Unknown, from Windows' storage and failure-prediction data);
+  Windows repair (`sfc /scannow`, then `DISM /RestoreHealth` offered only if SFC couldn't fix everything;
+  needs administrator rights, takes 10-30 minutes, and can't be cancelled once started); restore point
+  (create one, see the most recent ones, explains Windows' 24-hour limit and detects System Protection
+  being off, with a link to open it); recent problems from the last 30 days of the Event Log (app
+  crashes, blue screens, unexpected shutdowns, disk errors, failed updates - grouped and counted); and,
+  on a laptop, battery wear. Any check that can't run shows "Couldn't check" instead of failing. See
+  `docs/specs/14-system-health.md`.
+
+- Internet: connection status (Wi-Fi name and signal as bars and words, local IP, router, DNS),
+  a guided "Fix my internet" check (network connection, router, website names, the internet) that
+  suggests only matching fixes - clear saved website addresses, get a fresh connection, switch the
+  connection off and on (administrator, with confirmation) - and only *offers* Windows' Network
+  settings as a last resort; a Cloudflare speed test that only runs when you press the button (the
+  last result is remembered); and a read-only list of programs using the internet, refreshed only
+  while the page is open. The public IP address is never fetched. See `docs/specs/18-network.md`.
 
 ## Planned modules
 
 ### Dashboard
 - CPU/GPU temperatures (where the hardware exposes them)
-- Battery health (laptops)
 
 ### App updates (winget)
 - Choose which apps to update, ignore list, silent mode (from the prototype)
@@ -171,25 +201,10 @@ milestone specs.
 - Update history
 - Install new apps from a search box; export/import an app list to set up a new PC
 
-### Startup and processes
-- Startup apps: see and disable what runs at boot, with startup impact
+### Processes and services
 - Process list with CPU/RAM, kill or open file location
 - Windows services viewer
-
-### Cleanup and storage
-- Temp files, Windows Update cache, recycle bin, browser caches
-- Disk space map: find the biggest folders and files
-- Duplicate file finder
-
-### System health
-- Run SFC / DISM, check disk (SMART) status
-- Create a restore point before risky changes
-- Recent crashes and errors from the Event Log in plain language
-
-### Network
-- Current IP, DNS, Wi-Fi signal, speed test
-- Flush DNS, reset network adapter
-- See which apps are using the network
+- Startup impact ratings and logon scheduled tasks for the Startup apps page
 
 ### Quality of life
 - System tray icon with quick stats

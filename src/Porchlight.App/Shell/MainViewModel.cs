@@ -14,6 +14,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly IShellService _shellService;
     private readonly IPageViewLocator _pageViewLocator;
     private readonly ISetupLauncher _setupLauncher;
+    private readonly IPageNavigator _navigator;
     private readonly ILogger<MainViewModel> _logger;
     private CancellationTokenSource _navigationCts = new();
     private bool _disposed;
@@ -30,15 +31,32 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         IShellService shellService,
         IPageViewLocator pageViewLocator,
         ISetupLauncher setupLauncher,
+        IPageNavigator navigator,
         ILogger<MainViewModel> logger)
     {
         _shellService = shellService;
         _pageViewLocator = pageViewLocator;
         _setupLauncher = setupLauncher;
+        _navigator = navigator;
         _logger = logger;
         var pageList = pages as IReadOnlyCollection<IPage> ?? pages.ToList();
         Pages = new ObservableCollection<IPage>(pageList.Where(p => !p.IsPinnedToBottom).OrderBy(p => p.Order));
         PinnedPages = new ObservableCollection<IPage>(pageList.Where(p => p.IsPinnedToBottom).OrderBy(p => p.Order));
+        _navigator.NavigationRequested += OnNavigationRequested;
+    }
+
+    /// <summary>Selects the page a feature asked for (see <see cref="IPageNavigator"/>). The nav
+    /// rail's OneWay SelectedItem bindings follow <see cref="SelectedPage"/>.</summary>
+    private void OnNavigationRequested(Type pageType)
+    {
+        var page = Pages.Concat(PinnedPages).FirstOrDefault(p => p.GetType() == pageType);
+        if (page is null)
+        {
+            _logger.LogWarning("A feature asked to show {PageType}, which is not a registered page.", pageType.Name);
+            return;
+        }
+
+        SelectedPage = page;
     }
 
     public ObservableCollection<IPage> Pages { get; }
@@ -141,6 +159,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         _disposed = true;
+        _navigator.NavigationRequested -= OnNavigationRequested;
         _navigationCts.Cancel();
         _navigationCts.Dispose();
     }

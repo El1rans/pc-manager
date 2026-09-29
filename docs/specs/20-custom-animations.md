@@ -1,4 +1,4 @@
-# 12 - Custom animations (branch `claude/custom-animations-porchlight-d698uo`)
+# 20 - Custom animations (branch `claude/custom-animations-porchlight-d698uo`)
 
 The LED effects engine (docs/specs/11-led-effects.md) ships a fixed set of built-in effects. This
 milestone lets the user add their own: upload an animation file (or paste one an AI chat wrote) on
