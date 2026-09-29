@@ -80,25 +80,6 @@ public sealed class WebConsoleServer : IWebConsoleServer, IDisposable
         _disposed = true;
     }
 
-    /// <summary>Listens on every interface - IPv6 and IPv4 together where IPv6 is available.</summary>
-    private static TcpListener CreateListener(int port)
-    {
-        TcpListener listener;
-        if (Socket.OSSupportsIPv6)
-        {
-            listener = new TcpListener(IPAddress.IPv6Any, port);
-            listener.Server.DualMode = true;
-        }
-        else
-        {
-            listener = new TcpListener(IPAddress.Any, port);
-        }
-
-        // Stops another program binding the same port more specifically and intercepting requests.
-        listener.ExclusiveAddressUse = true;
-        return listener;
-    }
-
     private static string DescribeStartFailure(SocketError error, int port) => error switch
     {
         SocketError.AddressAlreadyInUse =>
@@ -123,7 +104,7 @@ public sealed class WebConsoleServer : IWebConsoleServer, IDisposable
     /// <summary>Caller holds <see cref="_lock"/>.</summary>
     private void StartCore(int port, string accessKey)
     {
-        var listener = CreateListener(port);
+        var listener = WebConsoleListenerFactory.Create(port);
         try
         {
             listener.Start();

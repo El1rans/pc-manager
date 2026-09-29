@@ -17,7 +17,7 @@ public sealed class WebConsoleViewModelTests : IDisposable
     public WebConsoleViewModelTests()
     {
         _viewModel = new WebConsoleViewModel(
-            new WebConsoleController(_server, _settings),
+            new WebConsoleController(_server, _settings, new AllPortsFree()),
             new FixedAddresses(),
             _clipboard,
             _urlLauncher);
@@ -119,6 +119,11 @@ public sealed class WebConsoleViewModelTests : IDisposable
     private sealed class FixedAddresses : ILocalAddressProvider
     {
         public IReadOnlyList<string> GetAddresses() => ["192.168.1.20"];
+    }
+
+    private sealed class AllPortsFree : IPortAvailability
+    {
+        public bool IsFree(int port) => true;
     }
 
     private sealed class FakeServer : IWebConsoleServer

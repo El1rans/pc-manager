@@ -8,7 +8,10 @@ namespace Porchlight.Core.WebConsole;
 /// then start, restart or stop the server to match. Used by the app at startup (to resume a
 /// console left on) and by the Web console page.
 /// </summary>
-public sealed class WebConsoleController(IWebConsoleServer server, ISettingsStore settingsStore)
+public sealed class WebConsoleController(
+    IWebConsoleServer server,
+    ISettingsStore settingsStore,
+    IPortAvailability portAvailability)
 {
     public IWebConsoleServer Server => server;
 
@@ -20,7 +23,9 @@ public sealed class WebConsoleController(IWebConsoleServer server, ISettingsStor
     public string AccessKey => settingsStore.Current.WebConsole.AccessKey;
 
     /// <summary>Starts the server if the console is enabled in settings (creating an access key if
-    /// there is none yet), or stops it if not.</summary>
+    /// there is none yet), or stops it if not. On the console's very first start (no access key yet),
+    /// a busy port the user never picked is swapped for the nearest free one and saved, so the
+    /// address stays the same from then on.</summary>
     public void ApplySettings()
     {
         if (!IsEnabled)
@@ -31,6 +36,7 @@ public sealed class WebConsoleController(IWebConsoleServer server, ISettingsStor
 
         if (string.IsNullOrEmpty(AccessKey))
         {
+            MoveOffBusyDefaultPort();
             settingsStore.Update(s => s.WebConsole.AccessKey = AccessKeyGenerator.Generate());
         }
 
@@ -53,7 +59,11 @@ public sealed class WebConsoleController(IWebConsoleServer server, ISettingsStor
             throw new ArgumentOutOfRangeException(nameof(port), port, "Port is outside the allowed range.");
         }
 
-        settingsStore.Update(s => s.WebConsole.Port = port);
+        settingsStore.Update(s =>
+        {
+            s.WebConsole.Port = port;
+            s.WebConsole.PortChosenByUser = true;
+        });
         if (IsEnabled)
         {
             ApplySettings();
@@ -68,6 +78,23 @@ public sealed class WebConsoleController(IWebConsoleServer server, ISettingsStor
         if (IsEnabled)
         {
             ApplySettings();
+        }
+    }
+
+    /// <summary>First start only: if the (not user-chosen) port is taken, use the closest free one.
+    /// If nothing nearby is free, the port is left alone and the server reports its usual "port in
+    /// use" failure.</summary>
+    private void MoveOffBusyDefaultPort()
+    {
+        if (settingsStore.Current.WebConsole.PortChosenByUser)
+        {
+            return;
+        }
+
+        var preferred = ConfiguredPort;
+        if (FreePortFinder.FindNearest(preferred, portAvailability.IsFree) is { } free && free != preferred)
+        {
+            settingsStore.Update(s => s.WebConsole.Port = free);
         }
     }
 
