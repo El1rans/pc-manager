@@ -1,0 +1,39 @@
+{
+  "format": "porchlight-animation",
+  "version": 1,
+  "name": "Sunset",
+  "description": "A slow, calm drift through sunset colors. Works on any device.",
+  "loop": true,
+  "transition": "fade",
+  "frameDuration": 4,
+  "frames": [
+    {
+      "gradient": [
+        "#FF7A00",
+        "#FF3D6E",
+        "#7A2BFF"
+      ]
+    },
+    {
+      "gradient": [
+        "#FF3D6E",
+        "#7A2BFF",
+        "#1B2A80"
+      ]
+    },
+    {
+      "gradient": [
+        "#7A2BFF",
+        "#1B2A80",
+        "#FF7A00"
+      ]
+    },
+    {
+      "gradient": [
+        "#1B2A80",
+        "#FF7A00",
+        "#FF3D6E"
+      ]
+    }
+  ]
+}

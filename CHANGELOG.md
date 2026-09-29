@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Lighting: custom animations. A new "Custom animations" card on the Lighting page imports your own
+  LED animations - "Import animation file..." for a `.json` file, or "Paste from clipboard" for an
+  animation an AI chat wrote - and "Copy AI prompt" copies a ready-made prompt template that teaches
+  any AI chat the format, so you only describe what you want. Animations are data only
+  (`porchlight-animation` JSON: `fill`, `gradient` or palette pixel-art `rows` frames, per-frame
+  durations, loop, cut/fade transitions - never code), strictly validated with a plain-language
+  error you can paste back to the AI, and stored in `%APPDATA%\Porchlight\Animations`. Pick
+  "Custom animation" as any device's effect, choose the animation and a speed. Guide, prompt and
+  examples: `docs/custom-animations.md`, `docs/animations/`; design: `docs/specs/20-custom-animations.md`.
 - Hardware: Fans tab polish from maintainer testing on an ASUS ROG STRIX B550-F with Armoury Crate
   (`docs/specs/04-hardware-fans.md` addendum). Empty motherboard fan headers (never once reported
   RPM > 0) are now hidden when "Hide unused sensors" is on, reusing the Sensors tab's existing

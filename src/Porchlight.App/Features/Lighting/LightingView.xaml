@@ -301,6 +301,21 @@
                                                          Text="{Binding EffectMaxTempC, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                                          AutomationProperties.Name="{Binding Name, StringFormat='Maximum temperature for {0}'}"/>
                                             </DockPanel>
+
+                                            <StackPanel Visibility="{Binding ShowCustomAnimationSetting, Converter={StaticResource BoolToVis}}">
+                                                <DockPanel Visibility="{Binding CustomAnimations.Count, Converter={StaticResource CountToVis}}">
+                                                    <TextBlock DockPanel.Dock="Left" Text="Animation" Width="70"
+                                                               Style="{StaticResource Secondary}" VerticalAlignment="Center"/>
+                                                    <ComboBox ItemsSource="{Binding CustomAnimations}"
+                                                              DisplayMemberPath="Name" SelectedValuePath="Id"
+                                                              SelectedValue="{Binding SelectedCustomAnimationId, Mode=TwoWay}"
+                                                              Width="220" HorizontalAlignment="Left"
+                                                              AutomationProperties.Name="{Binding Name, StringFormat='Custom animation for {0}'}"/>
+                                                </DockPanel>
+                                                <TextBlock Text="No custom animations yet - add one under &quot;Custom animations&quot; below."
+                                                           Style="{StaticResource Secondary}" TextWrapping="Wrap"
+                                                           Visibility="{Binding CustomAnimations.Count, Converter={StaticResource InverseCountToVis}}"/>
+                                            </StackPanel>
                                         </StackPanel>
                                     </StackPanel>
                                 </DataTemplate>
@@ -308,6 +323,49 @@
                         </ItemsControl>
                         <TextBlock Text="No devices found." Style="{StaticResource Secondary}"
                                    Visibility="{Binding Devices.Count, Converter={StaticResource InverseCountToVis}}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Custom animations (see docs/custom-animations.md) -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="Custom animations" Style="{StaticResource CardTitle}"/>
+                        <TextBlock Style="{StaticResource Secondary}" TextWrapping="Wrap" Margin="0,2,0,10"
+                                   Text="Make your own lighting animation with AI: click &quot;Copy AI prompt&quot;, paste it into an AI chat (ChatGPT, Claude, Gemini, ...) and describe what you want, then copy the AI's answer and click &quot;Paste from clipboard&quot;. You can also import a downloaded animation file (.json)."/>
+                        <WrapPanel Margin="0,0,0,2">
+                            <Button Content="Copy AI prompt" Command="{Binding CopyAiPromptCommand}" Margin="0,0,8,8"
+                                    ToolTip="Copies a ready-made prompt that teaches an AI chat how to write a Porchlight animation"
+                                    AutomationProperties.Name="Copy AI prompt"/>
+                            <Button Content="Paste from clipboard" Command="{Binding PasteAnimationCommand}" Margin="0,0,8,8"
+                                    ToolTip="Imports the animation an AI chat wrote, from the clipboard"
+                                    AutomationProperties.Name="Paste animation from clipboard"/>
+                            <Button Content="Import animation file..." Command="{Binding ImportAnimationFileCommand}" Margin="0,0,8,8"
+                                    ToolTip="Imports a Porchlight animation (.json) file"
+                                    AutomationProperties.Name="Import animation file"/>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding AnimationStatusMessage}" TextWrapping="Wrap" Margin="0,0,0,10"
+                                   Visibility="{Binding AnimationStatusMessage, Converter={StaticResource StringToVis}}"/>
+
+                        <ItemsControl ItemsSource="{Binding CustomAnimations}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="0,0,0,8">
+                                        <Button DockPanel.Dock="Right" Content="Remove" VerticalAlignment="Center"
+                                                Command="{Binding DataContext.RemoveAnimationCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                AutomationProperties.Name="{Binding Name, StringFormat='Remove animation {0}'}"/>
+                                        <StackPanel Margin="0,0,10,0">
+                                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding Description}" Style="{StaticResource Secondary}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Visibility="{Binding Description, Converter={StaticResource StringToVis}}"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="No custom animations yet." Style="{StaticResource Secondary}"
+                                   Visibility="{Binding CustomAnimations.Count, Converter={StaticResource InverseCountToVis}}"/>
                     </StackPanel>
                 </Border>
 

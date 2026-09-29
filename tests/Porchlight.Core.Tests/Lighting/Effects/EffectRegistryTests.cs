@@ -71,7 +71,7 @@ public sealed class EffectRegistryTests
     }
 
     private static readonly string[] ExpectedNames =
-        ["Rainbow wave", "Breathing", "CPU temperature", "Pac-Man", "Rain", "Typing ripple"];
+        ["Rainbow wave", "Breathing", "CPU temperature", "Pac-Man", "Rain", "Typing ripple", "Custom animation"];
 
     [Fact]
     public void Names_ContainsEveryRegisteredEffect() => Assert.Equal(ExpectedNames, EffectRegistry.Names);

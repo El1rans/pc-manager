@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Porchlight.Core.Hardware;
+using Porchlight.Core.Lighting.Effects.CustomAnimations;
 
 namespace Porchlight.Core.Lighting.Effects;
 
@@ -26,6 +27,7 @@ public sealed class EffectEngine : IDisposable
     private readonly IDeviceExclusionProvider _exclusionProvider;
     private readonly IKeyPressSource _keyPressSource;
     private readonly TimeProvider _timeProvider;
+    private readonly ICustomAnimationLibrary? _customAnimations;
     private readonly ILogger<EffectEngine> _logger;
     private readonly Lock _gate = new();
     private readonly Dictionary<string, EffectAssignment> _assignments = new(StringComparer.OrdinalIgnoreCase);
@@ -49,7 +51,8 @@ public sealed class EffectEngine : IDisposable
         IDeviceExclusionProvider exclusionProvider,
         IKeyPressSource keyPressSource,
         ILogger<EffectEngine> logger,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        ICustomAnimationLibrary? customAnimations = null)
     {
         _client = client;
         _hardwareService = hardwareService;
@@ -58,6 +61,7 @@ public sealed class EffectEngine : IDisposable
         _keyPressSource = keyPressSource;
         _logger = logger;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _customAnimations = customAnimations;
     }
 
     /// <summary>Whether the frame loop is currently running.</summary>
@@ -207,11 +211,14 @@ public sealed class EffectEngine : IDisposable
             return null;
         }
 
-        var effect = EffectRegistry.CreateWithOverlay(assignment.EffectName, assignment.Settings, assignment.ShowUpdatesAlert);
+        var effect = EffectRegistry.CreateWithOverlay(
+            assignment.EffectName, assignment.Settings, assignment.ShowUpdatesAlert, _customAnimations);
         if (effect is null)
         {
             _logger.LogWarning(
-                "Device {Device} is assigned unknown effect '{Effect}'; skipping.", device.Name, assignment.EffectName);
+                "Device {Device}'s effect '{Effect}' could not be created (unknown effect, or its custom animation was removed); skipping.",
+                device.Name,
+                assignment.EffectName);
             return null;
         }
 
