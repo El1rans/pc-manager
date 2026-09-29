@@ -136,6 +136,12 @@ public partial class App : System.Windows.Application, IDisposable
             _host = builder.Build();
             Services = _host.Services;
 
+            // The tray icon owns a message-only HwndSource, which must be created on this (STA, UI)
+            // thread. Hosted services that raise alerts depend on it, and StartAsync below resolves
+            // them on the thread pool - so create the singleton here first, or startup throws
+            // "The calling thread must be STA".
+            _ = _host.Services.GetRequiredService<ITrayIcon>();
+
             // Run off the UI thread: StartAsync should not block the dispatcher, and offloading it
             // to the thread pool avoids any risk of deadlocking on this thread's context.
             Task.Run(() => _host.StartAsync()).GetAwaiter().GetResult();
