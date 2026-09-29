@@ -86,7 +86,6 @@ internal sealed class OpenRgbConnection : IDisposable
                     {
                         var dataBuffer = new byte[header.DataLength];
                         await _socket.ReceiveAllAsync(dataBuffer, _cancellationTokenSource.Token);
-                        DebugDumpBuffer(dataBuffer, false, header.Command);
                         _pendingRequests[header.Command].Add(dataBuffer, _cancellationTokenSource.Token);
                     }
                 }
@@ -137,7 +136,6 @@ internal sealed class OpenRgbConnection : IDisposable
 
         try
         {
-            DebugDumpBuffer(buffer, true, command);
             _socket.SendAll(buffer);
         }
         finally
@@ -199,18 +197,4 @@ internal sealed class OpenRgbConnection : IDisposable
         _readLoopTask?.Dispose();
     }
 
-    [Conditional("DEBUG")]
-    private static void DebugDumpBuffer(ReadOnlySpan<byte> buffer, bool sending, CommandId command)
-    {
-        var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "OpenRGB.NET");
-        
-        if (!Directory.Exists(directory))
-            Directory.CreateDirectory(directory);
-        
-        var lastFileName = Directory.EnumerateFiles(directory).MaxBy(f => f);
-        var lastFileNumber = lastFileName is null ? -1 :
-            int.Parse(Path.GetFileNameWithoutExtension(lastFileName).Split('-')[0]);
-        
-        File.WriteAllBytes(Path.Combine(directory, $"{lastFileNumber + 1:D2}-{(sending ? "Send" : "Receive")}-{command}.bin"), buffer.ToArray());
-    }
 }
