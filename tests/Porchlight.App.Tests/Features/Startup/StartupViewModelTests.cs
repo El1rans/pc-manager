@@ -1,3 +1,4 @@
+using Porchlight.App.Shell;
 using Microsoft.Extensions.Logging.Abstractions;
 using Porchlight.App.Features.Startup;
 using Porchlight.Core.Elevation;
@@ -24,7 +25,8 @@ public sealed class StartupViewModelTests
 
         await vm.OnNavigatedToAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(5, vm.Order);
+        Assert.Equal(2, vm.Order);
+        Assert.Equal(PageCategory.TuneUp, vm.Category);
         Assert.Equal("Startup apps", vm.Title);
         Assert.Equal("2 apps start with Windows: 1 on, 1 off.", vm.Summary);
         Assert.False(vm.ShowAdminBanner);

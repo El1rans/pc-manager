@@ -1,3 +1,4 @@
+using Porchlight.App.Shell;
 using Microsoft.Extensions.Logging.Abstractions;
 using Porchlight.App.Features.Cleanup;
 using Porchlight.App.Tests.Features.Lighting;
@@ -68,7 +69,8 @@ public sealed class CleanupViewModelTests
 
         Assert.Equal("Free up space", viewModel.Title);
         Assert.Equal("\uE74D", viewModel.Glyph);
-        Assert.Equal(4, viewModel.Order);
+        Assert.Equal(3, viewModel.Order);
+        Assert.Equal(PageCategory.TuneUp, viewModel.Category);
     }
 
     [Fact]

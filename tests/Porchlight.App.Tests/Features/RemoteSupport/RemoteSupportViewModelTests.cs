@@ -1,3 +1,4 @@
+using Porchlight.App.Shell;
 using System.ComponentModel;
 using System.IO;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -119,11 +120,13 @@ public sealed class RemoteSupportViewModelTests : IDisposable
     }
 
     [Fact]
-    public void IsPinnedToBottom_True()
+    public void Category_IsHelp_WhichIsPinnedToTheBottom()
     {
         // "Get help" must be placed separately at the bottom of the nav, not among the regular
-        // pages ordered by Order - see IPage.IsPinnedToBottom.
-        Assert.True(CreateViewModel().IsPinnedToBottom);
+        // categories - see PageCategoryCatalog.
+        var category = CreateViewModel().Category;
+        Assert.Equal(PageCategory.Help, category);
+        Assert.True(PageCategoryCatalog.Get(category).IsPinnedToBottom);
     }
 
     [Fact]

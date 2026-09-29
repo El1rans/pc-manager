@@ -73,6 +73,8 @@ public sealed class PageServiceCollectionExtensionsTests
 
         public override int Order => 0;
 
+        public override PageCategory Category => PageCategory.Overview;
+
         public void Dispose() => DisposeCount++;
     }
 }
