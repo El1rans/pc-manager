@@ -21,4 +21,6 @@ public sealed class AppSettings
     public NotificationSettings Notifications { get; set; } = new();
 
     public WebConsoleSettings WebConsole { get; set; } = new();
+
+    public WindowSettings Window { get; set; } = new();
 }
