@@ -50,6 +50,33 @@ public sealed class HardwareSummarySelectorTests
     }
 
     [Fact]
+    public void Build_AmdSensorsReadingZero_AreHiddenRatherThanShownAsNormal()
+    {
+        // What LibreHardwareMonitor reports for a Ryzen when Porchlight is not elevated.
+        var cpu = new HardwareNode("cpu", "AMD Ryzen 7", HardwareNodeType.Cpu,
+            [
+                Reading("t1", "Core (Tctl/Tdie)", SensorType.Temperature, 0),
+                Reading("p1", "Package", SensorType.Power, 0),
+            ], []);
+
+        var tiles = HardwareSummarySelector.Build(new HardwareSnapshot(HardwareStatus.Ready, null, [cpu], DateTimeOffset.UtcNow), 95);
+
+        Assert.DoesNotContain(tiles, t => t.Title is "CPU temperature" or "CPU package power");
+    }
+
+    [Fact]
+    public void SelectCpuTemperature_Amd_ZeroTctl_FallsBackToAReadableSensor()
+    {
+        var cpu = new HardwareNode("cpu", "AMD Ryzen 7", HardwareNodeType.Cpu,
+            [
+                Reading("t1", "Core (Tctl/Tdie)", SensorType.Temperature, 0),
+                Reading("t2", "CCD1 (Tdie)", SensorType.Temperature, 58),
+            ], []);
+
+        Assert.Equal("t2", HardwareSummarySelector.SelectCpuTemperature(cpu)!.Id);
+    }
+
+    [Fact]
     public void SelectCpuTemperature_NeverPicksAnInvertedDistanceToTjMaxSensor()
     {
         var cpu = new HardwareNode("cpu", "Intel Core i7", HardwareNodeType.Cpu,
