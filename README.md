@@ -91,6 +91,7 @@ milestone specs.
 - Settings persisted as JSON under `%APPDATA%\Porchlight\settings.json`, atomic writes, corrupt-file
   recovery.
 - Free up space: one Scan measures safe junk (temporary files, browser caches, crash reports, Windows Update leftovers, optionally the Recycle Bin), then one Clean up button removes the ticked items. Files in use are left alone, and the page never follows shortcuts or links into other folders. It also suggests big files and old downloads (moved to the Recycle Bin only when you click, so they can be restored) and large apps (opens the app's own uninstaller). Personal files are never deleted automatically.
+  The same page has "What's using space?", a disk space map: pick your files, a drive or any folder, and Porchlight measures it in the background (never following shortcuts, and counting folders Windows won't let it read) and shows the biggest folders and files as a sorted list with proportional bars, sizes and percentages, with a breadcrumb to go back up and "Show in folder". Only files in your own folders can be moved to the Recycle Bin. "Duplicate files" finds identical copies of files 1 MB or bigger in your own folders (comparing sizes first, then the start and end of each file, then a full SHA-256 only where needed), shows how much space each set wastes and suggests "Keep newest"; you tick the copies to move to the Recycle Bin, and one copy of every set always stays. On the Dashboard, a drive that is low on space gets a "Free up space" button that opens this page. See `docs/specs/19-disk-insights.md`.
 - Logs written to `%APPDATA%\Porchlight\logs`.
 - Admin elevation: the sidebar shows whether the app is running as administrator and can relaunch
   elevated.
@@ -172,10 +173,6 @@ milestone specs.
 - Startup apps: see and disable what runs at boot, with startup impact
 - Process list with CPU/RAM, kill or open file location
 - Windows services viewer
-
-### Cleanup and storage
-- Disk space map: find the biggest folders and files
-- Duplicate file finder
 
 ### System health
 - Run SFC / DISM, check disk (SMART) status
