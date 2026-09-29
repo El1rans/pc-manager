@@ -49,6 +49,36 @@ the connection.
 
 ![Get help page showing the PC's remote-help address, a three-step how-it-works list and a safety warning about unexpected callers](docs/screenshots/get-help.png)
 
+## Pages
+
+Every page in the app, grouped the way the left-hand menu groups them. Each link opens a guide that
+explains everything on that page.
+
+**Overview**
+- [Dashboard](docs/pages/dashboard.md) - live CPU, memory, GPU, disk and network tiles, drive space, busiest programs and a fact sheet about the PC.
+
+**Tune-up**
+- [Updates](docs/pages/updates.md) - see which programs have updates and install the ones you pick.
+- [Startup apps](docs/pages/startup-apps.md) - choose which programs start with Windows.
+- [Free up space](docs/pages/free-up-space.md) - clear out leftovers and find what is filling a drive.
+- [Health check](docs/pages/health-check.md) - disk and battery health, Windows repair, restore points and recent problems.
+
+**Internet & safety**
+- [Internet](docs/pages/internet.md) - connection details, a "fix my internet" checker, a speed test and which programs use the internet.
+- [Browser add-ons](docs/pages/browser-add-ons.md) - list the browser add-ons and flag the ones worth a second look.
+
+**Hardware**
+- [Hardware](docs/pages/hardware.md) ("Sensors & fans" tab) - temperatures, speeds and power, plus optional fan control.
+- [Lighting](docs/pages/lighting.md) - colours, effects and profiles for the PC's RGB lights.
+
+**Get help**
+- [Get help](docs/pages/get-help.md) - let family connect to help, and send them a check-up.
+- [Web console](docs/pages/web-console.md) - watch this PC's stats from a phone or another computer (read-only).
+
+**Other windows** (opened from the buttons at the bottom of the left menu)
+- [Set up optional features](docs/pages/set-up-optional-features.md) - install AnyDesk, OpenRGB and the PawnIO driver.
+- [Notifications](docs/pages/notifications.md) - tray behaviour, which alerts you get, and how often to check for updates.
+
 ## Status
 
 Foundation stage: a production-shaped app shell (solution layout, host + DI, logging, settings,
