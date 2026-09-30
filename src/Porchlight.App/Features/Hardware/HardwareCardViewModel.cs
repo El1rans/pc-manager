@@ -43,7 +43,9 @@ public sealed partial class HardwareCardViewModel : ObservableObject
     {
         Id = node.Id;
         Type = node.Type;
-        IsExpanded = Type is HardwareNodeType.Cpu or HardwareNodeType.Gpu;
+        // Every card starts collapsed: its header already shows its 2 key stats (see
+        // CollapsedStatsText), so the Sensors tab opens as a compact overview.
+        IsExpanded = false;
         UpdateFrom(node, unusedTracker, fanDisplayNameOverrides);
     }
 

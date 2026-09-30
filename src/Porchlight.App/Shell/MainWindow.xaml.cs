@@ -19,6 +19,7 @@ public partial class MainWindow : Window
         _shellWindowService = shellWindowService;
         InitializeComponent();
         DataContext = viewModel;
+        ApplySavedBounds(settingsStore.Current.Window);
 
         // See WhiteFlashGuard: without this, the freshly shown window can paint solid white until
         // the user clicks it.
@@ -85,6 +86,10 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnClosing(object? sender, CancelEventArgs e)
     {
+        // Every path through here - hide to tray, real exit, or a cancelled close - is a good
+        // moment to remember the window's size and position for next launch.
+        SaveBounds();
+
         if (AppExitState.IsExiting)
         {
             return;
@@ -104,6 +109,63 @@ public partial class MainWindow : Window
         {
             e.Cancel = true;
         }
+    }
+
+    /// <summary>Applies the saved size/position, but only if it would still be at least partly on
+    /// a screen (a monitor may have been unplugged or rearranged since); otherwise the window keeps
+    /// its XAML default size and Windows' default placement.</summary>
+    private void ApplySavedBounds(WindowSettings saved)
+    {
+        if (saved is not { Left: { } left, Top: { } top, Width: { } width, Height: { } height }
+            || width < MinWidth || height < MinHeight
+            || !IsOnScreen(left, top, width, height))
+        {
+            return;
+        }
+
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        Left = left;
+        Top = top;
+        Width = width;
+        Height = height;
+        if (saved.IsMaximized)
+        {
+            WindowState = WindowState.Maximized;
+        }
+    }
+
+    /// <summary>True when enough of the window's title bar (a 100x40 patch at its top-left) is on
+    /// the virtual screen for the user to grab and move it.</summary>
+    private static bool IsOnScreen(double left, double top, double width, double height)
+    {
+        var screen = new Rect(
+            SystemParameters.VirtualScreenLeft,
+            SystemParameters.VirtualScreenTop,
+            SystemParameters.VirtualScreenWidth,
+            SystemParameters.VirtualScreenHeight);
+        var titleBar = new Rect(left, top, Math.Min(width, 100), Math.Min(height, 40));
+        return screen.Contains(titleBar);
+    }
+
+    private void SaveBounds()
+    {
+        // RestoreBounds is the normal-state rectangle even while maximized or minimized, so
+        // un-maximizing next session returns to the size the user last set by hand.
+        var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, ActualWidth, ActualHeight) : RestoreBounds;
+        if (bounds.IsEmpty || double.IsNaN(bounds.Left) || double.IsNaN(bounds.Top) || bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return;
+        }
+
+        var isMaximized = WindowState == WindowState.Maximized;
+        _settingsStore.Update(s =>
+        {
+            s.Window.Left = bounds.Left;
+            s.Window.Top = bounds.Top;
+            s.Window.Width = bounds.Width;
+            s.Window.Height = bounds.Height;
+            s.Window.IsMaximized = isMaximized;
+        });
     }
 
     private void ShowTrayHintOnce()
