@@ -102,6 +102,7 @@ public sealed class CustomAnimationParserTests
     [InlineData("""{ "name": "x", "frames": [ { "rows": ["ab"] } ] }""", "needs a \"palette\"")]
     [InlineData("""{ "name": "x", "palette": { "ab": "#000000" }, "frames": [ { "fill": "#FF0000" } ] }""", "exactly one character")]
     [InlineData("""{ "name": "x", "palette": { "a": "blue" }, "frames": [ { "fill": "#FF0000" } ] }""", "Palette entry \"a\"")]
+    [InlineData("""{ "name": "x", "palette": { ".": "#000000" }, "frames": [ { "rows": ["...", ".."] } ] }""", "every row must be the same length")]
     public void Parse_Invalid_ReturnsReadableError(string json, string expectedErrorFragment)
     {
         var result = CustomAnimationParser.Parse(json);
@@ -119,16 +120,6 @@ public sealed class CustomAnimationParserTests
             """);
 
         Assert.Equal("Frame 2, row 2: 'X' is not in the palette.", result.Error);
-    }
-
-    [Fact]
-    public void Parse_RaggedRows_Rejected()
-    {
-        var result = CustomAnimationParser.Parse("""
-            { "name": "x", "palette": { ".": "#000000" }, "frames": [ { "rows": ["...", ".."] } ] }
-            """);
-
-        Assert.Contains("every row must be the same length", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]
