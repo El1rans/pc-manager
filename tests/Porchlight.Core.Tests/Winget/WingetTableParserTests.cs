@@ -83,19 +83,21 @@ public sealed class WingetTableParserTests
         Assert.DoesNotContain(packages, p => string.IsNullOrWhiteSpace(p.Name));
     }
 
-    [Fact]
-    public void Parse_EmptyOutput_ReturnsNoPackages()
+    public static TheoryData<string[]> OutputsWithoutATable
     {
-        var packages = WingetTableParser.Parse([]);
-
-        Assert.Empty(packages);
+        get
+        {
+            var data = new TheoryData<string[]>();
+            data.Add([]);
+            data.Add(["No installed package found matching input criteria."]);
+            return data;
+        }
     }
 
-    [Fact]
-    public void Parse_NoInstalledPackageFound_ReturnsNoPackages()
+    [Theory]
+    [MemberData(nameof(OutputsWithoutATable))]
+    public void Parse_EmptyOutputOrNoInstalledPackageFound_ReturnsNoPackages(string[] lines)
     {
-        string[] lines = ["No installed package found matching input criteria."];
-
         var packages = WingetTableParser.Parse(lines);
 
         Assert.Empty(packages);

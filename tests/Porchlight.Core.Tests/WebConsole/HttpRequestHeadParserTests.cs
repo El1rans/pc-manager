@@ -20,17 +20,12 @@ public class HttpRequestHeadParserTests
         Assert.Equal("abc123", request.BearerToken);
     }
 
-    [Fact]
-    public void BearerToken_is_null_without_an_Authorization_header()
+    [Theory]
+    [InlineData("GET / HTTP/1.1\r\nHost: pc")]
+    [InlineData("GET / HTTP/1.1\r\nAuthorization: Basic abc")]
+    public void BearerToken_is_null_without_an_Authorization_header_or_for_another_scheme(string head)
     {
-        Assert.True(HttpRequestHeadParser.TryParse("GET / HTTP/1.1\r\nHost: pc", out var request));
-        Assert.Null(request.BearerToken);
-    }
-
-    [Fact]
-    public void BearerToken_is_null_for_another_scheme()
-    {
-        Assert.True(HttpRequestHeadParser.TryParse("GET / HTTP/1.1\r\nAuthorization: Basic abc", out var request));
+        Assert.True(HttpRequestHeadParser.TryParse(head, out var request));
         Assert.Null(request.BearerToken);
     }
 
