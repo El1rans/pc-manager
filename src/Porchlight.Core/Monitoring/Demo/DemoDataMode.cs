@@ -12,7 +12,7 @@ namespace Porchlight.Core.Monitoring.Demo;
 /// Release build: everything here is inside <c>#if DEBUG</c>, so this is not a shipping feature.
 /// See CONTRIBUTING.md's "Screenshots" section for how to use this to (re)capture documentation
 /// screenshots.</summary>
-internal static class DemoDataMode
+public static class DemoDataMode
 {
 #if DEBUG
     public static bool IsEnabled { get; } =

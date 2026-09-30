@@ -26,6 +26,7 @@ using Porchlight.Core.Components;
 using Porchlight.Core.Elevation;
 using Porchlight.Core.Hardware;
 using Porchlight.Core.Lighting.Effects;
+using Porchlight.Core.Monitoring;
 using Porchlight.Core.Settings;
 using Porchlight.Core.Startup;
 using Serilog;
@@ -114,6 +115,11 @@ public partial class App : System.Windows.Application, IDisposable
             Shutdown(0);
             return;
         }
+
+        // Start Windows loading its performance-counter library now (about a second, far longer
+        // right after boot) so it overlaps building the host and window, and the dashboard's CPU,
+        // GPU and disk tiles fill in sooner. Off the UI thread; never throws.
+        _ = Task.Run(PerformanceSampler.PrewarmCounterLibrary);
 
         AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;

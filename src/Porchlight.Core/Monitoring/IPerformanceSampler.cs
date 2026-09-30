@@ -9,7 +9,7 @@ public interface IPerformanceSampler : IDisposable
     /// has not run yet.</summary>
     PerformanceSnapshot Sample();
 
-    /// <summary>True once the one-time counter setup has finished, so CPU, GPU and disk values in
+    /// <summary>True once the one-time counter setup has finished, so GPU and disk values in
     /// <see cref="SampleWithoutWaiting"/> are real rather than still warming up.</summary>
     bool IsWarmedUp => true;
 
@@ -20,7 +20,7 @@ public interface IPerformanceSampler : IDisposable
     }
 
     /// <summary>Like <see cref="Sample"/>, but never waits for the counter setup: until
-    /// <see cref="IsWarmedUp"/>, returns memory and network only, with the counter-based values
-    /// (CPU, GPU, disk) null.</summary>
+    /// <see cref="IsWarmedUp"/>, returns CPU (from a quicker source), memory and network, with the
+    /// counter-only values (GPU, disk) null.</summary>
     PerformanceSnapshot SampleWithoutWaiting() => Sample();
 }

@@ -14,6 +14,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   turning it on or off asks for admin permission once. The checkbox shows the task's real state, the
   task is re-pointed if Porchlight moves, and uninstalling removes it. New `--tray` switch starts
   Porchlight hidden in the tray.
+- The main window remembers its size, position and maximized state between launches (falling back
+  to the default if the saved spot is no longer on any screen).
+
+### Changed
+
+- Dashboard: CPU shows on the very first update instead of waiting ~1 s (5 s+ after boot) for the
+  performance counters; they now start loading at app launch, so GPU and disk arrive sooner too.
+- Hardware: the Sensors tab opens with every card collapsed (each header already shows its key
+  stats) instead of CPU and GPU expanded.
 
 ## [0.1.0] - 2026-09-30
 
