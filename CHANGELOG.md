@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- "Start Porchlight when I sign in to Windows" option in the Notifications dialog
+  (`docs/specs/24-start-at-login.md`). It registers a Task Scheduler task that starts Porchlight in the
+  tray as administrator with no UAC prompt at sign-in, so every sensor works from the first minute;
+  turning it on or off asks for admin permission once. The checkbox shows the task's real state, the
+  task is re-pointed if Porchlight moves, and uninstalling removes it. New `--tray` switch starts
+  Porchlight hidden in the tray.
 - The main window remembers its size, position and maximized state between launches (falling back
   to the default if the saved spot is no longer on any screen).
 

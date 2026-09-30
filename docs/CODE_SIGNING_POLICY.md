@@ -75,6 +75,13 @@ network connection (`Process.Start`/`ProcessStartInfo`, `Socket`/`TcpClient`, an
   started by Porchlight or independently), AnyDesk connects to AnyDesk's own network to provide
   remote-support relaying - that traffic is AnyDesk's, not Porchlight's; see
   [AnyDesk's privacy policy](https://anydesk.com/en/privacy).
+- **"Start Porchlight when I sign in to Windows"** (Notifications dialog, off by default): when the
+  user turns it on, Porchlight runs Windows' own `schtasks.exe` (Task Scheduler's command-line tool;
+  elevated after a UAC prompt) to create, query or delete one scheduled task named "Porchlight" that
+  starts Porchlight in the tray at sign-in. It makes no network connection and sends nothing anywhere
+  (see `src/Porchlight.Core/Startup/LoginLaunchService.cs`,
+  `src/Porchlight.Core/Elevation/ElevatedCommandRunner.cs`, and the `[UninstallRun]` entry in
+  `installer/Porchlight.iss`, which deletes the task on uninstall).
 - **Lighting (RGB control)**: Porchlight talks to a locally installed and running OpenRGB SDK
   server over a plain TCP socket, by default to `127.0.0.1` (loopback - the default `OpenRgbHost` in
   `LightingSettings.cs`, implemented in the vendored `src/ThirdParty/OpenRGB.NET/`, MIT licensed).
