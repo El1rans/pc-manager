@@ -14,20 +14,16 @@ public class DriveThresholdsTests
         Assert.False(DriveThresholds.IsLow(200 * OneGb, 500 * OneGb));
     }
 
-    [Fact]
-    public void IsLow_true_under_the_absolute_10gb_floor_even_on_a_huge_drive()
+    [Theory]
+    // 4 TB drive with 5 GB free: 5GB is well above 10% would need... actually 10% of 4TB is huge,
+    // so the absolute floor is what triggers this.
+    [InlineData(5, 4000)]
+    // 100 GB drive with 15 GB free: above the 10 GB floor, but under 10% (10 GB) is not... check
+    // the boundary explicitly with 8 GB free (under both 10 GB floor and 10% of 100GB=10GB).
+    [InlineData(8, 100)]
+    public void IsLow_true_under_the_absolute_10gb_floor_or_the_10_percent_fraction(long freeGb, long totalGb)
     {
-        // 4 TB drive with 5 GB free: 5GB is well above 10% would need... actually 10% of 4TB is huge,
-        // so the absolute floor is what triggers this.
-        Assert.True(DriveThresholds.IsLow(5 * OneGb, 4000L * OneGb));
-    }
-
-    [Fact]
-    public void IsLow_true_under_the_10_percent_fraction_on_a_small_drive()
-    {
-        // 100 GB drive with 15 GB free: above the 10 GB floor, but under 10% (10 GB) is not... check
-        // the boundary explicitly with 8 GB free (under both 10 GB floor and 10% of 100GB=10GB).
-        Assert.True(DriveThresholds.IsLow(8 * OneGb, 100 * OneGb));
+        Assert.True(DriveThresholds.IsLow(freeGb * OneGb, totalGb * OneGb));
     }
 
     [Fact]

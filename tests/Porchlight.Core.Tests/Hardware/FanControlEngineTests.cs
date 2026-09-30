@@ -41,22 +41,24 @@ public sealed class FanControlEngineTests
 
     // ---------------------------------------------------------------- rule 1: minimum floor
 
-    [Fact]
-    public void Evaluate_FixedBelowFloor_IsRaisedToMinPercent()
+    [Theory]
+    [InlineData(5, 30)] // below the floor: raised to MinPercent
+    [InlineData(65, 65)] // above the floor: unchanged
+    public void Evaluate_Fixed_IsRaisedToMinPercentOnlyWhenBelowFloor(double fixedPercent, double expectedPercent)
     {
         var engine = CreateEngine();
         var input = new FanControlEngineInput(
             SoftwareControlEnabled: true,
             MinPercent: 30,
             FailsafeTemperatureC: 90,
-            Profiles: [new FanProfile(FanId, FanMode.Fixed, FixedPercent: 5)],
+            Profiles: [new FanProfile(FanId, FanMode.Fixed, FixedPercent: fixedPercent)],
             CpuGpuTemperatures: new Dictionary<string, SensorSample>(),
             FanSourceTemperatures: new Dictionary<string, SensorSample>());
 
         var decision = engine.Evaluate(input);
 
         Assert.Equal(FanTargetKind.SetPercent, decision.Targets[FanId].Kind);
-        Assert.Equal(30, decision.Targets[FanId].Percent);
+        Assert.Equal(expectedPercent, decision.Targets[FanId].Percent);
     }
 
     [Fact]
@@ -69,23 +71,6 @@ public sealed class FanControlEngineTests
         var decision = engine.Evaluate(input);
 
         Assert.Equal(40, decision.Targets[FanId].Percent);
-    }
-
-    [Fact]
-    public void Evaluate_FixedAboveFloor_IsUnchanged()
-    {
-        var engine = CreateEngine();
-        var input = new FanControlEngineInput(
-            SoftwareControlEnabled: true,
-            MinPercent: 30,
-            FailsafeTemperatureC: 90,
-            Profiles: [new FanProfile(FanId, FanMode.Fixed, FixedPercent: 65)],
-            CpuGpuTemperatures: new Dictionary<string, SensorSample>(),
-            FanSourceTemperatures: new Dictionary<string, SensorSample>());
-
-        var decision = engine.Evaluate(input);
-
-        Assert.Equal(65, decision.Targets[FanId].Percent);
     }
 
     [Fact]
@@ -223,22 +208,14 @@ public sealed class FanControlEngineTests
         Assert.Equal(100, decision.Targets[FanId].Percent);
     }
 
-    [Fact]
-    public void Evaluate_SourceSensorValueIsNull_ForcesFanTo100()
+    [Theory]
+    [InlineData(null)]
+    [InlineData(double.NaN)]
+    public void Evaluate_SourceSensorValueIsNullOrNaN_ForcesFanTo100(double? cpuTemp)
     {
         var engine = CreateEngine();
 
-        var decision = engine.Evaluate(CurveInput(cpuTemp: null));
-
-        Assert.Equal(100, decision.Targets[FanId].Percent);
-    }
-
-    [Fact]
-    public void Evaluate_SourceSensorValueIsNaN_ForcesFanTo100()
-    {
-        var engine = CreateEngine();
-
-        var decision = engine.Evaluate(CurveInput(cpuTemp: double.NaN));
+        var decision = engine.Evaluate(CurveInput(cpuTemp: cpuTemp));
 
         Assert.Equal(100, decision.Targets[FanId].Percent);
     }

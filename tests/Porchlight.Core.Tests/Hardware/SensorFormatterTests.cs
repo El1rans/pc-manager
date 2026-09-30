@@ -57,29 +57,16 @@ public sealed class SensorFormatterTests
         // per-core multiplier sensor (SensorType.Factor) used to map to an empty string.
         Assert.Equal("34.00×", SensorFormatter.Format(34.0, SensorType.Factor));
 
-    [Fact]
-    public void Format_Clock_BelowGigahertzThreshold_UsesMhz() =>
-        Assert.Equal("800 MHz", SensorFormatter.Format(800, SensorType.Clock));
-
-    [Fact]
-    public void Format_Clock_AtOrAboveGigahertzThreshold_UsesGhz() =>
-        Assert.Equal("4.20 GHz", SensorFormatter.Format(4200, SensorType.Clock));
-
-    [Fact]
-    public void Format_Voltage_SmallRail_Uses3Decimals() =>
-        Assert.Equal("1.284 V", SensorFormatter.Format(1.284, SensorType.Voltage));
-
-    [Fact]
-    public void Format_Voltage_LargeRail_Uses2Decimals() =>
-        Assert.Equal("12.06 V", SensorFormatter.Format(12.06, SensorType.Voltage));
-
-    [Fact]
-    public void Format_Throughput_BelowOneMegabyte_UsesKbPerSecond() =>
-        Assert.Equal("500 KB/s", SensorFormatter.Format(500 * 1024, SensorType.Throughput));
-
-    [Fact]
-    public void Format_Throughput_AtOrAboveOneMegabyte_UsesMbPerSecond() =>
-        Assert.Equal("2.3 MB/s", SensorFormatter.Format(2.3 * 1024 * 1024, SensorType.Throughput));
+    [Theory]
+    [InlineData(SensorType.Clock, 800, "800 MHz")] // below the gigahertz threshold
+    [InlineData(SensorType.Clock, 4200, "4.20 GHz")] // at or above the gigahertz threshold
+    [InlineData(SensorType.Voltage, 1.284, "1.284 V")] // small rail: 3 decimals
+    [InlineData(SensorType.Voltage, 12.06, "12.06 V")] // large rail: 2 decimals
+    [InlineData(SensorType.Throughput, 500 * 1024, "500 KB/s")] // below one megabyte
+    [InlineData(SensorType.Throughput, 2.3 * 1024 * 1024, "2.3 MB/s")] // at or above one megabyte
+    public void Format_MagnitudeDependentUnits_PickTheUnitAndPrecisionForTheValue(
+        SensorType type, double value, string expected) =>
+        Assert.Equal(expected, SensorFormatter.Format(value, type));
 
     [Fact]
     public void Format_Other_HasNoUnitButStillFormatsTheNumber() =>

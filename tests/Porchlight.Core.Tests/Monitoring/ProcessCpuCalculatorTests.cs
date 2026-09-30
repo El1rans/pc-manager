@@ -5,59 +5,33 @@ namespace Porchlight.Core.Tests.Monitoring;
 
 public class ProcessCpuCalculatorTests
 {
-    [Fact]
-    public void CalculateCpuPercent_full_core_saturation_on_single_core_is_100_percent()
+    [Theory]
+    [InlineData(1, 1, 1, 100)] // full core saturation on a single core
+    [InlineData(1, 1, 4, 25)] // divides by the logical processor count
+    [InlineData(4, 1, 2, 100)] // clamps to 100 when multiple cores are saturated
+    public void CalculateCpuPercent_scales_by_core_count_and_clamps_to_100(
+        int cpuSeconds, int elapsedSeconds, int logicalProcessorCount, double expected)
     {
         var percent = ProcessCpuCalculator.CalculateCpuPercent(
             previousTotalProcessorTime: TimeSpan.Zero,
-            currentTotalProcessorTime: TimeSpan.FromSeconds(1),
-            elapsed: TimeSpan.FromSeconds(1),
-            logicalProcessorCount: 1);
+            currentTotalProcessorTime: TimeSpan.FromSeconds(cpuSeconds),
+            elapsed: TimeSpan.FromSeconds(elapsedSeconds),
+            logicalProcessorCount: logicalProcessorCount);
 
-        Assert.Equal(100, percent);
+        Assert.Equal(expected, percent);
     }
 
-    [Fact]
-    public void CalculateCpuPercent_divides_by_logical_processor_count()
+    [Theory]
+    [InlineData(0, 1, 0, 4)] // elapsed is zero
+    [InlineData(10, 1, 1, 4)] // the delta is negative (pid reuse)
+    public void CalculateCpuPercent_is_zero_for_unusable_samples(
+        int previousSeconds, int currentSeconds, int elapsedSeconds, int logicalProcessorCount)
     {
         var percent = ProcessCpuCalculator.CalculateCpuPercent(
-            previousTotalProcessorTime: TimeSpan.Zero,
-            currentTotalProcessorTime: TimeSpan.FromSeconds(1),
-            elapsed: TimeSpan.FromSeconds(1),
-            logicalProcessorCount: 4);
-
-        Assert.Equal(25, percent);
-    }
-
-    [Fact]
-    public void CalculateCpuPercent_clamps_to_100_when_multiple_cores_saturated()
-    {
-        var percent = ProcessCpuCalculator.CalculateCpuPercent(
-            previousTotalProcessorTime: TimeSpan.Zero,
-            currentTotalProcessorTime: TimeSpan.FromSeconds(4),
-            elapsed: TimeSpan.FromSeconds(1),
-            logicalProcessorCount: 2);
-
-        Assert.Equal(100, percent);
-    }
-
-    [Fact]
-    public void CalculateCpuPercent_is_zero_when_elapsed_is_zero()
-    {
-        var percent = ProcessCpuCalculator.CalculateCpuPercent(
-            TimeSpan.Zero, TimeSpan.FromSeconds(1), TimeSpan.Zero, 4);
-
-        Assert.Equal(0, percent);
-    }
-
-    [Fact]
-    public void CalculateCpuPercent_is_zero_when_the_delta_is_negative_pid_reuse()
-    {
-        var percent = ProcessCpuCalculator.CalculateCpuPercent(
-            previousTotalProcessorTime: TimeSpan.FromSeconds(10),
-            currentTotalProcessorTime: TimeSpan.FromSeconds(1),
-            elapsed: TimeSpan.FromSeconds(1),
-            logicalProcessorCount: 4);
+            previousTotalProcessorTime: TimeSpan.FromSeconds(previousSeconds),
+            currentTotalProcessorTime: TimeSpan.FromSeconds(currentSeconds),
+            elapsed: TimeSpan.FromSeconds(elapsedSeconds),
+            logicalProcessorCount: logicalProcessorCount);
 
         Assert.Equal(0, percent);
     }

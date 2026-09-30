@@ -25,15 +25,10 @@ public sealed class WingetExitCodesTests
     [InlineData(0x8A15010C)] // APPINSTALLER_CLI_ERROR_INSTALL_CANCELLED_BY_USER
     [InlineData(0x800704C7)] // HRESULT_FROM_WIN32(ERROR_CANCELLED) - what an installer with no
                               // ExpectedReturnCodes mapping (like PawnIO's) actually exits with.
-    public void IsCancelledByUser_KnownHResultCodes_ReturnsTrue(long hexCode)
+    [InlineData(1223)] // raw Win32 ERROR_CANCELLED
+    public void IsCancelledByUser_KnownCancelledCodes_ReturnsTrue(long hexCode)
     {
         Assert.True(WingetExitCodes.IsCancelledByUser(unchecked((int)hexCode)));
-    }
-
-    [Fact]
-    public void IsCancelledByUser_RawWin32ErrorCancelled_ReturnsTrue()
-    {
-        Assert.True(WingetExitCodes.IsCancelledByUser(1223));
     }
 
     [Fact]
@@ -75,21 +70,15 @@ public sealed class WingetExitCodesTests
         Assert.Equal("Updated - restart needed", outcome.Title);
     }
 
-    [Fact]
-    public void DescribeOutcome_RebootRequiredToFinish_IsUpdatedRestartNeeded()
+    [Theory]
+    [InlineData(0x8A150109)] // reboot required to finish
+    [InlineData(0x8A15010B)] // reboot initiated
+    public void DescribeOutcome_RebootCodes_IsUpdatedRestartNeeded(long hexCode)
     {
-        var outcome = WingetExitCodes.DescribeOutcome(unchecked((int)0x8A150109), outputLines: null);
+        var outcome = WingetExitCodes.DescribeOutcome(unchecked((int)hexCode), outputLines: null);
 
         Assert.Equal(WingetOutcomeKind.UpdatedRestartNeeded, outcome.Kind);
         Assert.Equal(WingetSuggestedAction.None, outcome.SuggestedAction);
-    }
-
-    [Fact]
-    public void DescribeOutcome_RebootInitiated_IsUpdatedRestartNeeded()
-    {
-        var outcome = WingetExitCodes.DescribeOutcome(unchecked((int)0x8A15010B), outputLines: null);
-
-        Assert.Equal(WingetOutcomeKind.UpdatedRestartNeeded, outcome.Kind);
     }
 
     [Fact]
@@ -107,6 +96,7 @@ public sealed class WingetExitCodesTests
     [Theory]
     [InlineData(0x8A150010)] // APPINSTALLER_CLI_ERROR_NO_APPLICABLE_INSTALLER
     [InlineData(0x8A150068)] // APPINSTALLER_CLI_ERROR_PACKAGE_IS_PINNED
+    [InlineData(0x8A15005F)] // install location required - Blizzard.BattleNet on the maintainer's PC
     public void DescribeOutcome_NoApplicableCodes_IsNoApplicableUpdateWithHide(long hexCode)
     {
         var outcome = WingetExitCodes.DescribeOutcome(unchecked((int)hexCode), outputLines: null);
@@ -136,6 +126,8 @@ public sealed class WingetExitCodesTests
     [InlineData(0x8A150101)] // APPINSTALLER_CLI_ERROR_INSTALL_PACKAGE_IN_USE
     [InlineData(0x8A150103)] // APPINSTALLER_CLI_ERROR_INSTALL_FILE_IN_USE
     [InlineData(0x8A150111)] // APPINSTALLER_CLI_ERROR_INSTALL_PACKAGE_IN_USE_BY_APPLICATION
+    [InlineData(0x8A150006)] // shell-exec install failed - GOG.Galaxy on the maintainer's PC: self-updating
+                             // launchers often hold their own installer locked while running.
     public void DescribeOutcome_AppInUseCodes_IsAppRunningWithCloseAppAndRetry(long hexCode)
     {
         var outcome = WingetExitCodes.DescribeOutcome(unchecked((int)hexCode), outputLines: null);
@@ -215,29 +207,6 @@ public sealed class WingetExitCodesTests
     }
 
     [Fact]
-    public void DescribeOutcome_ShellExecInstallFailed_IsAppRunningWithCloseAppAndRetry()
-    {
-        // GOG.Galaxy on the maintainer's PC - self-updating launchers often hold their own
-        // installer locked while running.
-        var outcome = WingetExitCodes.DescribeOutcome(unchecked((int)0x8A150006), outputLines: null);
-
-        Assert.Equal(WingetOutcomeKind.AppRunning, outcome.Kind);
-        Assert.Equal("Close the app and try again", outcome.Title);
-        Assert.Equal(WingetSuggestedAction.CloseAppAndRetry, outcome.SuggestedAction);
-    }
-
-    [Fact]
-    public void DescribeOutcome_InstallLocationRequired_IsNoApplicableUpdateWithHide()
-    {
-        // Blizzard.BattleNet on the maintainer's PC.
-        var outcome = WingetExitCodes.DescribeOutcome(unchecked((int)0x8A15005F), outputLines: null);
-
-        Assert.Equal(WingetOutcomeKind.NoApplicableUpdate, outcome.Kind);
-        Assert.Equal("Not available for this PC", outcome.Title);
-        Assert.Equal(WingetSuggestedAction.Hide, outcome.SuggestedAction);
-    }
-
-    [Fact]
     public void DescribeOutcome_OutputMentionsInstallerExitCode_AppendedToExplanationOnly()
     {
         // OBSProject.OBSStudio on the maintainer's PC.
@@ -298,24 +267,15 @@ public sealed class WingetExitCodesTests
         Assert.False(WingetExitCodes.MentionsRestart([]));
     }
 
-    [Fact]
-    public void MentionsAdminPromptRequest_ExactObservedLine_ReturnsTrue()
+    [Theory]
+    // The exact observed line: Google.CloudSDK on the maintainer's PC - see
+    // docs/specs/09-friendly-update-outcomes.md's addendum.
+    [InlineData("The installer will request to run as administrator. Expect a prompt.")]
+    [InlineData("Some other wording: request to run as administrator here")] // matches as a substring
+    [InlineData("REQUEST TO RUN AS ADMINISTRATOR")] // case-insensitive
+    public void MentionsAdminPromptRequest_LineContainingThePhrase_ReturnsTrue(string line)
     {
-        // Google.CloudSDK on the maintainer's PC - see docs/specs/09-friendly-update-outcomes.md's addendum.
-        Assert.True(WingetExitCodes.MentionsAdminPromptRequest(
-            "The installer will request to run as administrator. Expect a prompt."));
-    }
-
-    [Fact]
-    public void MentionsAdminPromptRequest_MatchesSubstringRobustly()
-    {
-        Assert.True(WingetExitCodes.MentionsAdminPromptRequest("Some other wording: request to run as administrator here"));
-    }
-
-    [Fact]
-    public void MentionsAdminPromptRequest_CaseInsensitive_ReturnsTrue()
-    {
-        Assert.True(WingetExitCodes.MentionsAdminPromptRequest("REQUEST TO RUN AS ADMINISTRATOR"));
+        Assert.True(WingetExitCodes.MentionsAdminPromptRequest(line));
     }
 
     [Fact]
