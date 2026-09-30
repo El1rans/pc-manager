@@ -57,11 +57,13 @@ public sealed class DuplicateFinderTests
         Assert.Empty(_reader.Opened);
     }
 
-    [Fact]
-    public async Task Find_SameSizeButDifferentStart_IsRejectedByTheQuickCheck_WithoutReadingWholeFiles()
+    [Theory]
+    [InlineData(0)] // Different first byte.
+    [InlineData(Size - 1)] // Different last byte.
+    public async Task Find_SameSizeButDifferentStartOrEnd_IsRejectedByTheQuickCheck_WithoutReadingWholeFiles(int differingIndex)
     {
         Add(Docs + @"\a.bin", Bytes(Size));
-        Add(Docs + @"\b.bin", With(Bytes(Size), 0, 9));
+        Add(Docs + @"\b.bin", With(Bytes(Size), differingIndex, 9));
 
         var groups = await Find();
 
@@ -69,17 +71,6 @@ public sealed class DuplicateFinderTests
         Assert.Equal(2 * Partial, _reader.BytesRead[Docs + @"\a.bin"]);
         Assert.Equal(2 * Partial, _reader.BytesRead[Docs + @"\b.bin"]);
     }
-
-    [Fact]
-    public async Task Find_SameSizeButDifferentEnd_IsRejectedByTheQuickCheck()
-    {
-        Add(Docs + @"\a.bin", Bytes(Size));
-        Add(Docs + @"\b.bin", With(Bytes(Size), Size - 1, 9));
-
-        Assert.Empty(await Find());
-        Assert.Equal(2 * Partial, _reader.TotalBytesRead / 2);
-    }
-
     [Fact]
     public async Task Find_SameStartAndEndButDifferentMiddle_IsRejectedOnlyByTheFullHash()
     {

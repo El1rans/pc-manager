@@ -253,29 +253,20 @@ public sealed class CleanupRunnerTests
         Assert.DoesNotContain(Root + @"\sub", _fs.ListedDirectories);
     }
 
-    [Fact]
-    public async Task Clean_AdminOnlyCategory_IsSkippedWhenNotElevated()
+    [Theory]
+    [InlineData(false, 0, 0)]
+    [InlineData(true, 1, 10)]
+    public async Task Clean_AdminOnlyCategory_RunsOnlyWhenElevated(bool elevated, int expectedFilesDeleted, long expectedBytesFreed)
     {
         _fs.AddDirectory(Root).AddFile(Root + @"\a.tmp", 10, Old);
-        _elevation.IsElevated = false;
+        _elevation.IsElevated = elevated;
 
         var result = await Clean(Category(requiresAdmin: true));
 
-        Assert.Equal(0, result.FilesDeleted);
-        Assert.Empty(_fs.DeleteFileAttempts);
+        Assert.Equal(expectedFilesDeleted, result.FilesDeleted);
+        Assert.Equal(expectedBytesFreed, result.BytesFreed);
+        Assert.Equal(expectedFilesDeleted, _fs.DeleteFileAttempts.Count);
     }
-
-    [Fact]
-    public async Task Clean_AdminOnlyCategory_RunsWhenElevated()
-    {
-        _fs.AddDirectory(Root).AddFile(Root + @"\a.tmp", 10, Old);
-        _elevation.IsElevated = true;
-
-        var result = await Clean(Category(requiresAdmin: true));
-
-        Assert.Equal(10, result.BytesFreed);
-    }
-
     [Fact]
     public async Task Clean_AdminOnlyRootInMixedCategory_IsSkippedWhenNotElevated()
     {

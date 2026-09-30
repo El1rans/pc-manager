@@ -38,26 +38,17 @@ public sealed class AppUninstallerTests
         Assert.Empty(_runner.StartDetachedCalls);
     }
 
-    [Fact]
-    public void StartUninstall_PerMachineEntryWhileElevated_IsLaunched()
+    [Theory]
+    [InlineData(true, true)] // Per-machine entry while elevated.
+    [InlineData(false, false)] // Per-user entry when not elevated.
+    public void StartUninstall_EntryThatMatchesTheElevation_IsLaunched(bool elevated, bool perMachine)
     {
-        _elevation.IsElevated = true;
+        _elevation.IsElevated = elevated;
 
-        var result = CreateUninstaller().StartUninstall(App(perMachine: true));
+        var result = CreateUninstaller().StartUninstall(App(perMachine));
 
         Assert.Equal(UninstallStartResult.Started, result);
     }
-
-    [Fact]
-    public void StartUninstall_PerUserEntryWhenNotElevated_IsLaunched()
-    {
-        _elevation.IsElevated = false;
-
-        var result = CreateUninstaller().StartUninstall(App(perMachine: false));
-
-        Assert.Equal(UninstallStartResult.Started, result);
-    }
-
     [Fact]
     public void StartUninstall_UnparseableCommand_DoesNotLaunchAnything()
     {

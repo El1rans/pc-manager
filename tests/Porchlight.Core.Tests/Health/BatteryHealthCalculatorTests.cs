@@ -25,37 +25,17 @@ public class BatteryHealthCalculatorTests
         Assert.Null(BatteryHealthCalculator.HealthPercent(design, full));
     }
 
-    [Fact]
-    public void Good_at_80_and_above()
+    [Theory]
+    [InlineData(80, BatteryVerdict.Good, "Good")] // Good at 80 and above.
+    [InlineData(60, BatteryVerdict.Worn, "Worn - holds about 60% of its original charge")] // Worn text mentions the percentage.
+    [InlineData(50, BatteryVerdict.Worn, "Worn - holds about 50% of its original charge")] // 50 is the worn boundary.
+    [InlineData(49, BatteryVerdict.VeryWorn, "Very worn - holds only about 49% of its original charge. Consider replacing the battery")] // Very worn below 50.
+    public void Assess_verdict_and_text_follow_health_percent(long fullCharge, BatteryVerdict verdict, string text)
     {
-        var a = BatteryHealthCalculator.Assess(new BatteryReading(100, 80, null, null, BatteryChargeState.Unknown));
-        Assert.Equal(BatteryVerdict.Good, a.Verdict);
-        Assert.Equal("Good", a.Text);
+        var a = BatteryHealthCalculator.Assess(new BatteryReading(100, fullCharge, null, null, BatteryChargeState.Unknown));
+        Assert.Equal(verdict, a.Verdict);
+        Assert.Equal(text, a.Text);
     }
-
-    [Fact]
-    public void Worn_text_mentions_percentage()
-    {
-        var a = BatteryHealthCalculator.Assess(new BatteryReading(100, 60, null, null, BatteryChargeState.Unknown));
-        Assert.Equal(BatteryVerdict.Worn, a.Verdict);
-        Assert.Equal("Worn - holds about 60% of its original charge", a.Text);
-    }
-
-    [Fact]
-    public void Very_worn_below_50()
-    {
-        var a = BatteryHealthCalculator.Assess(new BatteryReading(100, 49, null, null, BatteryChargeState.Unknown));
-        Assert.Equal(BatteryVerdict.VeryWorn, a.Verdict);
-        Assert.Contains("49%", a.Text);
-    }
-
-    [Fact]
-    public void Boundary_50_is_worn()
-    {
-        var a = BatteryHealthCalculator.Assess(new BatteryReading(100, 50, null, null, BatteryChargeState.Unknown));
-        Assert.Equal(BatteryVerdict.Worn, a.Verdict);
-    }
-
     [Fact]
     public void Unknown_without_capacities()
     {

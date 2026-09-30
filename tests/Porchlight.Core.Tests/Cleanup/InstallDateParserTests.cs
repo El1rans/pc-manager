@@ -5,18 +5,13 @@ namespace Porchlight.Core.Tests.Cleanup;
 
 public sealed class InstallDateParserTests
 {
-    [Fact]
-    public void Parse_ValidYyyyMmDd_ReturnsTheDate()
+    [Theory]
+    [InlineData("20210314")]
+    [InlineData(" 20210314 ")] // Surrounding whitespace is ignored.
+    public void Parse_ValidYyyyMmDd_ReturnsTheDate(string value)
     {
-        Assert.Equal(new DateOnly(2021, 3, 14), InstallDateParser.Parse("20210314"));
+        Assert.Equal(new DateOnly(2021, 3, 14), InstallDateParser.Parse(value));
     }
-
-    [Fact]
-    public void Parse_IgnoresSurroundingWhitespace()
-    {
-        Assert.Equal(new DateOnly(2021, 3, 14), InstallDateParser.Parse(" 20210314 "));
-    }
-
     [Theory]
     [InlineData(null)]
     [InlineData("")]
