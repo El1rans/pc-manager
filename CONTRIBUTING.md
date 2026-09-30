@@ -33,6 +33,21 @@ dotnet test -c Release
 
 Both must pass with zero warnings and zero errors before requesting review.
 
+`dotnet test` runs on Microsoft.Testing.Platform (see `global.json`), which rejects old VSTest-era
+switches: `dotnet test --nologo`, for example, makes every test app exit with "Zero tests ran".
+
+### Code coverage
+
+```powershell
+dotnet test -c Release --coverage --coverage-output-format cobertura --coverage-settings coverage.config
+```
+
+This writes one `TestResults/<guid>.cobertura.xml` per test project. `coverage.config` limits the
+report to Porchlight's own assemblies and leaves out source-generated code. CI runs the same
+command and uploads the reports as the `coverage` artifact. Code that only wraps a Windows API
+(WMI, the registry, P/Invoke, tray/window plumbing) is not expected to be covered by unit tests;
+parsers, calculations, state machines, safety rules and view models are.
+
 ## Pull requests
 
 - Use the PR template: summary, how it was tested, screenshots for UI changes, and a checklist of

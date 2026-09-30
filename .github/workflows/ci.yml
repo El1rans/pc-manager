@@ -37,7 +37,17 @@ jobs:
         run: dotnet build -c Release --no-restore
 
       - name: Test
-        run: dotnet test -c Release --no-build
+        run: >
+          dotnet test -c Release --no-build
+          --coverage --coverage-output-format cobertura --coverage-settings coverage.config
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: coverage
+          path: TestResults/*.cobertura.xml
+          if-no-files-found: warn
 
   build-installer:
     needs: build-and-test
