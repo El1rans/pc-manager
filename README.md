@@ -14,17 +14,21 @@ Built with C# / .NET (WPF). Windows only.
 
 Screenshots use made-up demo data, not a real PC.
 
-![Dashboard with live CPU, memory, GPU, disk and network tiles, drive space and the busiest programs](docs/screenshots/dashboard.png)
 **Dashboard** - how is the PC doing right now?
 
-![Updates page listing programs with newer versions, with checkboxes and an Update selected button](docs/screenshots/updates.png)
+![Dashboard with live CPU, memory, GPU, disk and network tiles, drive space and the busiest programs](docs/screenshots/dashboard.png)
+
 **Tune-up > Updates** - tick the programs to update and Porchlight does the rest.
 
-![Hardware page with temperature, power and fan tiles above collapsed cards for each part](docs/screenshots/hardware.png)
+![Updates page listing programs with newer versions, with checkboxes and an Update selected button](docs/screenshots/updates.png)
+
 **Hardware > Sensors & fans** - is it running hot?
 
-![Get help page showing the PC's remote-help address, three simple steps and a safety warning](docs/screenshots/get-help.png)
+![Hardware page with temperature, power and fan tiles above collapsed cards for each part](docs/screenshots/hardware.png)
+
 **Get help** - let family connect in two clicks (uses AnyDesk).
+
+![Get help page showing the PC's remote-help address, three simple steps and a safety warning](docs/screenshots/get-help.png)
 
 ## Pages
 
