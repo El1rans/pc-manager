@@ -84,3 +84,7 @@ See `docs/specs/00-engineering-standards.md` for the full solution layout and co
 In short: testable logic lives in `Porchlight.Core` behind an interface; `Porchlight.App` holds
 views, view models, and DI wiring. A feature adds itself via its own folders, one DI registration
 extension method, and one navigation entry, without touching other features' files.
+
+## The prototype
+
+`prototype/` holds the original PowerShell winget updater tool that the Updates page was ported from. It is kept for reference and is not built. To run it standalone, double-click `prototype/Winget Updater.bat`.
