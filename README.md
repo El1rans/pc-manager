@@ -211,6 +211,9 @@ milestone specs.
   installs by itself. All of it is configured in the small Notifications dialog (tray menu or sidebar
   footer). See `docs/specs/15-tray-and-alerts.md`.
 
+- Theme setting: "Match Windows" (default), "Light" or "Dark", chosen in an "Appearance" card at the top of
+  the Notifications dialog and applied to every open window immediately. See
+  `docs/specs/25-theme-setting.md`.
 - Web console (read-only): turn it on from the "Web console" page to watch this PC's live stats
   (CPU, memory, GPU, disk, network, temperatures, busiest apps, drives, system info) from a browser
   on your phone or another computer. It only shows information - there is no way to change anything
@@ -235,5 +238,4 @@ milestone specs.
 - Startup impact ratings and logon scheduled tasks for the Startup apps page
 
 ### Quality of life
-- Dark / light theme
 - Everything logged to `%APPDATA%\Porchlight\logs`

@@ -98,6 +98,25 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void Theme_DefaultsToSystem_WhenMissingFromAnOldFile()
+    {
+        File.WriteAllText(_settingsPath, """{"Setup": {"FirstRunCompleted": true}}""");
+
+        var store = CreateStore();
+
+        Assert.Equal(AppTheme.System, store.Current.Appearance.Theme);
+    }
+
+    [Fact]
+    public void Theme_RoundTripsByName()
+    {
+        CreateStore().Update(s => s.Appearance.Theme = AppTheme.Dark);
+
+        Assert.Contains("\"Theme\": \"Dark\"", File.ReadAllText(_settingsPath));
+        Assert.Equal(AppTheme.Dark, CreateStore().Current.Appearance.Theme);
+    }
+
+    [Fact]
     public void Load_NullSection_FallsBackToDefaultForThatSection()
     {
         File.WriteAllText(_settingsPath, """{"Updates": null}""");

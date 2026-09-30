@@ -15,6 +15,7 @@ public static class NotificationsFeature
         services.AddAlertsCore();
 
         services.AddSingleton<IShellWindowService, ShellWindowService>();
+        services.AddSingleton<IThemeService, ThemeService>();
         services.AddSingleton<ITrayIcon, TrayIcon>();
         services.AddSingleton<TrayService>();
 
