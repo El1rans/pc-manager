@@ -1,0 +1,145 @@
+# Features
+
+A technical reference of what Porchlight does. For a friendlier walk through each page, see the [page guides](../README.md#pages).
+
+- App shell with a navigation rail of five entries - Overview, Tune-up (Updates, Startup apps, Free up space, Health check), Internet & safety (Internet, Browser add-ons),
+  Hardware (Sensors & fans, Lighting) and Get help (Get help, Web console) - with a tab row above the page for categories that hold more than one, following
+  Windows light/dark theme, with the app version shown in the sidebar footer.
+- Browser add-ons page: read-only list of the add-ons installed in Edge, Chrome, Brave and Firefox
+  (every profile), each with a plain-language note on what it can do (read all websites, see
+  history, change proxy settings, ...), where it came from and a "Looks fine / Review / Worth
+  removing" level. Porchlight never changes or removes anything in a browser; the page opens the
+  browser's own add-ons page and explains how to remove one. Nothing leaves the PC.
+- Settings persisted as JSON under `%APPDATA%\Porchlight\settings.json`, atomic writes, corrupt-file
+  recovery.
+- Free up space: one Scan measures safe junk (temporary files, browser caches, crash reports, Windows Update leftovers, optionally the Recycle Bin), then one Clean up button removes the ticked items. Files in use are left alone, and the page never follows shortcuts or links into other folders. It also suggests big files and old downloads (moved to the Recycle Bin only when you click, so they can be restored) and large apps (opens the app's own uninstaller). Personal files are never deleted automatically.
+  The same page has "What's using space?", a disk space map: pick your files, a drive or any folder, and Porchlight measures it in the background (never following shortcuts, and counting folders Windows won't let it read) and shows the biggest folders and files as a sorted list with proportional bars, sizes and percentages, with a breadcrumb to go back up and "Show in folder". Only files in your own folders can be moved to the Recycle Bin. "Duplicate files" finds identical copies of files 1 MB or bigger in your own folders (comparing sizes first, then the start and end of each file, then a full SHA-256 only where needed), shows how much space each set wastes and suggests "Keep newest"; you tick the copies to move to the Recycle Bin, and one copy of every set always stays. On the Dashboard, a drive that is low on space gets a "Free up space" button that opens this page. See `specs/19-disk-insights.md`.
+- Logs written to `%APPDATA%\Porchlight\logs`.
+- Admin elevation: the sidebar shows whether the app is running as administrator and can relaunch
+  elevated.
+- First-run setup: on first launch (and any time after, via "Set up optional features" in the
+  sidebar), choose which optional third-party tools to install - AnyDesk (remote help), OpenRGB
+  (lighting) and the PawnIO driver (hardware sensors/fan control). Already-installed tools are
+  detected and skipped. Feature pages that need one of these show a shared status card and can
+  install/start it in place, without restarting the app.
+- Dashboard: live CPU, memory, GPU, disk and network usage with 60-second history sparklines,
+  updated once a second (paused while the window is minimized). Drives with a low-space warning,
+  top processes by CPU/memory, a pending-restart badge, and static system info (computer name, OS,
+  manufacturer/model, CPU, GPU, RAM).
+- Porchlight updates itself: an installed copy checks GitHub Releases (at startup unless the "Check
+  for updates when Porchlight starts" option is off, and on Refresh) and shows "Porchlight X.Y.Z is
+  available" at the top of the Updates page with a "What's new" link and an "Update now" button that
+  downloads the installer, verifies its SHA-256, runs it (one Windows permission prompt) and restarts
+  Porchlight on the new version. A copy that wasn't installed with the installer only gets a link to
+  the release page. See `specs/23-self-update.md`.
+- Updates page: lists `winget upgrade` results with selection, filtering and an ignore list;
+  installs the selected apps one at a time with a live log and progress, "Silent install",
+  "Include apps with unknown version" and "Check for updates when Porchlight starts" options, and
+  "Stop after current" to cancel the rest of a run. The nav badge shows how many updates are
+  available; a check runs automatically at startup (unless turned off) and on Refresh. Every
+  outcome is a plain-language status with a matching action - Reinstall... (uninstall then install
+  the newest version), Hide this update, or Try again - that's remembered across app restarts; an
+  "app in use" failure names the actual programs holding the app's files open when it isn't the app
+  itself; and a long silent wait explains itself the moment winget says it's about to raise a
+  Windows permission prompt.
+- Get help: a plain-language remote-support page for a non-technical user, pinned in its own group
+  at the bottom of the nav rail. Installs AnyDesk, shows its address in large, selectable,
+  grouped-digit text with a one-click "Copy address" (put the bare digits on the clipboard), a
+  running/not-running status with a "Start AnyDesk" button, step-by-step instructions, a
+  scam-safety warning, and "Copy support info" for sharing computer name/Windows version/address by
+  message. Porchlight never changes any AnyDesk security setting.
+- Check-up report (Get help page): "Send a check-up to <your helper>" builds a plain-language
+  summary of this PC (computer and Windows, restarts, drive space, pending app updates,
+  temperatures, remote help), shows exactly what it contains, and lets you copy it, save it as an
+  HTML or text file, or open it in your mail program addressed to your helper (optional email
+  setting). Porchlight never sends or uploads anything itself, and the report never includes your
+  user name, files, installed apps, IP addresses or serial numbers. Other features add their own
+  sections by registering an `ICheckupSection`; see `specs/16-checkup-report.md`.
+- Move to a new PC (Updates page): "Save my app list..." exports installed apps with
+  `winget export`; "Install apps from a list..." validates the file, shows the apps for
+  confirmation, then runs `winget import` with the live log and progress.
+- Hardware: a sensors tab with an "At a glance" summary strip (CPU/GPU temperature, CPU package
+  power, hottest fan) above one card per device (CPU, GPU, motherboard, memory, storage, network -
+  CPU/GPU expanded by default), each grouped into sections (temperatures, fans, load, power,
+  clocks, voltages, then the rest) with aligned Name/Current/Min/Max columns - Current is the
+  prominent value, Min/Max are secondary. A "Hide unused sensors" toggle (on by default) hides
+  sensors that have never reported a real reading (unconnected fan headers, unpopulated voltage
+  rails); a filter box and "Reset min/max" still work across every card. A fans tab (Default/
+  Fixed/Curve control per fan, with a draggable-point curve editor) sits alongside it - empty
+  motherboard fan headers that have never reported RPM are hidden the same way (GPU fans are never
+  hidden, since a 0-RPM idle mode is normal for them - shown as "Stopped (idle)"), each fan can be
+  given a custom display name (shown everywhere its name appears), and a banner warns when another
+  fan-control tool (Armoury Crate, MSI Center, iCUE, ...) is detected running alongside Porchlight.
+  Software fan control is off by
+  default, requires a one-time risk confirmation, and is only ever active while the page itself
+  reports `Ready` (elevated, driver installed, hardware read healthy) - a fan profile enabled during
+  an earlier elevated session never drives a fan on a later non-elevated launch. A safety engine
+  enforces a minimum speed floor, an overheat failsafe, a lost/stale-sensor failsafe, a
+  no-CPU-temperature failsafe, and restores every fan to BIOS control on a set failure, on exit, on
+  system suspend, on session end, and on a crash. Needs administrator rights and the PawnIO driver
+  (installed in place from the page) for full sensor access and fan control.
+  **Important:** if Porchlight is forced to close, crashes, or the PC loses power while a fan is
+  under software control, that fan stays at its last commanded speed - only restarting the PC (not
+  relaunching Porchlight) hands it back to BIOS control. Porchlight warns about this before you turn
+  software fan control on, and shows a banner at the next launch if it detects this happened.
+- Lighting: control RGB devices (motherboard, RAM, GPU, keyboard, ...) through OpenRGB - apply a
+  color and brightness to every device at once or to one device at a time, switch a device's mode,
+  save up to 8 favorite colors, and load OpenRGB profiles. Shows the shared setup card until OpenRGB
+  is installed and running, and an optional "Start OpenRGB with Porchlight" toggle; a dropped
+  connection (including a silent remote close, caught by a periodic heartbeat) returns to a
+  reconnect state instead of crashing the page. Talks to OpenRGB through a vendored, patched copy
+  of `OpenRGB.NET` at `src/ThirdParty/OpenRGB.NET/` - see `THIRD-PARTY-NOTICES.md` and
+  `upstream/openrgb-net.md` for why. The Lighting page's Effects card assigns a custom
+  animated effect per device - Rainbow wave, Breathing, CPU temperature (color follows CPU
+  temperature between a min/max °C), and, for a device with a matrix (per-key) zone, Pac-Man and
+  Rain - plus a global "updates pending" overlay and a "Pause effects" button. See
+  `specs/11-led-effects.md`. You can also add your own **custom animations**: click "Copy AI
+  prompt", describe the animation you want to any AI chat, and paste its answer back with "Paste
+  from clipboard" (or import a `.json` animation file) - then pick "Custom animation" for any
+  device. See [`custom-animations.md`](custom-animations.md) for the guide, the prompt
+  template and examples.
+- Startup apps: lists everything that starts when you sign in - the per-user and all-users `Run`
+  registry keys and both Startup folders - with a friendly name, publisher, On/Off status and a plain
+  "What is this?" line, and marks Windows/Microsoft items and Porchlight's own tools (AnyDesk,
+  OpenRGB) as "Recommended to keep". Turn items off and on exactly like Task Manager (the
+  `StartupApproved` value): nothing is ever deleted, so it is always reversible, and no startup
+  program is ever launched. Items for all users need administrator rights. No startup-impact rating
+  and no scheduled tasks are shown (see `specs/13-startup-apps.md`).
+- Health check: a plain-language page with five cards - disk health (per physical disk: Healthy /
+  Warning - back up your files soon / Unknown, from Windows' storage and failure-prediction data);
+  Windows repair (`sfc /scannow`, then `DISM /RestoreHealth` offered only if SFC couldn't fix everything;
+  needs administrator rights, takes 10-30 minutes, and can't be cancelled once started); restore point
+  (create one, see the most recent ones, explains Windows' 24-hour limit and detects System Protection
+  being off, with a link to open it); recent problems from the last 30 days of the Event Log (app
+  crashes, blue screens, unexpected shutdowns, disk errors, failed updates - grouped and counted); and,
+  on a laptop, battery wear. Any check that can't run shows "Couldn't check" instead of failing. See
+  `specs/14-system-health.md`.
+
+- Internet: connection status (Wi-Fi name and signal as bars and words, local IP, router, DNS),
+  a guided "Fix my internet" check (network connection, router, website names, the internet) that
+  suggests only matching fixes - clear saved website addresses, get a fresh connection, switch the
+  connection off and on (administrator, with confirmation) - and only *offers* Windows' Network
+  settings as a last resort; a Cloudflare speed test that only runs when you press the button (the
+  last result is remembered); and a read-only list of programs using the internet, refreshed only
+  while the page is open. The public IP address is never fetched. See `specs/18-network.md`.
+- System tray icon and background alerts: a Porchlight icon in the notification area with a
+  quick-stats tooltip (CPU, memory, free space on C:) and a menu (Open, Check for updates, Get help,
+  Notifications settings, Exit). By default closing the window keeps Porchlight running in the
+  tray (Exit really quits); starting it a second time just shows the running window. Plain-language
+  balloon alerts for a nearly full drive, a sustained hot CPU/GPU (only when temperature readings are
+  available), app updates ready, and a restart pending for over 3 days - each type can be turned
+  off, each shown at most once a day, and clicking one opens the relevant page. App updates are
+  checked on a schedule (every day by default, or weekly/never); Porchlight only looks, it never
+  installs by itself. All of it is configured in the small Notifications dialog (tray menu or sidebar
+  footer). See `specs/15-tray-and-alerts.md`.
+
+- Theme setting: "Match Windows" (default), "Light" or "Dark", chosen in an "Appearance" card at the top of
+  the Notifications dialog and applied to every open window immediately. See
+  `specs/25-theme-setting.md`.
+- Web console (read-only): turn it on from the "Web console" page to watch this PC's live stats
+  (CPU, memory, GPU, disk, network, temperatures, busiest apps, drives, system info) from a browser
+  on your phone or another computer. It only shows information - there is no way to change anything
+  on the PC from it - and it needs an access key, included in the link the page gives you (make a
+  new key any time to lock out old links). Off by default; port 8765 unless you pick another. Use it
+  on your home network, or through a VPN such as Tailscale when away - don't forward the port on
+  your router. See `specs/21-web-console.md`.
