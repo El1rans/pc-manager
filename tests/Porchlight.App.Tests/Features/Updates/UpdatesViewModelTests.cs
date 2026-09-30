@@ -70,24 +70,19 @@ public sealed class UpdatesViewModelTests : IDisposable
         Assert.Equal(UpdateCheckResult.Succeeded(0), result);
     }
 
-    [Fact]
-    public async Task CheckForUpdatesAsync_WingetFailure_ReportsFailed()
+    [Theory]
+    [InlineData(false)] // winget ran but blew up
+    [InlineData(true)] // winget is not installed at all
+    public async Task CheckForUpdatesAsync_WingetUnavailableOrFailing_ReportsFailed(bool wingetMissing)
     {
-        _wingetClient.GetUpgradesException = new InvalidOperationException("boom");
+        _wingetClient.GetUpgradesException = wingetMissing
+            ? new WingetNotFoundException()
+            : new InvalidOperationException("boom");
         var viewModel = CreateViewModel();
 
         var result = await viewModel.CheckForUpdatesAsync();
 
         Assert.Equal(UpdateCheckStatus.Failed, result.Status);
-    }
-
-    [Fact]
-    public async Task CheckForUpdatesAsync_WingetMissing_ReportsFailed()
-    {
-        _wingetClient.GetUpgradesException = new WingetNotFoundException();
-        var viewModel = CreateViewModel();
-
-        Assert.Equal(UpdateCheckStatus.Failed, (await viewModel.CheckForUpdatesAsync()).Status);
     }
 
     [Fact]
@@ -587,14 +582,17 @@ public sealed class UpdatesViewModelTests : IDisposable
         Assert.False(row.IsCriticalReinstallFailure);
     }
 
-    [Fact]
-    public async Task UpdateSelectedAsync_NonSilentLongRunningPackage_ShowsInteractiveWaitingHintThenClearsIt()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UpdateSelectedAsync_LongRunningPackage_ShowsWaitingHintForTheSilentSettingThenClearsIt(bool silent)
     {
         var package = Package("Slow.Id");
         _wingetClient.UpgradeListResults.Enqueue([package]);
         _wingetClient.Gate = new TaskCompletionSource();
         var timeProvider = new FakeTimeProvider();
         var viewModel = CreateViewModel(timeProvider);
+        viewModel.Silent = silent;
         await viewModel.RefreshAsync(quiet: false);
         viewModel.SelectAllCommand.Execute(null);
         var row = viewModel.Packages.Single();
@@ -607,39 +605,15 @@ public sealed class UpdatesViewModelTests : IDisposable
         timeProvider.Advance(UpdatesViewModel.WaitingHintThreshold);
         await Task.Delay(20, TestContext.Current.CancellationToken); // let the Task.Delay continuation observe the advance
 
-        Assert.Equal(UpdatesViewModel.WaitingHintTextInteractive, row.WaitingHint);
+        Assert.Equal(
+            silent ? UpdatesViewModel.WaitingHintTextSilent : UpdatesViewModel.WaitingHintTextInteractive,
+            row.WaitingHint);
 
         _wingetClient.UpgradeListResults.Enqueue([]);
         _wingetClient.Gate.SetResult();
         await updateTask;
 
         Assert.Null(row.WaitingHint);
-    }
-
-    [Fact]
-    public async Task UpdateSelectedAsync_SilentLongRunningPackage_ShowsSilentWaitingHint()
-    {
-        var package = Package("Slow.Id");
-        _wingetClient.UpgradeListResults.Enqueue([package]);
-        _wingetClient.Gate = new TaskCompletionSource();
-        var timeProvider = new FakeTimeProvider();
-        var viewModel = CreateViewModel(timeProvider);
-        viewModel.Silent = true;
-        await viewModel.RefreshAsync(quiet: false);
-        viewModel.SelectAllCommand.Execute(null);
-        var row = viewModel.Packages.Single();
-
-        var updateTask = viewModel.UpdateSelectedCommand.ExecuteAsync(null);
-        await Task.Delay(20, TestContext.Current.CancellationToken);
-
-        timeProvider.Advance(UpdatesViewModel.WaitingHintThreshold);
-        await Task.Delay(20, TestContext.Current.CancellationToken);
-
-        Assert.Equal(UpdatesViewModel.WaitingHintTextSilent, row.WaitingHint);
-
-        _wingetClient.UpgradeListResults.Enqueue([]);
-        _wingetClient.Gate.SetResult();
-        await updateTask;
     }
 
     [Fact]

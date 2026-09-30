@@ -15,46 +15,21 @@ public sealed class FanCardViewModelTests
     private static FanCardViewModel CreateCard(string id, HardwareNodeType nodeType) =>
         new(id, "Fan", nodeType, new FakeSettingsStore(), NullLogger<FanCardViewModel>.Instance);
 
-    [Fact]
-    public void UpdateVisibility_MotherboardFan_NeverReportedRpm_HiddenWhenHideUnusedSensorsOn()
+    [Theory]
+    [InlineData(HardwareNodeType.Motherboard, true, false, false)] // an empty motherboard header is hidden when "hide unused" is on
+    [InlineData(HardwareNodeType.Motherboard, false, false, true)] // ...but visible when it is off
+    [InlineData(HardwareNodeType.Motherboard, true, true, true)] // once real, always visible (spec 10's "hide unused" rule, reused here)
+    [InlineData(HardwareNodeType.Gpu, true, false, true)] // a GPU fan is never hidden, whatever the setting
+    public void UpdateVisibility_DependsOnNodeTypeSettingAndRpmHistory(
+        HardwareNodeType nodeType, bool hideUnusedSensors, bool everReportedRpm, bool expectedVisible)
     {
-        var card = CreateCard("fan-1", HardwareNodeType.Motherboard);
+        var card = CreateCard("fan-1", nodeType);
 
-        card.UpdateVisibility(hideUnusedSensors: true, everReportedRpm: false);
+        // The RPM *history* is what is passed in: a motherboard fan whose most recent tick idled
+        // back to 0 still stays visible once it has ever reported RPM.
+        card.UpdateVisibility(hideUnusedSensors, everReportedRpm);
 
-        Assert.False(card.IsVisible);
-    }
-
-    [Fact]
-    public void UpdateVisibility_MotherboardFan_NeverReportedRpm_VisibleWhenHideUnusedSensorsOff()
-    {
-        var card = CreateCard("fan-1", HardwareNodeType.Motherboard);
-
-        card.UpdateVisibility(hideUnusedSensors: false, everReportedRpm: false);
-
-        Assert.True(card.IsVisible);
-    }
-
-    [Fact]
-    public void UpdateVisibility_MotherboardFan_EverReportedRpm_StaysVisible_EvenIfNowZero()
-    {
-        var card = CreateCard("fan-1", HardwareNodeType.Motherboard);
-
-        // Once real, always visible (spec 10's "hide unused" rule, reused here) - even though the
-        // most recent tick's own RPM has since idled back to 0, the *history* is what is passed in.
-        card.UpdateVisibility(hideUnusedSensors: true, everReportedRpm: true);
-
-        Assert.True(card.IsVisible);
-    }
-
-    [Fact]
-    public void UpdateVisibility_GpuFan_NeverReportedRpm_StaysVisibleRegardlessOfHideUnusedSensors()
-    {
-        var card = CreateCard("gpu-fan-1", HardwareNodeType.Gpu);
-
-        card.UpdateVisibility(hideUnusedSensors: true, everReportedRpm: false);
-
-        Assert.True(card.IsVisible);
+        Assert.Equal(expectedVisible, card.IsVisible);
     }
 
     [Fact]
@@ -136,40 +111,20 @@ public sealed class FanCardViewModelTests
         Assert.False(settingsStore.Current.Hardware.FanDisplayNames.ContainsKey("fan-1"));
     }
 
-    [Fact]
-    public void UpdateReadings_GpuFan_ZeroRpm_ShowsStoppedIdle_NotZeroRpm()
+    [Theory]
+    [InlineData(HardwareNodeType.Gpu, 30, 0, "Stopped (idle)")] // a GPU fan at 0 RPM is idle, not faulty
+    [InlineData(HardwareNodeType.Motherboard, 30, 0, "0 RPM")] // a motherboard fan at 0 RPM is shown as-is
+    [InlineData(HardwareNodeType.Gpu, 60, 1800, "1800 RPM")]
+    public void UpdateReadings_RpmDisplayText_DependsOnNodeTypeAndRpm(
+        HardwareNodeType nodeType, double percent, double rpm, string expected)
     {
-        var card = CreateCard("gpu-fan-1", HardwareNodeType.Gpu);
-        var controller = new FakeFanController("gpu-fan-1", HardwareNodeType.Gpu) { CurrentPercent = 30 };
-        var rpmSensor = new SensorReading("gpu-fan-1-rpm", "GPU fan", SensorType.Fan, 0, 0, 0, DateTimeOffset.UtcNow);
+        var card = CreateCard("fan-1", nodeType);
+        var controller = new FakeFanController("fan-1", nodeType) { CurrentPercent = percent };
+        var rpmSensor = new SensorReading("fan-1-rpm", "Fan", SensorType.Fan, rpm, rpm, rpm, DateTimeOffset.UtcNow);
 
         card.UpdateReadings(controller, rpmSensor);
 
-        Assert.Equal("Stopped (idle)", card.RpmDisplayText);
-    }
-
-    [Fact]
-    public void UpdateReadings_MotherboardFan_ZeroRpm_ShowsZeroRpm_NotStoppedIdle()
-    {
-        var card = CreateCard("fan-1", HardwareNodeType.Motherboard);
-        var controller = new FakeFanController("fan-1", HardwareNodeType.Motherboard) { CurrentPercent = 30 };
-        var rpmSensor = new SensorReading("fan-1-rpm", "CPU fan", SensorType.Fan, 0, 0, 0, DateTimeOffset.UtcNow);
-
-        card.UpdateReadings(controller, rpmSensor);
-
-        Assert.Equal("0 RPM", card.RpmDisplayText);
-    }
-
-    [Fact]
-    public void UpdateReadings_GpuFan_NonZeroRpm_ShowsOrdinaryRpmText()
-    {
-        var card = CreateCard("gpu-fan-1", HardwareNodeType.Gpu);
-        var controller = new FakeFanController("gpu-fan-1", HardwareNodeType.Gpu) { CurrentPercent = 60 };
-        var rpmSensor = new SensorReading("gpu-fan-1-rpm", "GPU fan", SensorType.Fan, 1800, 1800, 1800, DateTimeOffset.UtcNow);
-
-        card.UpdateReadings(controller, rpmSensor);
-
-        Assert.Equal("1800 RPM", card.RpmDisplayText);
+        Assert.Equal(expected, card.RpmDisplayText);
     }
 
     /// <summary>Minimal local <see cref="IFanController"/> fake - this test project has no
