@@ -198,8 +198,10 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
 
     public UpdatesViewModel(
         IWingetClient wingetClient, ISettingsStore settingsStore, IAppInUseDiagnosticsService appInUseDiagnostics,
-        IPendingUpdatesTracker pendingUpdatesTracker, IFileDialogService fileDialogs, ILogger<UpdatesViewModel> logger)
-        : this(wingetClient, settingsStore, appInUseDiagnostics, pendingUpdatesTracker, fileDialogs, logger, TimeProvider.System)
+        IPendingUpdatesTracker pendingUpdatesTracker, IFileDialogService fileDialogs,
+        PorchlightUpdateViewModel porchlightUpdate, ILogger<UpdatesViewModel> logger)
+        : this(wingetClient, settingsStore, appInUseDiagnostics, pendingUpdatesTracker, fileDialogs, porchlightUpdate,
+            logger, TimeProvider.System)
     {
     }
 
@@ -209,9 +211,11 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     public UpdatesViewModel(
         IWingetClient wingetClient, ISettingsStore settingsStore, IAppInUseDiagnosticsService appInUseDiagnostics,
         IPendingUpdatesTracker pendingUpdatesTracker, IFileDialogService fileDialogs,
-        ILogger<UpdatesViewModel> logger, TimeProvider timeProvider)
+        PorchlightUpdateViewModel porchlightUpdate, ILogger<UpdatesViewModel> logger, TimeProvider timeProvider)
     {
         _pendingUpdatesTracker = pendingUpdatesTracker;
+        PorchlightUpdate = porchlightUpdate;
+        PorchlightUpdate.PropertyChanged += OnPorchlightUpdateChanged;
         _fileDialogs = fileDialogs;
         _wingetClient = wingetClient;
         _reinstallWorkflow = new ReinstallWorkflow(wingetClient);
@@ -248,6 +252,10 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     public override int Order => 1;
 
     public override PageCategory Category => PageCategory.TuneUp;
+
+    /// <summary>The "Porchlight X.Y.Z is available" card - Porchlight's own update, separate from the
+    /// winget list below. See <c>docs/specs/23-self-update.md</c>.</summary>
+    public PorchlightUpdateViewModel PorchlightUpdate { get; }
 
     public ObservableCollection<UpdatePackageViewModel> Packages { get; }
 
@@ -437,9 +445,18 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         SummaryText = text;
     }
 
+    private void OnPorchlightUpdateChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PorchlightUpdateViewModel.IsUpdateAvailable))
+        {
+            UpdateBadge();
+        }
+    }
+
+    /// <summary>The nav badge counts winget updates plus one for a newer Porchlight, if there is one.</summary>
     private void UpdateBadge()
     {
-        var count = Packages.Count(p => !p.IsHiddenByDefault);
+        var count = Packages.Count(p => !p.IsHiddenByDefault) + (PorchlightUpdate.IsUpdateAvailable ? 1 : 0);
         Badge = count > 0 ? count.ToString(CultureInfo.InvariantCulture) : null;
     }
 
@@ -487,8 +504,9 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
 
     partial void OnCheckOnStartupChanged(bool value) => _settingsStore.Update(s => s.Updates.CheckOnStartup = value);
 
+    // The refresh button also re-checks for a new Porchlight version (a failed or offline check is silent).
     [RelayCommand(CanExecute = nameof(CanRefresh))]
-    private Task Refresh() => RefreshAsync(quiet: false);
+    private Task Refresh() => Task.WhenAll(PorchlightUpdate.CheckAsync(), RefreshAsync(quiet: false));
 
     private bool CanRefresh() => !IsBusy;
 
@@ -1361,6 +1379,8 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         }
 
         _disposed = true;
+        PorchlightUpdate.PropertyChanged -= OnPorchlightUpdateChanged;
+        PorchlightUpdate.Dispose();
         _logFlushTimer.Stop();
         Packages.CollectionChanged -= OnPackagesCollectionChanged;
         foreach (var row in Packages)

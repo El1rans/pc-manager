@@ -64,6 +64,21 @@ network connection (`Process.Start`/`ProcessStartInfo`, `Socket`/`TcpClient`, an
   to list what is available, without further action from the user. See Microsoft's own
   [privacy statement](https://privacy.microsoft.com/privacystatement) for what Microsoft's winget
   service receives. This can be turned off entirely via the toggle above.
+- **Checking for and installing a new version of Porchlight itself** (the card at the top of the
+  Updates page; see `docs/specs/23-self-update.md`). Porchlight makes this network call itself, with
+  .NET's `HttpClient` (`src/Porchlight.Core/SelfUpdate/`):
+  - *Version check* - one plain, unauthenticated `GET https://api.github.com/repos/El1rans/porchlight/releases/latest`
+    with a `User-Agent: Porchlight/<version>` header (the running version, e.g. `Porchlight/0.1.0`)
+    and `Accept: application/vnd.github+json`. Nothing else is sent: no cookies, no account, no
+    machine name, no identifiers. GitHub sees your IP address and that header, like for any web request.
+    It runs **at every app start unless "Check for updates when Porchlight starts" (Updates page) is
+    turned off**, and whenever you press Refresh on the Updates page. There is no other timer.
+  - *Download* - only when you press "Update now": a plain GET (same `User-Agent`) of the release's
+    installer and its `.sha256` file from `github.com`, which GitHub redirects to its own release
+    download hosts (`objects.githubusercontent.com` / `release-assets.githubusercontent.com`).
+    Downloads from any other host, or over http, are refused, and the installer is only run after its
+    SHA-256 matches the published checksum.
+  - Porchlight does not send anything to GitHub beyond that, and never contacts a Porchlight-operated server.
 - **"Get help" (remote support)**: Porchlight starts the locally installed AnyDesk process
   (`Process.Start`) to read its assigned address and to launch it. Porchlight never sends that
   AnyDesk address, or any other data, to any server of its own or of ours - the address is only
@@ -89,7 +104,8 @@ network connection (`Process.Start`/`ProcessStartInfo`, `Socket`/`TcpClient`, an
   its default it never leaves the local machine.
 - **No telemetry, crash reporting, or analytics.** Porchlight does not call home to any
   Porchlight-operated server, and runs no background network call other than the startup/Updates-page
-  winget check described above (both toggleable/user-initiated). Logs stay on disk under
+  winget check and the GitHub version check described above (both covered by the same startup toggle
+  or user-initiated). Logs stay on disk under
   `%APPDATA%\Porchlight\logs` and are never uploaded anywhere by the app.
 
 If a future change adds a new network call, this section must be updated in the same pull request

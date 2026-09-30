@@ -147,6 +147,12 @@ Name: "{commonstartup}\Porchlight"; Filename: "{app}\{#MyAppExeName}"; Tasks: st
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch Porchlight"; Flags: nowait postinstall skipifsilent
+; In-app update (docs/specs/23-self-update.md): Porchlight starts this installer with
+; /SILENT ... /RELAUNCH=1, then exits. The entry above is skipped for silent installs, so this one
+; starts the new version instead. Deliberately no "runasoriginaluser": an elevated Porchlight (needed
+; for sensors and fan control) stays elevated after updating. Not a postinstall entry, so it runs
+; without any wizard page - only when ShouldRelaunchAfterSilentInstall says so.
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait skipifnotsilent; Check: ShouldRelaunchAfterSilentInstall
 
 ; Removes the "start when I sign in" scheduled task Porchlight can register itself
 ; (docs/specs/24-start-at-login.md). The task name must match LoginLaunchTaskXml.TaskName. Setup
@@ -181,8 +187,50 @@ const
   LegacyInstallerRegistryKey = 'Software\PC Manager\Installer';
   LegacyInstallerParentRegistryKey = 'Software\PC Manager';
 
+  { In-app update (docs/specs/23-self-update.md): Porchlight starts this installer with
+    /RELAUNCH=1 and then exits. See InitializeSetup and ShouldRelaunchAfterSilentInstall. }
+  RELAUNCH_WAIT_MS = 30000;
+  RELAUNCH_POLL_MS = 250;
+
 var
   ComponentProgressPage: TOutputProgressWizardPage;
+
+{ True when Porchlight's in-app updater started this Setup (/RELAUNCH=1). The param constant below
+  expands to the switch's value, or 0 when it wasn't passed. (No curly braces inside this comment:
+  Pascal Script would end the comment at the first closing one.) }
+function IsRelaunchRequested(): Boolean;
+begin
+  Result := CompareText(ExpandConstant('{param:RELAUNCH|0}'), '1') = 0;
+end;
+
+{ Called by Setup before anything else. When the in-app updater started Setup, Porchlight is still
+  shutting down (it started Setup and exited right away), and a silent Setup aborts if AppMutex
+  still exists - so wait here for both of Porchlight's mutexes (the per-session and the Global\ one
+  - see AppMutex in [Setup]) to disappear, polling every RELAUNCH_POLL_MS for up to RELAUNCH_WAIT_MS.
+  If Porchlight is still running after that, carry on and let Setup's normal AppMutex handling
+  report it. Interactive installs (no /RELAUNCH) are unaffected. }
+function InitializeSetup(): Boolean;
+var
+  WaitedMs: Integer;
+begin
+  Result := True;
+  if not IsRelaunchRequested() then
+    Exit;
+
+  WaitedMs := 0;
+  while CheckForMutexes('{#MyAppMutex},Global\{#MyAppMutex}') and (WaitedMs < RELAUNCH_WAIT_MS) do
+  begin
+    Sleep(RELAUNCH_POLL_MS);
+    WaitedMs := WaitedMs + RELAUNCH_POLL_MS;
+  end;
+end;
+
+{ Check: function of the silent-only [Run] entry that starts the new version - true only for a
+  silent Setup started by the in-app updater. }
+function ShouldRelaunchAfterSilentInstall(): Boolean;
+begin
+  Result := IsRelaunchRequested();
+end;
 
 procedure InitializeWizard();
 begin

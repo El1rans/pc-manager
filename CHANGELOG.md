@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Self-update: an installed Porchlight now checks GitHub Releases for a newer version (at startup, if
+  "Check for updates when Porchlight starts" is on, and whenever you press Refresh on the Updates
+  page) and shows "Porchlight X.Y.Z is available" at the top of that page, with a "What's new" link
+  and an "Update now" button. Update now downloads the installer, checks its SHA-256 against the
+  release's checksum file, starts it (one Windows permission prompt), and Porchlight restarts itself on
+  the new version. A copy that wasn't installed with the installer only gets a link to the release
+  page. Downloads are accepted only from GitHub over https. Design and privacy details:
+  `docs/specs/23-self-update.md`, `docs/CODE_SIGNING_POLICY.md`.
 - "Start Porchlight when I sign in to Windows" option in the Notifications dialog
   (`docs/specs/24-start-at-login.md`). It registers a Task Scheduler task that starts Porchlight in the
   tray as administrator with no UAC prompt at sign-in, so every sensor works from the first minute;
