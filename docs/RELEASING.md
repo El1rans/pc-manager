@@ -70,6 +70,25 @@ sanity-check the installer before ever cutting a release. A real release is only
    published `.sha256` file, and (ideally, on a real or virtual Windows PC - never the machine
    used to develop Porchlight) run it through a fresh install and uninstall.
 
+## Releases feed the in-app updater
+
+Installed copies of Porchlight check `releases/latest` on this repository and offer the newest release
+to the user (`docs/specs/23-self-update.md`), so what `release.yml` publishes is an interface. Keep it
+stable:
+
+- The release must be a normal (non-draft, non-pre-release) release tagged exactly `vX.Y.Z`; anything
+  else is ignored by the updater (pre-releases are never offered).
+- The assets must stay named `Porchlight-Setup-X.Y.Z.exe` and `Porchlight-Setup-X.Y.Z.exe.sha256`, and
+  the checksum file must stay a single line `<sha256 hex> *Porchlight-Setup-X.Y.Z.exe`. If either
+  changes, change `src/Porchlight.Core/SelfUpdate/` in the same PR - otherwise in-app updates stop
+  working (the updater then just links to the release page).
+- The installer must keep its fixed `AppId`, `AppMutex` names and the `/RELAUNCH=1` handling in
+  `installer/Porchlight.iss`.
+- Once every release is signed through SignPath, set `SelfUpdatePolicy.RequireSignedInstaller` to
+  `true` (`src/Porchlight.Core/SelfUpdate/SelfUpdatePolicy.cs`) so the updater also refuses an installer
+  without a valid Authenticode signature. Do this only after the first signed release is published;
+  older unsigned releases are then no longer installable in-app from a newer client.
+
 ## Code signing (SignPath)
 
 Porchlight signs releases through the [SignPath Foundation](https://signpath.org/) program for

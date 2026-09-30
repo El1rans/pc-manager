@@ -23,6 +23,7 @@ public static class NotificationsFeature
         services.AddSingleton<AlertNotifier>();
         services.AddHostedService<AlertHostedService>();
         services.AddHostedService<ScheduledUpdateCheckHostedService>();
+        services.AddHostedService<LoginLaunchRefreshHostedService>();
 
         services.AddSingleton<INotificationsLauncher, NotificationsLauncher>();
         services.AddTransient<NotificationsViewModel>();

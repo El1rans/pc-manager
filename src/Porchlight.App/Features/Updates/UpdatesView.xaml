@@ -55,6 +55,46 @@
         <StackPanel Grid.Row="0" Margin="0,0,0,16">
             <TextBlock Text="Updates" Style="{StaticResource PageTitle}"/>
             <TextBlock Text="{Binding SummaryText}" Style="{StaticResource Secondary}" Margin="0,4,0,0"/>
+
+            <!-- Porchlight's own update (docs/specs/23-self-update.md): only shown when GitHub has a
+                 newer release. An installed copy gets "Update now"; a portable one a Download link. -->
+            <Border Style="{StaticResource Card}" Padding="12,10" Margin="0,12,0,0"
+                    DataContext="{Binding PorchlightUpdate}"
+                    Visibility="{Binding IsUpdateAvailable, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <DockPanel LastChildFill="True">
+                        <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                            <Button Content="Update now" Style="{DynamicResource AccentButtonStyle}"
+                                    Command="{Binding UpdateNowCommand}" MinWidth="120" Padding="14,6" Margin="8,0,0,0"
+                                    Visibility="{Binding ShowUpdateNowButton, Converter={StaticResource BoolToVis}}"/>
+                            <Button Content="Cancel" Command="{Binding CancelUpdateCommand}" Margin="8,0,0,0"
+                                    Visibility="{Binding IsWorking, Converter={StaticResource BoolToVis}}"/>
+                        </WrapPanel>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Headline}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                            <TextBlock Margin="0,2,0,0">
+                                <Hyperlink Command="{Binding OpenReleaseNotesCommand}">What's new</Hyperlink>
+                            </TextBlock>
+                        </StackPanel>
+                    </DockPanel>
+                    <TextBlock Text="{Binding ManualDownloadText}" Style="{StaticResource Secondary}"
+                               TextWrapping="Wrap" Margin="0,6,0,0"
+                               Visibility="{Binding ShowManualDownload, Converter={StaticResource BoolToVis}}"/>
+                    <TextBlock Margin="0,4,0,0"
+                               Visibility="{Binding ShowManualDownload, Converter={StaticResource BoolToVis}}">
+                        <Hyperlink Command="{Binding OpenReleaseNotesCommand}">Download</Hyperlink>
+                    </TextBlock>
+                    <StackPanel Margin="0,8,0,0"
+                                Visibility="{Binding IsWorking, Converter={StaticResource BoolToVis}}">
+                        <ProgressBar Height="6" Minimum="0" Maximum="100" Value="{Binding ProgressPercent, Mode=OneWay}"
+                                     IsIndeterminate="{Binding IsProgressIndeterminate}"/>
+                        <TextBlock Text="{Binding StatusText}" Style="{StaticResource Secondary}" Margin="0,4,0,0"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding ErrorText}" TextWrapping="Wrap" Margin="0,6,0,0"
+                               Foreground="{DynamicResource SystemFillColorCriticalBrush}"
+                               Visibility="{Binding ErrorText, Converter={StaticResource StringToVis}}"/>
+                </StackPanel>
+            </Border>
         </StackPanel>
 
         <!-- Toolbar -->

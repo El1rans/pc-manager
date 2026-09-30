@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Porchlight.App.Shell;
 using Porchlight.Core.Settings;
+using Porchlight.Core.Startup;
 
 namespace Porchlight.App.Features.Notifications;
 
@@ -9,6 +10,7 @@ namespace Porchlight.App.Features.Notifications;
 public sealed partial class NotificationsViewModel : ObservableObject
 {
     private readonly ISettingsStore _settingsStore;
+    private readonly ILoginLaunchService _loginLaunch;
     private readonly IThemeService? _themeService;
 
     [ObservableProperty]
@@ -32,9 +34,29 @@ public sealed partial class NotificationsViewModel : ObservableObject
     [ObservableProperty]
     private ThemeOption _selectedTheme;
 
-    public NotificationsViewModel(ISettingsStore settingsStore, IThemeService? themeService = null)
+    /// <summary>True while the sign-in checkbox's change is being applied, and until its real state
+    /// has been read.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanChangeStartAtLogin))]
+    private bool _isStartAtLoginBusy = true;
+
+    /// <summary>Friendly text shown under the checkbox when enabling/disabling failed.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasStartAtLoginError))]
+    private string? _startAtLoginError;
+
+    /// <summary>Reflects the real scheduled-task state, not a saved setting. Changing it (by the user)
+    /// registers or removes the task.</summary>
+    [ObservableProperty]
+    private bool _startAtLogin;
+
+    /// <summary>Set while the property is changed by code (loading, reverting) so it does not re-run the task.</summary>
+    private bool _suppressStartAtLogin;
+
+    public NotificationsViewModel(ISettingsStore settingsStore, ILoginLaunchService loginLaunch, IThemeService? themeService = null)
     {
         _settingsStore = settingsStore;
+        _loginLaunch = loginLaunch;
         _themeService = themeService;
         var settings = settingsStore.Current.Notifications;
 
@@ -61,6 +83,79 @@ public sealed partial class NotificationsViewModel : ObservableObject
         new(UpdateCheckSchedule.Weekly, "Every week"),
         new(UpdateCheckSchedule.Never, "Never"),
     ];
+
+    public bool CanChangeStartAtLogin => !IsStartAtLoginBusy;
+
+    public bool HasStartAtLoginError => !string.IsNullOrEmpty(StartAtLoginError);
+
+    /// <summary>Reads the real task state; called when the dialog opens. If it cannot be read the
+    /// box stays off and is enabled so the user can still try.</summary>
+    public async Task LoadStartAtLoginAsync()
+    {
+        try
+        {
+            var state = await Task.Run(() => _loginLaunch.GetStateAsync(CancellationToken.None)).ConfigureAwait(true);
+            SetStartAtLoginQuietly(state.Exists);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Reading is best-effort: the checkbox simply starts unchecked.
+            SetStartAtLoginQuietly(false);
+        }
+        finally
+        {
+            IsStartAtLoginBusy = false;
+        }
+    }
+
+    partial void OnStartAtLoginChanged(bool value)
+    {
+        if (_suppressStartAtLogin)
+        {
+            return;
+        }
+
+        _ = ApplyStartAtLoginAsync(value);
+    }
+
+    private async Task ApplyStartAtLoginAsync(bool enable)
+    {
+        StartAtLoginError = null;
+        IsStartAtLoginBusy = true;
+        try
+        {
+            var result = await Task.Run(
+                () => enable ? _loginLaunch.EnableAsync(CancellationToken.None) : _loginLaunch.DisableAsync(CancellationToken.None))
+                .ConfigureAwait(true);
+            if (!result.Succeeded)
+            {
+                SetStartAtLoginQuietly(!enable);
+                StartAtLoginError = result.Message ?? "Porchlight could not change this setting.";
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            SetStartAtLoginQuietly(!enable);
+            StartAtLoginError = "Porchlight could not change this setting.";
+        }
+        finally
+        {
+            IsStartAtLoginBusy = false;
+        }
+    }
+
+    private void SetStartAtLoginQuietly(bool value)
+    {
+        _suppressStartAtLogin = true;
+        try
+        {
+            StartAtLogin = value;
+        }
+        finally
+        {
+            _suppressStartAtLogin = false;
+        }
+    }
 
     partial void OnKeepRunningInTrayChanged(bool value) => _settingsStore.Update(s => s.Notifications.KeepRunningInTray = value);
 
