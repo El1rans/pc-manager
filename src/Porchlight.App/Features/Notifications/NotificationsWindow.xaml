@@ -10,6 +10,9 @@
         WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip"
         Icon="/Assets/porchlight.ico"
         Background="{DynamicResource ApplicationBackgroundBrush}">
+  <Window.Resources>
+    <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+  </Window.Resources>
   <ScrollViewer VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="24">
       <TextBlock Text="Notifications" Style="{StaticResource PageTitle}" FontSize="20"/>
@@ -22,6 +25,20 @@
           <CheckBox Content="Keep Porchlight running in the tray when I close the window"
                     IsChecked="{Binding KeepRunningInTray}"
                     AutomationProperties.Name="Keep Porchlight running in the tray when I close the window"/>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+        <StackPanel>
+          <TextBlock Text="When I sign in" Style="{StaticResource CardTitle}"/>
+          <CheckBox Content="Start Porchlight when I sign in to Windows"
+                    IsChecked="{Binding StartAtLogin}" IsEnabled="{Binding CanChangeStartAtLogin}"
+                    AutomationProperties.Name="Start Porchlight when I sign in to Windows"/>
+          <TextBlock Style="{StaticResource Secondary}" Margin="0,8,0,0" TextWrapping="Wrap"
+                     Text="Starts in the tray, as administrator, so every sensor works. Turning this on or off asks for admin permission once."/>
+          <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{DynamicResource SystemFillColorCriticalBrush}"
+                     Text="{Binding StartAtLoginError}"
+                     Visibility="{Binding HasStartAtLoginError, Converter={StaticResource BoolToVisibility}}"/>
         </StackPanel>
       </Border>
 

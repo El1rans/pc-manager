@@ -319,10 +319,11 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
 
         await RunOnUiThreadAsync(() =>
         {
-            // Until the counters are ready their values are null because they are still warming
-            // up, not because they failed - leave those tiles on their neutral placeholder rather
-            // than counting misses toward "Not available on this PC".
-            if (countersReady)
+            // Until the counters are ready, GPU/disk are null because they are still warming up,
+            // not because they failed - leave those tiles on their neutral placeholder rather than
+            // counting misses toward "Not available on this PC". CPU has a quicker source meanwhile,
+            // so it shows whenever it has a value.
+            if (countersReady || snapshot.CpuPercent is not null)
             {
                 CpuTile.Update(snapshot.CpuPercent, FormatPercent(snapshot.CpuPercent), $"{logicalProcessors} logical processors");
             }

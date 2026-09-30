@@ -10,6 +10,75 @@ so you can help before a small problem turns into a phone call.
 
 Built with C# / .NET (WPF).
 
+## A quick tour
+
+Porchlight has a left-hand menu with a few plain-named sections; some have tabs across the top for
+related pages. (These screenshots use made-up demo data, not a real PC.)
+
+**Overview - how is the PC doing right now?**
+The Dashboard shows live tiles for CPU, memory, graphics, disk and network speed, how full each
+drive is (with a "Low space" warning), and which programs are using the most resources. It's the
+first thing you look at when someone says "the computer feels slow".
+
+![Dashboard showing live CPU, memory, GPU, disk and network tiles, drive space bars with a low-space warning, and a list of the busiest programs](docs/screenshots/dashboard.png)
+
+**Tune-up > Updates - keep programs up to date**
+Lists the programs that have a newer version available. Tick the ones you want and press
+**Update selected**; Porchlight does the rest. Programs whose version can't be read, or that are
+pinned, are flagged in the Notes column so nothing surprising gets installed.
+
+![Updates page listing programs with an installed and an available version, checkboxes to pick which to update, and an Update selected button](docs/screenshots/updates.png)
+
+**Hardware > Sensors & fans - is it running hot?**
+The big tiles at the top give the headline numbers (CPU and graphics temperature, power draw,
+hottest fan) in plain units. Below them, each part of the PC has a collapsed card you can open for
+the full list of readings.
+
+![Hardware page with tiles for CPU temperature, GPU temperature, CPU power and hottest fan, above collapsed cards for the processor, graphics card and other components](docs/screenshots/hardware.png)
+
+**Hardware > Lighting - RGB lights in one place**
+Pick a colour and brightness for every RGB device at once, or set each device (motherboard,
+keyboard, ...) on its own. There is also a section for animated effects.
+
+![Lighting page with a colour wheel, quick colour swatches, a brightness slider and a list of RGB devices](docs/screenshots/lighting.png)
+
+**Get help - let family connect in two clicks**
+Shows a short address to read out over the phone, plain step-by-step instructions, and a reminder
+to only accept a connection from someone you are talking to right now. It uses AnyDesk to make
+the connection.
+
+![Get help page showing the PC's remote-help address, a three-step how-it-works list and a safety warning about unexpected callers](docs/screenshots/get-help.png)
+
+## Pages
+
+Every page in the app, grouped the way the left-hand menu groups them. Each link opens a guide that
+explains everything on that page.
+
+**Overview**
+- [Dashboard](docs/pages/dashboard.md) - live CPU, memory, GPU, disk and network tiles, drive space, busiest programs and a fact sheet about the PC.
+
+**Tune-up**
+- [Updates](docs/pages/updates.md) - see which programs have updates and install the ones you pick.
+- [Startup apps](docs/pages/startup-apps.md) - choose which programs start with Windows.
+- [Free up space](docs/pages/free-up-space.md) - clear out leftovers and find what is filling a drive.
+- [Health check](docs/pages/health-check.md) - disk and battery health, Windows repair, restore points and recent problems.
+
+**Internet & safety**
+- [Internet](docs/pages/internet.md) - connection details, a "fix my internet" checker, a speed test and which programs use the internet.
+- [Browser add-ons](docs/pages/browser-add-ons.md) - list the browser add-ons and flag the ones worth a second look.
+
+**Hardware**
+- [Hardware](docs/pages/hardware.md) ("Sensors & fans" tab) - temperatures, speeds and power, plus optional fan control.
+- [Lighting](docs/pages/lighting.md) - colours, effects and profiles for the PC's RGB lights.
+
+**Get help**
+- [Get help](docs/pages/get-help.md) - let family connect to help, and send them a check-up.
+- [Web console](docs/pages/web-console.md) - watch this PC's stats from a phone or another computer (read-only).
+
+**Other windows** (opened from the buttons at the bottom of the left menu)
+- [Set up optional features](docs/pages/set-up-optional-features.md) - install AnyDesk, OpenRGB and the PawnIO driver.
+- [Notifications](docs/pages/notifications.md) - tray behaviour, which alerts you get, and how often to check for updates.
+
 ## Status
 
 Foundation stage: a production-shaped app shell (solution layout, host + DI, logging, settings,

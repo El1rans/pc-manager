@@ -27,6 +27,10 @@ public sealed partial class PerformanceSampler : IPerformanceSampler
     /// <see cref="SampleWithoutWaiting"/> on another.</summary>
     private volatile bool _initialized;
 
+    /// <summary>Previous <c>GetSystemTimes</c> reading, for the CPU value reported while the
+    /// counters are still warming up (see <see cref="SampleCpuFromSystemTimes"/>).</summary>
+    private (long Idle, long Kernel, long User)? _previousSystemTimes;
+
     private Dictionary<string, CounterSample> _previousGpuSamples = [];
     private Dictionary<string, NetworkAdapterSample> _previousNetworkSamples = new(StringComparer.Ordinal);
     private long _cumulativeDownloadBytes;
@@ -42,6 +46,29 @@ public sealed partial class PerformanceSampler : IPerformanceSampler
         // freeze the window before it is even shown. Deferred to WarmUp() (the dashboard starts it
         // on a background thread as soon as it is created) or the first Sample() call, whichever
         // comes first; the lock makes the two safe to race.
+        //
+        // Meanwhile CPU comes from GetSystemTimes, which is instant - baseline it now so the very
+        // first sample already has an interval to measure over.
+        _previousSystemTimes = ReadSystemTimes();
+    }
+
+    /// <summary>
+    /// Nearly all of the ~1 second setup (measured 940-990 ms warm, 5 s+ right after boot) is
+    /// Windows loading the performance-counter library on the first counter call in the process;
+    /// every counter after that takes milliseconds. Call this as early as possible at app startup,
+    /// on a background thread, so that load overlaps building the window instead of starting only
+    /// once the dashboard exists. Best-effort and never throws.
+    /// </summary>
+    public static void PrewarmCounterLibrary()
+    {
+        try
+        {
+            PerformanceCounterCategory.Exists("Processor Information");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException or Win32Exception)
+        {
+            // Nothing to prewarm; EnsureInitialized() logs and degrades on its own later.
+        }
     }
 
     public bool IsWarmedUp => _initialized;
@@ -55,11 +82,13 @@ public sealed partial class PerformanceSampler : IPerformanceSampler
             return Sample();
         }
 
-        // Memory and network need no counters, so they can show while WarmUp() is still running.
+        // Memory, network and (via GetSystemTimes) CPU need no counters, so they can show while
+        // WarmUp() is still running.
+        var cpuPercent = SampleCpuFromSystemTimes();
         var (memoryUsed, memoryTotal) = SampleMemory();
         var (download, upload) = SampleNetwork();
         return new PerformanceSnapshot(
-            null,
+            cpuPercent,
             memoryUsed,
             memoryTotal,
             null,
@@ -146,6 +175,28 @@ public sealed partial class PerformanceSampler : IPerformanceSampler
             _initialized = true;
         }
     }
+
+    /// <summary>CPU busy % since the previous call, from <c>GetSystemTimes</c> (kernel time includes
+    /// idle time, so busy = 1 - idle / (kernel + user)). Only used until the counters are ready: it
+    /// is instant, but reads a little differently from Task Manager's "% Processor Utility" on a
+    /// CPU that boosts. Null when there is no previous reading or no time has passed.</summary>
+    private double? SampleCpuFromSystemTimes()
+    {
+        var current = ReadSystemTimes();
+        var previous = _previousSystemTimes;
+        _previousSystemTimes = current;
+        if (current is not { } now || previous is not { } before)
+        {
+            return null;
+        }
+
+        var idle = now.Idle - before.Idle;
+        var total = (now.Kernel - before.Kernel) + (now.User - before.User);
+        return total <= 0 ? null : Math.Clamp(100.0 * (total - idle) / total, 0, 100);
+    }
+
+    private static (long Idle, long Kernel, long User)? ReadSystemTimes() =>
+        GetSystemTimes(out var idle, out var kernel, out var user) ? (idle, kernel, user) : null;
 
     private static (long? Used, long? Total) SampleMemory()
     {
@@ -350,6 +401,10 @@ public sealed partial class PerformanceSampler : IPerformanceSampler
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GlobalMemoryStatusEx(ref MemoryStatusEx buffer);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetSystemTimes(out long idleTime, out long kernelTime, out long userTime);
 #pragma warning restore SYSLIB1054
 
     // Source-generated (guarded by IsEnabled internally) so the message is never formatted when

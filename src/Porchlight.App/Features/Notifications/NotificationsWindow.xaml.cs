@@ -14,6 +14,9 @@ public partial class NotificationsWindow : Window
         // See WhiteFlashGuard: without this, the freshly shown window can paint solid white until
         // the user clicks it.
         WhiteFlashGuard.Attach(this);
+
+        // The sign-in checkbox shows the real scheduled-task state, read once the dialog opens.
+        Loaded += async (_, _) => await viewModel.LoadStartAtLoginAsync().ConfigureAwait(true);
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();

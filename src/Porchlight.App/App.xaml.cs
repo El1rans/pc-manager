@@ -26,7 +26,9 @@ using Porchlight.Core.Components;
 using Porchlight.Core.Elevation;
 using Porchlight.Core.Hardware;
 using Porchlight.Core.Lighting.Effects;
+using Porchlight.Core.Monitoring;
 using Porchlight.Core.Settings;
+using Porchlight.Core.Startup;
 using Serilog;
 using Serilog.Extensions.Logging;
 
@@ -114,6 +116,11 @@ public partial class App : System.Windows.Application, IDisposable
             return;
         }
 
+        // Start Windows loading its performance-counter library now (about a second, far longer
+        // right after boot) so it overlaps building the host and window, and the dashboard's CPU,
+        // GPU and disk tiles fill in sooner. Off the UI thread; never throws.
+        _ = Task.Run(PerformanceSampler.PrewarmCounterLibrary);
+
         AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         DispatcherUnhandledException += OnDispatcherUnhandledException;
@@ -156,11 +163,25 @@ public partial class App : System.Windows.Application, IDisposable
 
             var mainWindow = _host.Services.GetRequiredService<MainWindow>();
             MainWindow = mainWindow;
-            mainWindow.Show();
 
             var shellWindows = _host.Services.GetRequiredService<IShellWindowService>();
             _singleInstance.StartListening(shellWindows.ShowMainWindow);
             _host.Services.GetRequiredService<TrayService>().Start();
+
+            // "--tray" (the sign-in task, spec 24) starts hidden: the window exists (so the tray's
+            // Open works and WhiteFlashGuard cloaks it on its first real Show) but stays unshown.
+            // Never hide it without a tray icon, or the app would be invisible and unreachable.
+            var startHidden = e.Args.Contains(LoginLaunchTaskXml.TrayArgument, StringComparer.OrdinalIgnoreCase);
+            if (startHidden && !_host.Services.GetRequiredService<ITrayIcon>().IsVisible)
+            {
+                logger.LogWarning("Started with --tray but the tray icon is not available; showing the window instead.");
+                startHidden = false;
+            }
+
+            if (!startHidden)
+            {
+                mainWindow.Show();
+            }
 
             if (!settingsStore.Current.Setup.FirstRunCompleted)
             {

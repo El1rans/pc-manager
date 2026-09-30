@@ -55,7 +55,7 @@ public sealed class DashboardViewModelTests
     }
 
     [Fact]
-    public async Task FirstTick_ShowsMemoryImmediately_WhileCountersAreStillWarmingUp()
+    public async Task FirstTick_ShowsCpuAndMemoryImmediately_WhileCountersAreStillWarmingUp()
     {
         var sampler = new WarmingUpSampler();
         using var viewModel = new DashboardViewModel(
@@ -75,7 +75,9 @@ public sealed class DashboardViewModelTests
         }
 
         Assert.Equal("50%", viewModel.MemoryTile.ValueText);
-        Assert.Equal("–", viewModel.CpuTile.ValueText);
+        Assert.Equal("25%", viewModel.CpuTile.ValueText);
+        Assert.Equal("–", viewModel.GpuTile.ValueText);
+        Assert.Equal("–", viewModel.DiskTile.ValueText);
         Assert.Equal(0, sampler.BlockingSampleCalls);
     }
 
@@ -98,7 +100,7 @@ public sealed class DashboardViewModelTests
         }
 
         public PerformanceSnapshot SampleWithoutWaiting() =>
-            new(null, 50, 100, null, null, null, null, null, null, 0, 0);
+            new(25, 50, 100, null, null, null, null, null, null, 0, 0);
 
         public void Dispose()
         {
