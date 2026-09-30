@@ -14,7 +14,7 @@ These are the programs that start by themselves when you sign in to Windows. Too
 
 ## Each program in the list
 
-- **Name**, with the **publisher** and where the entry comes from (for example the Startup folder or the registry).
+- **Name**, with the **publisher** and who it starts for: **Your account** (just you) or **All users** (everyone who signs in to this PC).
 - **A hint** - a short plain-language note about what the program is.
 - **Recommended to keep** - a green tick on things Porchlight thinks you should leave on (for example security software).
 - **Status** - whether it currently starts with Windows.
