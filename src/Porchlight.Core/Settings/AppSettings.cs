@@ -6,6 +6,8 @@ namespace Porchlight.Core.Settings;
 /// </summary>
 public sealed class AppSettings
 {
+    public AppearanceSettings Appearance { get; set; } = new();
+
     public UpdatesSettings Updates { get; set; } = new();
 
     public HardwareSettings Hardware { get; set; } = new();

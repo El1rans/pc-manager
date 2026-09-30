@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Theme setting: choose "Match Windows" (default), "Light" or "Dark" in the new "Appearance" card of the
+  Notifications dialog; the choice is saved and applied to all open windows immediately
+  (`docs/specs/25-theme-setting.md`). The sidebar and tab badge text now uses the theme's own
+  on-accent colour instead of fixed white.
 - Self-update: an installed Porchlight now checks GitHub Releases for a newer version (at startup, if
   "Check for updates when Porchlight starts" is on, and whenever you press Refresh on the Updates
   page) and shows "Porchlight X.Y.Z is available" at the top of that page, with a "What's new" link

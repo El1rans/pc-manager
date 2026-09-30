@@ -21,6 +21,16 @@
 
       <Border Style="{StaticResource Card}" Margin="0,0,0,12">
         <StackPanel>
+          <TextBlock Text="Appearance" Style="{StaticResource CardTitle}"/>
+          <TextBlock Text="Theme" Margin="0,0,0,4"/>
+          <ComboBox ItemsSource="{Binding ThemeOptions}" SelectedItem="{Binding SelectedTheme}"
+                    DisplayMemberPath="Label" HorizontalAlignment="Left" MinWidth="160"
+                    AutomationProperties.Name="Theme"/>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+        <StackPanel>
           <TextBlock Text="When I close the window" Style="{StaticResource CardTitle}"/>
           <CheckBox Content="Keep Porchlight running in the tray when I close the window"
                     IsChecked="{Binding KeepRunningInTray}"

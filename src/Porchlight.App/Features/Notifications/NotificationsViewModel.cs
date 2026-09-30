@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Porchlight.App.Shell;
 using Porchlight.Core.Settings;
 using Porchlight.Core.Startup;
 
@@ -10,6 +11,7 @@ public sealed partial class NotificationsViewModel : ObservableObject
 {
     private readonly ISettingsStore _settingsStore;
     private readonly ILoginLaunchService _loginLaunch;
+    private readonly IThemeService? _themeService;
 
     [ObservableProperty]
     private bool _keepRunningInTray;
@@ -28,6 +30,9 @@ public sealed partial class NotificationsViewModel : ObservableObject
 
     [ObservableProperty]
     private ScheduleOption _selectedSchedule;
+
+    [ObservableProperty]
+    private ThemeOption _selectedTheme;
 
     /// <summary>True while the sign-in checkbox's change is being applied, and until its real state
     /// has been read.</summary>
@@ -48,10 +53,11 @@ public sealed partial class NotificationsViewModel : ObservableObject
     /// <summary>Set while the property is changed by code (loading, reverting) so it does not re-run the task.</summary>
     private bool _suppressStartAtLogin;
 
-    public NotificationsViewModel(ISettingsStore settingsStore, ILoginLaunchService loginLaunch)
+    public NotificationsViewModel(ISettingsStore settingsStore, ILoginLaunchService loginLaunch, IThemeService? themeService = null)
     {
         _settingsStore = settingsStore;
         _loginLaunch = loginLaunch;
+        _themeService = themeService;
         var settings = settingsStore.Current.Notifications;
 
         // Assigned to the fields, not the properties: loading must not write settings back.
@@ -61,7 +67,15 @@ public sealed partial class NotificationsViewModel : ObservableObject
         _alertUpdates = settings.AlertUpdates;
         _alertRestartPending = settings.AlertRestartPending;
         _selectedSchedule = ScheduleOptions.FirstOrDefault(o => o.Value == settings.UpdateCheckSchedule) ?? ScheduleOptions[0];
+        _selectedTheme = ThemeOptions.FirstOrDefault(o => o.Value == settingsStore.Current.Appearance.Theme) ?? ThemeOptions[0];
     }
+
+    public IReadOnlyList<ThemeOption> ThemeOptions { get; } =
+    [
+        new(AppTheme.System, "Match Windows"),
+        new(AppTheme.Light, "Light"),
+        new(AppTheme.Dark, "Dark"),
+    ];
 
     public IReadOnlyList<ScheduleOption> ScheduleOptions { get; } =
     [
@@ -155,4 +169,10 @@ public sealed partial class NotificationsViewModel : ObservableObject
 
     partial void OnSelectedScheduleChanged(ScheduleOption value) =>
         _settingsStore.Update(s => s.Notifications.UpdateCheckSchedule = value.Value);
+
+    partial void OnSelectedThemeChanged(ThemeOption value)
+    {
+        _settingsStore.Update(s => s.Appearance.Theme = value.Value);
+        _themeService?.Apply(value.Value);
+    }
 }

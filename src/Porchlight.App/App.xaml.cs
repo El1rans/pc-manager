@@ -75,6 +75,7 @@ public partial class App : System.Windows.Application, IDisposable
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        // Until settings are loaded (below) follow Windows; the saved choice replaces this before any window exists.
         ThemeMode = ThemeMode.System;
 
         var logPath = BuildLogPath();
@@ -142,6 +143,9 @@ public partial class App : System.Windows.Application, IDisposable
 
             _host = builder.Build();
             Services = _host.Services;
+
+            // Before any window is created, so nothing ever paints in the wrong theme.
+            _host.Services.GetRequiredService<IThemeService>().Apply(_host.Services.GetRequiredService<ISettingsStore>().Current.Appearance.Theme);
 
             // The tray icon owns a message-only HwndSource, which must be created on this (STA, UI)
             // thread. Hosted services that raise alerts depend on it, and StartAsync below resolves

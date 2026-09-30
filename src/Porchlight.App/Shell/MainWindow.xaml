@@ -118,7 +118,7 @@
                                 <Border Grid.Column="2" Background="{DynamicResource AccentFillColorDefaultBrush}"
                                         CornerRadius="8" Padding="6,2" Margin="8,0,0,0"
                                         Visibility="{Binding Badge, Converter={StaticResource StringToVis}}">
-                                    <TextBlock Text="{Binding Badge}" FontSize="11" Foreground="White"/>
+                                    <TextBlock Text="{Binding Badge}" FontSize="11" Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"/>
                                 </Border>
                             </Grid>
                         </DataTemplate>
@@ -147,7 +147,7 @@
                             <Border Background="{DynamicResource AccentFillColorDefaultBrush}"
                                     CornerRadius="8" Padding="6,2" Margin="8,0,0,0"
                                     Visibility="{Binding Badge, Converter={StaticResource StringToVis}}">
-                                <TextBlock Text="{Binding Badge}" FontSize="11" Foreground="White"/>
+                                <TextBlock Text="{Binding Badge}" FontSize="11" Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"/>
                             </Border>
                         </StackPanel>
                     </DataTemplate>
