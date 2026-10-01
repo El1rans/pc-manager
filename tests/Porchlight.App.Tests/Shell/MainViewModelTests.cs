@@ -2,7 +2,6 @@ using System.ComponentModel;
 using System.Windows;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging.Abstractions;
-using Porchlight.App.Features.Setup;
 using Porchlight.App.Shell;
 using Xunit;
 
@@ -83,13 +82,6 @@ public sealed class MainViewModelTests
         public FrameworkElement GetOrCreateView(IPage page) => null!;
     }
 
-    private sealed class FakeSetupLauncher : ISetupLauncher
-    {
-        public void ShowSetup()
-        {
-        }
-    }
-
     private sealed record Setup(MainViewModel Vm, DashPage Dash, UpdatesPage Updates, StartupPage Startup, HelpPage Help);
 
     private static MainViewModel Create(IEnumerable<IPage> pages, IPageNavigator? navigator = null) =>
@@ -97,7 +89,6 @@ public sealed class MainViewModelTests
             pages,
             new FakeShellService(),
             new FakePageViewLocator(),
-            new FakeSetupLauncher(),
             navigator ?? new PageNavigator(),
             NullLogger<MainViewModel>.Instance);
 
@@ -134,12 +125,14 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
-    public void CategoryCatalog_HasTheFiveSpecCategories_OnlyHelpPinned()
+    public void CategoryCatalog_HasTheSixCategories_HelpAndSettingsPinned_SettingsLast()
     {
         var all = PageCategoryCatalog.All.ToList();
 
-        Assert.Equal(5, all.Count);
-        Assert.Equal([PageCategory.Help], all.Where(c => c.IsPinnedToBottom).Select(c => c.Category));
+        Assert.Equal(6, all.Count);
+        Assert.Equal(
+            [PageCategory.Help, PageCategory.Settings],
+            all.Where(c => c.IsPinnedToBottom).OrderBy(c => c.Order).Select(c => c.Category));
         Assert.Equal(
             [PageCategory.Overview, PageCategory.TuneUp, PageCategory.InternetAndSafety, PageCategory.Hardware],
             all.Where(c => !c.IsPinnedToBottom).OrderBy(c => c.Order).Select(c => c.Category));

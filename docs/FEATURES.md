@@ -2,8 +2,8 @@
 
 A technical reference of what Porchlight does. For a friendlier walk through each page, see the [page guides](../README.md#pages).
 
-- App shell with a navigation rail of five entries - Overview, Tune-up (Updates, Startup apps, Free up space, Health check), Internet & safety (Internet, Browser add-ons),
-  Hardware (Sensors & fans, Lighting) and Get help (Get help, Web console) - with a tab row above the page for categories that hold more than one, following
+- App shell with a navigation rail of six entries - Overview, Tune-up (Updates, Startup apps, Free up space, Health check), Internet & safety (Internet, Browser add-ons),
+  Hardware (Sensors & fans, Lighting) Get help (Get help, Web console) and Settings (General, Notifications, Optional features; both of the last two are pinned at the bottom) - with a tab row above the page for categories that hold more than one, following
   Windows light/dark theme, with the app version shown in the sidebar footer.
 - Browser add-ons page: read-only list of the add-ons installed in Edge, Chrome, Brave and Firefox
   (every profile), each with a plain-language note on what it can do (read all websites, see
@@ -17,8 +17,8 @@ A technical reference of what Porchlight does. For a friendlier walk through eac
 - Logs written to `%APPDATA%\Porchlight\logs`.
 - Admin elevation: the sidebar shows whether the app is running as administrator and can relaunch
   elevated.
-- First-run setup: on first launch (and any time after, via "Set up optional features" in the
-  sidebar), choose which optional third-party tools to install - AnyDesk (remote help), OpenRGB
+- First-run setup: on first launch (and any time after, via Settings > Optional features, which also has a
+  "Run first-time setup again" button), choose which optional third-party tools to install - AnyDesk (remote help), OpenRGB
   (lighting) and the PawnIO driver (hardware sensors/fan control). Already-installed tools are
   detected and skipped. Feature pages that need one of these show a shared status card and can
   install/start it in place, without restarting the app.
@@ -130,11 +130,9 @@ A technical reference of what Porchlight does. For a friendlier walk through eac
   available), app updates ready, and a restart pending for over 3 days - each type can be turned
   off, each shown at most once a day, and clicking one opens the relevant page. App updates are
   checked on a schedule (every day by default, or weekly/never); Porchlight only looks, it never
-  installs by itself. All of it is configured in the small Notifications dialog (tray menu or sidebar
-  footer). See `specs/15-tray-and-alerts.md`.
+  installs by itself. All of it is configured on the Settings > Notifications page (tray menu "Notifications settings" opens it). See `specs/15-tray-and-alerts.md`.
 
-- Theme setting: "Match Windows" (default), "Light" or "Dark", chosen in an "Appearance" card at the top of
-  the Notifications dialog and applied to every open window immediately. See
+- Theme setting: "Match Windows" (default), "Light" or "Dark", chosen in the "Appearance" card on Settings > General and applied to every open window immediately. See
   `specs/25-theme-setting.md`.
 - Web console (read-only): turn it on from the "Web console" page to watch this PC's live stats
   (CPU, memory, GPU, disk, network, temperatures, busiest apps, drives, system info) from a browser

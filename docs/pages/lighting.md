@@ -2,7 +2,7 @@
 
 **Where to find it:** Hardware > Lighting.
 
-Controls the RGB lights in the PC (motherboard, memory, graphics card, keyboard and so on) from one place. It works through the optional **OpenRGB** component, which Porchlight can install for you (see [Set up optional features](set-up-optional-features.md)). Without OpenRGB the page shows a card offering to install it.
+Controls the RGB lights in the PC (motherboard, memory, graphics card, keyboard and so on) from one place. It works through the optional **OpenRGB** component, which Porchlight can install for you (see [Settings > Optional features](settings.md#optional-features)). Without OpenRGB the page shows a card offering to install it.
 
 ![Lighting page with a colour wheel, quick colour swatches, a brightness slider and a list of RGB devices](../screenshots/lighting.png)
 

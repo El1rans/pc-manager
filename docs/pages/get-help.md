@@ -2,7 +2,7 @@
 
 **Where to find it:** Get help (pinned at the bottom of the left menu). It has two tabs: **Get help** and [Web console](web-console.md).
 
-Lets someone you trust connect to this PC to help, in two clicks. It uses **AnyDesk**, a remote-help program; Porchlight installs it if you choose (see [Set up optional features](set-up-optional-features.md)), reads its address, and starts it. Porchlight never changes AnyDesk's security settings.
+Lets someone you trust connect to this PC to help, in two clicks. It uses **AnyDesk**, a remote-help program; Porchlight installs it if you choose (see [Settings > Optional features](settings.md#optional-features)), reads its address, and starts it. Porchlight never changes AnyDesk's security settings.
 
 ![Get help page showing the PC's remote-help address, a three-step how-it-works list and a safety warning about unexpected callers](../screenshots/get-help.png)
 

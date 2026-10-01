@@ -2,7 +2,7 @@
 
 **Where to find it:** Hardware > Sensors & fans (the tab is called "Sensors & fans"; the page heading is "Hardware"). Lighting is the other tab in this category.
 
-Shows what the PC's parts are doing - temperatures, speeds, power, fan speeds - and, if you want, lets Porchlight control the fans. Full sensor access and fan control need **administrator rights** and, for many PCs, the optional **PawnIO** driver (see [Set up optional features](set-up-optional-features.md)).
+Shows what the PC's parts are doing - temperatures, speeds, power, fan speeds - and, if you want, lets Porchlight control the fans. Full sensor access and fan control need **administrator rights** and, for many PCs, the optional **PawnIO** driver (see [Settings > Optional features](settings.md#optional-features)).
 
 ![Hardware page with tiles for CPU temperature, GPU temperature, CPU power and hottest fan, above collapsed cards for the processor, graphics card and other components](../screenshots/hardware.png)
 

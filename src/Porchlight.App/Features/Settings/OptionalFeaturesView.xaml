@@ -1,0 +1,28 @@
+<UserControl x:Class="Porchlight.App.Features.Settings.OptionalFeaturesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="clr-namespace:Porchlight.App.Controls"
+             xmlns:settings="clr-namespace:Porchlight.App.Features.Settings"
+             d:DataContext="{d:DesignInstance settings:OptionalFeaturesViewModel}"
+             mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="600">
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel MaxWidth="640" HorizontalAlignment="Left" Margin="0,0,16,16">
+      <TextBlock Style="{StaticResource Secondary}" Margin="0,0,0,16" TextWrapping="Wrap"
+                 Text="Porchlight works on its own. These extra tools add remote help, lighting control and fan and temperature access. Installing needs an internet connection."/>
+
+      <ItemsControl ItemsSource="{Binding Cards}" IsTabStop="False">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <controls:ComponentCard DataContext="{Binding}" Margin="0,0,0,12"/>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <Button Content="Run first-time setup again" Command="{Binding RunFirstTimeSetupCommand}"
+              HorizontalAlignment="Left" Margin="0,4,0,0"
+              AutomationProperties.Name="Run first-time setup again"/>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

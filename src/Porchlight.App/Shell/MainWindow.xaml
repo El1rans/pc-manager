@@ -33,19 +33,12 @@
                                 Command="{Binding RestartElevatedCommand}"
                                 Visibility="{Binding IsElevated, Converter={StaticResource InverseBoolToVis}}"
                                 HorizontalAlignment="Stretch" Margin="0,0,0,8"/>
-                        <Button Content="Set up optional features"
-                                Command="{Binding OpenSetupCommand}"
-                                HorizontalAlignment="Stretch"/>
-                        <Button Content="Notifications"
-                                Command="{Binding OpenNotificationsCommand}"
-                                AutomationProperties.Name="Notification settings"
-                                HorizontalAlignment="Stretch" Margin="0,8,0,0"/>
                         <TextBlock Text="{Binding VersionText}" Style="{StaticResource Secondary}"
                                    FontSize="11" Margin="4,8,4,0" HorizontalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
-                <!-- Pinned pages (e.g. "Get help"): their own group at the very bottom of the rail,
+                <!-- Pinned pages ("Get help", "Settings"): their own group at the very bottom of the rail,
                      above the admin block, separated and styled distinctly - see
                      PageCategoryCatalog. Docked before the fill ListBox below so it stacks just
                      above the (already Bottom-docked) admin block. -->
@@ -65,7 +58,7 @@
                              BorderThickness="0" Background="Transparent"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemContainerStyle>
-                            <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                            <Style TargetType="ListBoxItem" BasedOn="{StaticResource NavRailItem}">
                                 <Setter Property="AutomationProperties.Name" Value="{Binding Title}"/>
                             </Style>
                         </ListBox.ItemContainerStyle>
@@ -100,7 +93,7 @@
                           BorderThickness="0" Background="Transparent"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemContainerStyle>
-                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource NavRailItem}">
                             <Setter Property="AutomationProperties.Name" Value="{Binding Title}"/>
                         </Style>
                     </ListBox.ItemContainerStyle>

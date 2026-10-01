@@ -4,8 +4,6 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
-using Porchlight.App.Features.Notifications;
-using Porchlight.App.Features.Setup;
 
 namespace Porchlight.App.Shell;
 
@@ -14,9 +12,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     private readonly IShellService _shellService;
     private readonly IPageViewLocator _pageViewLocator;
-    private readonly ISetupLauncher _setupLauncher;
     private readonly IPageNavigator _navigator;
-    private readonly INotificationsLauncher? _notificationsLauncher;
     private readonly ILogger<MainViewModel> _logger;
     private readonly IReadOnlyList<NavCategoryViewModel> _allCategories;
     private CancellationTokenSource _navigationCts = new();
@@ -36,17 +32,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         IEnumerable<IPage> pages,
         IShellService shellService,
         IPageViewLocator pageViewLocator,
-        ISetupLauncher setupLauncher,
         IPageNavigator navigator,
-        ILogger<MainViewModel> logger,
-        INotificationsLauncher? notificationsLauncher = null)
+        ILogger<MainViewModel> logger)
     {
         _shellService = shellService;
         _pageViewLocator = pageViewLocator;
-        _setupLauncher = setupLauncher;
         _navigator = navigator;
         _logger = logger;
-        _notificationsLauncher = notificationsLauncher;
         var pageList = pages as IReadOnlyCollection<IPage> ?? pages.ToList();
         var categories = pageList
             .GroupBy(p => p.Category)
@@ -76,7 +68,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Unpinned categories shown in the nav rail, in order.</summary>
     public ObservableCollection<NavCategoryViewModel> Categories { get; }
 
-    /// <summary>Categories shown in their own group at the bottom of the nav rail (Get help).</summary>
+    /// <summary>Categories shown in their own group at the bottom of the nav rail (Get help, Settings).</summary>
     public ObservableCollection<NavCategoryViewModel> PinnedCategories { get; }
 
     public bool IsElevated => _shellService.IsElevated;
@@ -107,13 +99,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     public IRelayCommand RestartElevatedCommand => _shellService.RestartElevatedCommand;
-
-    [RelayCommand]
-    private void OpenSetup() => _setupLauncher.ShowSetup();
-
-    /// <summary>Opens the Notifications settings dialog (sidebar footer link).</summary>
-    [RelayCommand]
-    private void OpenNotifications() => _notificationsLauncher?.Show();
 
     /// <summary>The first page reporting work in flight (see <see cref="IBusyGuard"/>), or null.</summary>
     public IBusyGuard? FindBusyPage()

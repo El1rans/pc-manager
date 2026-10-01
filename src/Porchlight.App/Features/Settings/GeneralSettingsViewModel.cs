@@ -3,11 +3,12 @@ using Porchlight.App.Shell;
 using Porchlight.Core.Settings;
 using Porchlight.Core.Startup;
 
-namespace Porchlight.App.Features.Notifications;
+namespace Porchlight.App.Features.Settings;
 
-/// <summary>View model for the "Notifications" dialog. Every change is written straight to
-/// <see cref="NotificationSettings"/> through <see cref="ISettingsStore.Update"/> (no Save button).</summary>
-public sealed partial class NotificationsViewModel : ObservableObject
+/// <summary>The Settings > General page: theme, start at sign-in and keep-in-tray. Every change is
+/// written straight to <see cref="ISettingsStore.Update"/> (no Save button), except start at
+/// sign-in, which registers or removes a scheduled task and reflects that task's real state.</summary>
+public sealed partial class GeneralSettingsViewModel : PageViewModelBase
 {
     private readonly ISettingsStore _settingsStore;
     private readonly ILoginLaunchService _loginLaunch;
@@ -15,21 +16,6 @@ public sealed partial class NotificationsViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _keepRunningInTray;
-
-    [ObservableProperty]
-    private bool _alertLowDisk;
-
-    [ObservableProperty]
-    private bool _alertTemperature;
-
-    [ObservableProperty]
-    private bool _alertUpdates;
-
-    [ObservableProperty]
-    private bool _alertRestartPending;
-
-    [ObservableProperty]
-    private ScheduleOption _selectedSchedule;
 
     [ObservableProperty]
     private ThemeOption _selectedTheme;
@@ -53,22 +39,25 @@ public sealed partial class NotificationsViewModel : ObservableObject
     /// <summary>Set while the property is changed by code (loading, reverting) so it does not re-run the task.</summary>
     private bool _suppressStartAtLogin;
 
-    public NotificationsViewModel(ISettingsStore settingsStore, ILoginLaunchService loginLaunch, IThemeService? themeService = null)
+    public GeneralSettingsViewModel(ISettingsStore settingsStore, ILoginLaunchService loginLaunch, IThemeService? themeService = null)
     {
         _settingsStore = settingsStore;
         _loginLaunch = loginLaunch;
         _themeService = themeService;
-        var settings = settingsStore.Current.Notifications;
 
         // Assigned to the fields, not the properties: loading must not write settings back.
-        _keepRunningInTray = settings.KeepRunningInTray;
-        _alertLowDisk = settings.AlertLowDisk;
-        _alertTemperature = settings.AlertTemperature;
-        _alertUpdates = settings.AlertUpdates;
-        _alertRestartPending = settings.AlertRestartPending;
-        _selectedSchedule = ScheduleOptions.FirstOrDefault(o => o.Value == settings.UpdateCheckSchedule) ?? ScheduleOptions[0];
+        _keepRunningInTray = settingsStore.Current.Notifications.KeepRunningInTray;
         _selectedTheme = ThemeOptions.FirstOrDefault(o => o.Value == settingsStore.Current.Appearance.Theme) ?? ThemeOptions[0];
     }
+
+    public override string Title => "General";
+
+    // Segoe Fluent Icons "Settings" (gear). The rail shows the category's glyph; this one is unused.
+    public override string Glyph => "";
+
+    public override int Order => 0;
+
+    public override PageCategory Category => PageCategory.Settings;
 
     public IReadOnlyList<ThemeOption> ThemeOptions { get; } =
     [
@@ -77,19 +66,16 @@ public sealed partial class NotificationsViewModel : ObservableObject
         new(AppTheme.Dark, "Dark"),
     ];
 
-    public IReadOnlyList<ScheduleOption> ScheduleOptions { get; } =
-    [
-        new(UpdateCheckSchedule.Daily, "Every day"),
-        new(UpdateCheckSchedule.Weekly, "Every week"),
-        new(UpdateCheckSchedule.Never, "Never"),
-    ];
-
     public bool CanChangeStartAtLogin => !IsStartAtLoginBusy;
 
     public bool HasStartAtLoginError => !string.IsNullOrEmpty(StartAtLoginError);
 
-    /// <summary>Reads the real task state; called when the dialog opens. If it cannot be read the
-    /// box stays off and is enabled so the user can still try.</summary>
+    /// <summary>Reads the real task state every time the page is shown, so the box is right even if
+    /// the task was changed elsewhere (or the app moved).</summary>
+    public override Task OnNavigatedToAsync(CancellationToken cancellationToken) => LoadStartAtLoginAsync();
+
+    /// <summary>Reads the real task state. If it cannot be read the box stays off and is enabled so
+    /// the user can still try.</summary>
     public async Task LoadStartAtLoginAsync()
     {
         try
@@ -158,17 +144,6 @@ public sealed partial class NotificationsViewModel : ObservableObject
     }
 
     partial void OnKeepRunningInTrayChanged(bool value) => _settingsStore.Update(s => s.Notifications.KeepRunningInTray = value);
-
-    partial void OnAlertLowDiskChanged(bool value) => _settingsStore.Update(s => s.Notifications.AlertLowDisk = value);
-
-    partial void OnAlertTemperatureChanged(bool value) => _settingsStore.Update(s => s.Notifications.AlertTemperature = value);
-
-    partial void OnAlertUpdatesChanged(bool value) => _settingsStore.Update(s => s.Notifications.AlertUpdates = value);
-
-    partial void OnAlertRestartPendingChanged(bool value) => _settingsStore.Update(s => s.Notifications.AlertRestartPending = value);
-
-    partial void OnSelectedScheduleChanged(ScheduleOption value) =>
-        _settingsStore.Update(s => s.Notifications.UpdateCheckSchedule = value.Value);
 
     partial void OnSelectedThemeChanged(ThemeOption value)
     {
