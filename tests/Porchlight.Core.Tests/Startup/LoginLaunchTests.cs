@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Porchlight.Core.Elevation;
 using Porchlight.Core.Processes;
 using Porchlight.Core.Startup;
+using Porchlight.Core.Tests.Components;
 using Xunit;
 
 namespace Porchlight.Core.Tests.Startup;
@@ -228,16 +229,9 @@ public sealed class LoginLaunchTests
         public LoginLaunchService Service => _service ??= new LoginLaunchService(
             Runner,
             Elevated,
-            new FakeElevation(IsElevated),
+            new FakeElevationService(IsElevated),
             new FakeEnvironment(ExePath),
             NullLogger<LoginLaunchService>.Instance);
-    }
-
-    private sealed class FakeElevation(bool isElevated) : IElevationService
-    {
-        public bool IsElevated => isElevated;
-
-        public bool RestartElevated() => throw new NotSupportedException();
     }
 
     private sealed class FakeEnvironment(string? exePath) : ILoginLaunchEnvironment

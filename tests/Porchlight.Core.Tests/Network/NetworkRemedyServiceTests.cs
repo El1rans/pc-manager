@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Porchlight.Core.Elevation;
 using Porchlight.Core.Network;
 using Porchlight.Core.Processes;
+using Porchlight.Core.Tests.Components;
 using Xunit;
 
 namespace Porchlight.Core.Tests.Network;
@@ -25,13 +26,6 @@ public class NetworkRemedyServiceTests
 
         public void StartDetached(string fileName, IReadOnlyList<string> arguments) =>
             throw new NotSupportedException();
-    }
-
-    private sealed class FakeElevation(bool elevated) : IElevationService
-    {
-        public bool IsElevated => elevated;
-
-        public bool RestartElevated() => false;
     }
 
     private sealed class FakeAdapters : INetworkAdapterController
@@ -60,7 +54,7 @@ public class NetworkRemedyServiceTests
     private const string Guid1 = "{6b7a2f0e-1d0c-4a55-9d3e-2f6f7c0a1b11}";
 
     private static NetworkRemedyService Create(FakeRunner runner, bool elevated, FakeAdapters? adapters = null) =>
-        new(runner, adapters ?? new FakeAdapters(), new FakeElevation(elevated), NullLogger<NetworkRemedyService>.Instance);
+        new(runner, adapters ?? new FakeAdapters(), new FakeElevationService(elevated), NullLogger<NetworkRemedyService>.Instance);
 
     [Fact]
     public async Task Flush_dns_runs_ipconfig_flushdns()

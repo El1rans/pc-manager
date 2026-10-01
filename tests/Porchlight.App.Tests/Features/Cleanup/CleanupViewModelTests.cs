@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Porchlight.App.Features.Cleanup;
 using Porchlight.App.Tests.Features.Lighting;
 using Porchlight.App.Tests.Features.RemoteSupport;
+using Porchlight.App.Tests.TestDoubles;
 using Porchlight.Core.Cleanup;
 using Porchlight.Core.Elevation;
 using Porchlight.Core.Monitoring;
@@ -20,7 +21,7 @@ public sealed class CleanupViewModelTests
     private readonly FakeRecycler _recycler = new();
     private readonly FakeAppsReader _apps = new();
     private readonly FakeUninstaller _uninstaller = new();
-    private readonly FakeElevation _elevation = new();
+    private readonly FakeElevationService _elevation = new();
     private readonly FakeProcessRunner _processRunner = new();
     private readonly FakeUrlLauncher _urls = new();
     private readonly FakeConfirmation _confirmation = new();
@@ -44,11 +45,11 @@ public sealed class CleanupViewModelTests
             _elevation, _processRunner, _urls, _confirmation, _settings,
             new DiskMapViewModel(
                 new FakeDiskMapper(), new FakeInsightsDrives(), new FakeInsightsPaths(), new FakeInsightsRecycler(),
-                new FakeInsightsProcessRunner(), new FakeFolderPicker(), new FakeInsightsConfirmation(),
+                new FakeProcessRunner(), new FakeFolderPicker(), new FakeInsightsConfirmation(),
                 NullLogger<DiskMapViewModel>.Instance),
             new DuplicatesViewModel(
                 new FakeDuplicateFinder(), new FakeDuplicateRemover(), new FakeInsightsPaths(),
-                new FakeInsightsProcessRunner(), new FakeInsightsConfirmation(), NullLogger<DuplicatesViewModel>.Instance),
+                new FakeProcessRunner(), new FakeInsightsConfirmation(), NullLogger<DuplicatesViewModel>.Instance),
             NullLogger<CleanupViewModel>.Instance);
 
     private async Task<CleanupViewModel> CreateScanned()
@@ -432,25 +433,6 @@ public sealed class CleanupViewModelTests
     private sealed class FakeDrives : IDriveMonitor
     {
         public IReadOnlyList<DriveSnapshot> GetDrives() => [new(@"C:\", null, "NTFS", 1000, 400, false)];
-    }
-
-    private sealed class FakeElevation : IElevationService
-    {
-        public bool IsElevated { get; set; }
-
-        public bool RestartElevated() => true;
-    }
-
-    private sealed class FakeProcessRunner : IProcessRunner
-    {
-        public List<(string FileName, IReadOnlyList<string> Arguments)> StartDetachedCalls { get; } = [];
-
-        public Task<ProcessRunResult> RunAsync(
-            string fileName, IReadOnlyList<string> arguments, IProgress<string>? onLine, IProgress<string>? onProgress,
-            CancellationToken cancellationToken) => Task.FromResult(new ProcessRunResult(0, [], []));
-
-        public void StartDetached(string fileName, IReadOnlyList<string> arguments) =>
-            StartDetachedCalls.Add((fileName, arguments));
     }
 
     private sealed class FakeConfirmation : IConfirmationDialog

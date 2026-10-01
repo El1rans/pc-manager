@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Porchlight.App.Features.Cleanup;
+using Porchlight.App.Tests.TestDoubles;
 using Porchlight.Core.Cleanup;
 using Xunit;
 
@@ -13,7 +14,7 @@ public sealed class DuplicatesViewModelTests
     private readonly FakeDuplicateFinder _finder = new();
     private readonly FakeDuplicateRemover _remover = new();
     private readonly FakeInsightsConfirmation _confirmation = new();
-    private readonly FakeInsightsProcessRunner _runner = new();
+    private readonly FakeProcessRunner _runner = new();
 
     private static DuplicateFile File(string folder, string name, int days) =>
         new($@"C:\Users\Test\{folder}\{name}", name, $@"C:\Users\Test\{folder}", Base.AddDays(days));
@@ -153,9 +154,9 @@ public sealed class DuplicatesViewModelTests
 
         viewModel.ShowInFolderCommand.Execute(viewModel.Groups[0].Files[0]);
 
-        Assert.Equal("explorer.exe", _runner.Detached[0].FileName);
-        Assert.Equal("/select,", _runner.Detached[0].Arguments[0]);
-        Assert.Equal(viewModel.Groups[0].Files[0].File.FullPath, _runner.Detached[0].Arguments[1]);
+        Assert.Equal("explorer.exe", _runner.StartDetachedCalls[0].FileName);
+        Assert.Equal("/select,", _runner.StartDetachedCalls[0].Arguments[0]);
+        Assert.Equal(viewModel.Groups[0].Files[0].File.FullPath, _runner.StartDetachedCalls[0].Arguments[1]);
     }
 
     [Fact]

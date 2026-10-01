@@ -3,6 +3,7 @@ using Porchlight.App.Controls;
 using Porchlight.App.Features.Hardware;
 using Porchlight.App.Tests.Features.Lighting;
 using Porchlight.App.Tests.Features.Setup;
+using Porchlight.App.Tests.TestDoubles;
 using Porchlight.Core.Elevation;
 using Porchlight.Core.Hardware;
 using Xunit;
@@ -80,13 +81,6 @@ public sealed class HardwareViewModelTests
     private sealed class FakeClock : IClock
     {
         public DateTimeOffset UtcNow => DateTimeOffset.UnixEpoch;
-    }
-
-    private sealed class FakeElevationService : IElevationService
-    {
-        public bool IsElevated => false;
-
-        public bool RestartElevated() => false;
     }
 
     private sealed class FakeFanControlConflictDetector : IFanControlConflictDetector

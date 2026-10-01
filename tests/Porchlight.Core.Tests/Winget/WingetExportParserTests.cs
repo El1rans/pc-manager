@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Porchlight.Core.Processes;
+using Porchlight.Core.Tests.Components;
 using Porchlight.Core.Winget;
 using Xunit;
 
@@ -93,36 +94,21 @@ public sealed class WingetExportParserTests
         }
     }
 
-    private sealed class RecordingRunner : IProcessRunner
-    {
-        public List<IReadOnlyList<string>> Calls { get; } = [];
-
-        public Task<ProcessRunResult> RunAsync(
-            string fileName, IReadOnlyList<string> arguments, IProgress<string>? onLine, IProgress<string>? onProgress,
-            CancellationToken cancellationToken)
-        {
-            Calls.Add(arguments);
-            return Task.FromResult(new ProcessRunResult(0, [], []));
-        }
-
-        public void StartDetached(string fileName, IReadOnlyList<string> arguments) => throw new NotSupportedException();
-    }
-
     [Fact]
     public async Task Client_ExportAndImport_BuildExpectedArguments()
     {
-        var runner = new RecordingRunner();
+        var runner = new FakeProcessRunner();
         var client = new WingetClient(runner, NullLogger<WingetClient>.Instance);
 
         await client.ExportAsync("apps.json", null, null, CancellationToken.None);
         await client.ImportAsync("apps.json", null, null, CancellationToken.None);
 
-        Assert.Equal(["export", "-o", "apps.json", "--accept-source-agreements", "--disable-interactivity"], runner.Calls[0]);
+        Assert.Equal(["export", "-o", "apps.json", "--accept-source-agreements", "--disable-interactivity"], runner.RunCalls[0].Arguments);
         Assert.Equal(
             [
                 "import", "-i", "apps.json", "--accept-package-agreements", "--accept-source-agreements",
                 "--ignore-unavailable", "--disable-interactivity",
             ],
-            runner.Calls[1]);
+            runner.RunCalls[1].Arguments);
     }
 }

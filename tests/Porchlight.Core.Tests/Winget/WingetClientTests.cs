@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Microsoft.Extensions.Logging.Abstractions;
 using Porchlight.Core.Processes;
+using Porchlight.Core.Tests.Components;
 using Porchlight.Core.Winget;
 using Xunit;
 
@@ -142,7 +143,7 @@ public sealed class WingetClientTests
     [Fact]
     public async Task GetUpgradesAsync_WingetMissing_ThrowsWingetNotFoundException()
     {
-        var runner = new ThrowingProcessRunner(nativeErrorCode: 2); // ERROR_FILE_NOT_FOUND
+        var runner = new FakeProcessRunner { RunException = new Win32Exception(2, "Simulated Win32 failure.") }; // ERROR_FILE_NOT_FOUND
         var client = new WingetClient(runner, NullLogger<WingetClient>.Instance);
 
         await Assert.ThrowsAsync<WingetNotFoundException>(
@@ -153,37 +154,11 @@ public sealed class WingetClientTests
     public async Task GetUpgradesAsync_OtherWin32Error_PropagatesUnchanged()
     {
         // Not "file not found" - e.g. access denied - must not be misreported as "winget missing".
-        var runner = new ThrowingProcessRunner(nativeErrorCode: 5); // ERROR_ACCESS_DENIED
+        var runner = new FakeProcessRunner { RunException = new Win32Exception(5, "Simulated Win32 failure.") }; // ERROR_ACCESS_DENIED
         var client = new WingetClient(runner, NullLogger<WingetClient>.Instance);
 
         await Assert.ThrowsAsync<Win32Exception>(
             () => client.GetUpgradesAsync(includeUnknown: false, progress: null, CancellationToken.None));
-    }
-
-    /// <summary>Minimal fake standing in for <see cref="IProcessRunner"/> in these tests (a
-    /// duplicate of <c>Components.FakeProcessRunner</c> kept local to this folder rather than
-    /// shared, since test fakes are cheap to keep separate per feature area).</summary>
-    private sealed class FakeProcessRunner : IProcessRunner
-    {
-        public int NextExitCode { get; set; }
-
-        public IReadOnlyList<string> NextLines { get; set; } = [];
-
-        public List<(string FileName, IReadOnlyList<string> Arguments)> RunCalls { get; } = [];
-
-        public Task<ProcessRunResult> RunAsync(
-            string fileName,
-            IReadOnlyList<string> arguments,
-            IProgress<string>? onLine,
-            IProgress<string>? onProgress,
-            CancellationToken cancellationToken)
-        {
-            RunCalls.Add((fileName, arguments));
-            return Task.FromResult(new ProcessRunResult(NextExitCode, NextLines, []));
-        }
-
-        public void StartDetached(string fileName, IReadOnlyList<string> arguments) =>
-            throw new NotSupportedException();
     }
 
     /// <summary>Synchronous <see cref="IProgress{T}"/> fake - unlike <see cref="Progress{T}"/>,
@@ -197,17 +172,4 @@ public sealed class WingetClientTests
         public void Report(string value) => Lines.Add(value);
     }
 
-    private sealed class ThrowingProcessRunner(int nativeErrorCode) : IProcessRunner
-    {
-        public Task<ProcessRunResult> RunAsync(
-            string fileName,
-            IReadOnlyList<string> arguments,
-            IProgress<string>? onLine,
-            IProgress<string>? onProgress,
-            CancellationToken cancellationToken) =>
-            throw new Win32Exception(nativeErrorCode, "Simulated Win32 failure.");
-
-        public void StartDetached(string fileName, IReadOnlyList<string> arguments) =>
-            throw new NotSupportedException();
-    }
 }
