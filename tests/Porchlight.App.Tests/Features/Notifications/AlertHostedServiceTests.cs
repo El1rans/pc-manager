@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Time.Testing;
 using Porchlight.App.Features.Notifications;
 using Porchlight.App.Tests.Features.Lighting;
 using Porchlight.Core.Alerts;
@@ -12,7 +11,7 @@ public sealed class AlertHostedServiceTests : IDisposable
 {
     private const long Gb = 1024L * 1024 * 1024;
 
-    private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
+    private readonly TimerCountingTimeProvider _time = new(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
     private readonly FakeInputProvider _inputs = new();
     private readonly FakeTrayIcon _tray = new();
     private readonly FakeSettingsStore _settings = new();
@@ -33,43 +32,48 @@ public sealed class AlertHostedServiceTests : IDisposable
 
     private static DriveSnapshot LowDrive(string name) => new(name, null, "NTFS", 500 * Gb, 2 * Gb, true);
 
-    private static Task SettleAsync() => Task.Delay(100);
-
-    /// <summary>Starts the loop and lets it reach its first (initial-delay) timer before time moves.</summary>
-    private async Task StartAndSettleAsync()
+    /// <summary>Starts the loop and waits until it has armed its initial-delay timer, so the first
+    /// <c>Advance</c> is not lost.</summary>
+    private async Task StartAsync()
     {
         await _service.StartAsync(CancellationToken.None);
-        await SettleAsync();
+        await BackgroundLoop.WaitUntilAsync(() => _time.TimersCreated >= 1);
     }
 
-    private async Task AdvanceAsync(TimeSpan amount)
+    /// <summary>Runs through the initial delay and waits for the first round. The loop creates its
+    /// periodic timer before that round, so the next advance always counts towards the next tick.</summary>
+    private async Task RunFirstRoundAsync()
     {
-        _time.Advance(amount);
-        await SettleAsync();
+        await StartAsync();
+        _time.Advance(TimeSpan.FromSeconds(30));
+        await BackgroundLoop.WaitUntilAsync(() => _inputs.Calls == 1);
     }
 
     [Fact]
     public async Task FirstCheck_RunsAfterThe30SecondInitialDelay_NotBefore()
     {
-        await StartAndSettleAsync();
+        await StartAsync();
 
-        await AdvanceAsync(TimeSpan.FromSeconds(29));
+        _time.Advance(TimeSpan.FromSeconds(29));
+        await BackgroundLoop.SettleAsync();
         Assert.Equal(0, _inputs.Calls);
 
-        await AdvanceAsync(TimeSpan.FromSeconds(1));
+        _time.Advance(TimeSpan.FromSeconds(1));
+        await BackgroundLoop.WaitUntilAsync(() => _inputs.Calls == 1);
         Assert.Equal(1, _inputs.Calls);
     }
 
     [Fact]
     public async Task Checks_RepeatEveryMinute()
     {
-        await StartAndSettleAsync();
-        await AdvanceAsync(TimeSpan.FromSeconds(30));
+        await RunFirstRoundAsync();
 
-        await AdvanceAsync(TimeSpan.FromSeconds(59));
+        _time.Advance(TimeSpan.FromSeconds(59));
+        await BackgroundLoop.SettleAsync();
         Assert.Equal(1, _inputs.Calls);
 
-        await AdvanceAsync(TimeSpan.FromSeconds(1));
+        _time.Advance(TimeSpan.FromSeconds(1));
+        await BackgroundLoop.WaitUntilAsync(() => _inputs.Calls == 2);
         Assert.Equal(2, _inputs.Calls);
     }
 
@@ -77,9 +81,9 @@ public sealed class AlertHostedServiceTests : IDisposable
     public async Task AlertingInputs_ShowABalloon()
     {
         _inputs.Drives = [LowDrive("C:\\")];
-        await StartAndSettleAsync();
 
-        await AdvanceAsync(TimeSpan.FromSeconds(30));
+        await RunFirstRoundAsync();
+        await BackgroundLoop.WaitUntilAsync(() => _tray.Balloons.Count == 1);
 
         var balloon = Assert.Single(_tray.Balloons);
         Assert.Contains("C:", balloon, StringComparison.Ordinal);
@@ -90,9 +94,9 @@ public sealed class AlertHostedServiceTests : IDisposable
     {
         _settings.Current.Notifications.AlertLowDisk = false;
         _inputs.Drives = [LowDrive("C:\\")];
-        await StartAndSettleAsync();
 
-        await AdvanceAsync(TimeSpan.FromSeconds(30));
+        await RunFirstRoundAsync();
+        await BackgroundLoop.SettleAsync();
 
         Assert.Equal(1, _inputs.Calls);
         Assert.Empty(_tray.Balloons);
@@ -102,15 +106,18 @@ public sealed class AlertHostedServiceTests : IDisposable
     public async Task SeveralAlertsInOneRound_AreSpacedEightSecondsApart()
     {
         _inputs.Drives = [LowDrive("C:\\"), LowDrive("D:\\")];
-        await StartAndSettleAsync();
 
-        await AdvanceAsync(TimeSpan.FromSeconds(30));
+        // Timers: initial delay, periodic timer, then the spacing delay before the second balloon.
+        await RunFirstRoundAsync();
+        await BackgroundLoop.WaitUntilAsync(() => _tray.Balloons.Count == 1 && _time.TimersCreated >= 3);
         Assert.Single(_tray.Balloons);
 
-        await AdvanceAsync(TimeSpan.FromSeconds(7));
+        _time.Advance(TimeSpan.FromSeconds(7));
+        await BackgroundLoop.SettleAsync();
         Assert.Single(_tray.Balloons);
 
-        await AdvanceAsync(TimeSpan.FromSeconds(1));
+        _time.Advance(TimeSpan.FromSeconds(1));
+        await BackgroundLoop.WaitUntilAsync(() => _tray.Balloons.Count == 2);
         Assert.Equal(2, _tray.Balloons.Count);
     }
 
@@ -119,23 +126,24 @@ public sealed class AlertHostedServiceTests : IDisposable
     {
         _inputs.FailNextCall = true;
         _inputs.Drives = [LowDrive("C:\\")];
-        await StartAndSettleAsync();
 
-        await AdvanceAsync(TimeSpan.FromSeconds(30));
+        await RunFirstRoundAsync();
+        await BackgroundLoop.SettleAsync();
         Assert.Empty(_tray.Balloons);
 
-        await AdvanceAsync(TimeSpan.FromMinutes(1));
+        _time.Advance(TimeSpan.FromMinutes(1));
+        await BackgroundLoop.WaitUntilAsync(() => _tray.Balloons.Count == 1);
         Assert.Single(_tray.Balloons);
     }
 
     [Fact]
     public async Task StopAsync_EndsTheLoop()
     {
-        await StartAndSettleAsync();
-        await AdvanceAsync(TimeSpan.FromSeconds(30));
+        await RunFirstRoundAsync();
 
+        // StopAsync waits for the loop to finish, so nothing can run after this point.
         await _service.StopAsync(CancellationToken.None);
-        await AdvanceAsync(TimeSpan.FromMinutes(5));
+        _time.Advance(TimeSpan.FromMinutes(5));
 
         Assert.Equal(1, _inputs.Calls);
     }
@@ -150,7 +158,9 @@ public sealed class AlertHostedServiceTests : IDisposable
 
     private sealed class FakeInputProvider : IAlertInputProvider
     {
-        public int Calls { get; private set; }
+        private int _calls;
+
+        public int Calls => Volatile.Read(ref _calls);
 
         public IReadOnlyList<DriveSnapshot> Drives { get; set; } = [];
 
@@ -158,7 +168,7 @@ public sealed class AlertHostedServiceTests : IDisposable
 
         public AlertInputs GetInputs()
         {
-            Calls++;
+            Interlocked.Increment(ref _calls);
             if (FailNextCall)
             {
                 FailNextCall = false;

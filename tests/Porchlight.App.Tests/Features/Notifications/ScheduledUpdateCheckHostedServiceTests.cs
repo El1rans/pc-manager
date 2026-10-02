@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Time.Testing;
 using Porchlight.App.Features.Notifications;
 using Porchlight.App.Features.Updates;
 using Porchlight.App.Tests.Features.Lighting;
@@ -11,7 +10,7 @@ namespace Porchlight.App.Tests.Features.Notifications;
 
 public sealed class ScheduledUpdateCheckHostedServiceTests : IDisposable
 {
-    private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 1, 10, 12, 0, 0, TimeSpan.Zero));
+    private readonly TimerCountingTimeProvider _time = new(new DateTimeOffset(2026, 1, 10, 12, 0, 0, TimeSpan.Zero));
     private readonly FakeUpdateChecker _checker = new();
     private readonly FakeTrayIcon _tray = new();
     private readonly FakeSettingsStore _settings = new();
@@ -32,36 +31,44 @@ public sealed class ScheduledUpdateCheckHostedServiceTests : IDisposable
 
     private NotificationSettings Notifications => _settings.Current.Notifications;
 
-    private static Task SettleAsync() => Task.Delay(100);
-
-    private async Task StartAndSettleAsync()
+    /// <summary>Starts the loop and waits until it has armed its initial-delay timer, so the first
+    /// <c>Advance</c> is not lost.</summary>
+    private async Task StartAsync()
     {
         await _service.StartAsync(CancellationToken.None);
-        await SettleAsync();
+        await BackgroundLoop.WaitUntilAsync(() => _time.TimersCreated >= 1);
     }
 
-    private async Task AdvanceAsync(TimeSpan amount)
+    /// <summary>Runs through the five-minute initial delay to the first schedule decision.
+    /// <paramref name="decided"/> says how to tell that decision has finished; when it leaves no
+    /// trace (nothing was due), the test only checks for the absence of effects, so a short settle
+    /// after the periodic timer exists is enough.</summary>
+    private async Task ReachFirstDecisionAsync(Func<bool>? decided = null)
     {
-        _time.Advance(amount);
-        await SettleAsync();
-    }
-
-    /// <summary>Starts the service and runs through the five-minute initial delay to the first schedule decision.</summary>
-    private async Task StartAndReachFirstDecisionAsync()
-    {
-        await StartAndSettleAsync();
-        await AdvanceAsync(TimeSpan.FromMinutes(5));
+        await StartAsync();
+        _time.Advance(TimeSpan.FromMinutes(5));
+        if (decided is null)
+        {
+            await BackgroundLoop.WaitUntilAsync(() => _time.TimersCreated >= 2);
+            await BackgroundLoop.SettleAsync();
+        }
+        else
+        {
+            await BackgroundLoop.WaitUntilAsync(decided);
+        }
     }
 
     [Fact]
     public async Task FirstDecision_WaitsFiveMinutes()
     {
-        await StartAndSettleAsync();
+        await StartAsync();
 
-        await AdvanceAsync(TimeSpan.FromMinutes(4) + TimeSpan.FromSeconds(59));
+        _time.Advance(TimeSpan.FromMinutes(4) + TimeSpan.FromSeconds(59));
+        await BackgroundLoop.SettleAsync();
         Assert.Equal(0, _checker.Calls);
 
-        await AdvanceAsync(TimeSpan.FromSeconds(1));
+        _time.Advance(TimeSpan.FromSeconds(1));
+        await BackgroundLoop.WaitUntilAsync(() => _checker.Calls == 1);
         Assert.Equal(1, _checker.Calls);
     }
 
@@ -70,7 +77,7 @@ public sealed class ScheduledUpdateCheckHostedServiceTests : IDisposable
     {
         Notifications.LastScheduledUpdateCheckUtc = _time.GetUtcNow() - TimeSpan.FromHours(1);
 
-        await StartAndReachFirstDecisionAsync();
+        await ReachFirstDecisionAsync();
 
         Assert.Equal(0, _checker.Calls);
     }
@@ -80,7 +87,7 @@ public sealed class ScheduledUpdateCheckHostedServiceTests : IDisposable
     {
         Notifications.UpdateCheckSchedule = UpdateCheckSchedule.Never;
 
-        await StartAndReachFirstDecisionAsync();
+        await ReachFirstDecisionAsync();
 
         Assert.Equal(0, _checker.Calls);
     }
@@ -90,7 +97,7 @@ public sealed class ScheduledUpdateCheckHostedServiceTests : IDisposable
     {
         _checker.Result = UpdateCheckResult.Succeeded(3);
 
-        await StartAndReachFirstDecisionAsync();
+        await ReachFirstDecisionAsync(() => _tray.Balloons.Count == 1);
 
         Assert.Equal(_time.GetUtcNow(), Notifications.LastScheduledUpdateCheckUtc);
         Assert.Equal("3 app updates are ready", Assert.Single(_tray.Balloons));
@@ -101,7 +108,8 @@ public sealed class ScheduledUpdateCheckHostedServiceTests : IDisposable
     {
         _checker.Result = UpdateCheckResult.Succeeded(0);
 
-        await StartAndReachFirstDecisionAsync();
+        await ReachFirstDecisionAsync(() => Notifications.LastScheduledUpdateCheckUtc is not null);
+        await BackgroundLoop.SettleAsync();
 
         Assert.NotNull(Notifications.LastScheduledUpdateCheckUtc);
         Assert.Empty(_tray.Balloons);
@@ -113,7 +121,8 @@ public sealed class ScheduledUpdateCheckHostedServiceTests : IDisposable
         Notifications.AlertUpdates = false;
         _checker.Result = UpdateCheckResult.Succeeded(2);
 
-        await StartAndReachFirstDecisionAsync();
+        await ReachFirstDecisionAsync(() => Notifications.LastScheduledUpdateCheckUtc is not null);
+        await BackgroundLoop.SettleAsync();
 
         Assert.NotNull(Notifications.LastScheduledUpdateCheckUtc);
         Assert.Empty(_tray.Balloons);
@@ -125,12 +134,14 @@ public sealed class ScheduledUpdateCheckHostedServiceTests : IDisposable
     public async Task CheckThatDidNotComplete_IsNotRecorded_AndRetriedTheNextHour(UpdateCheckStatus status)
     {
         _checker.Result = new UpdateCheckResult(status, 0);
-        await StartAndReachFirstDecisionAsync();
+        await ReachFirstDecisionAsync(() => _checker.Calls == 1);
+        await BackgroundLoop.SettleAsync();
 
         Assert.Null(Notifications.LastScheduledUpdateCheckUtc);
         Assert.Empty(_tray.Balloons);
 
-        await AdvanceAsync(TimeSpan.FromHours(1));
+        _time.Advance(TimeSpan.FromHours(1));
+        await BackgroundLoop.WaitUntilAsync(() => _checker.Calls == 2);
         Assert.Equal(2, _checker.Calls);
     }
 
@@ -138,10 +149,11 @@ public sealed class ScheduledUpdateCheckHostedServiceTests : IDisposable
     public async Task CheckerThrowing_DoesNotEndTheLoop()
     {
         _checker.FailNextCall = true;
-        await StartAndReachFirstDecisionAsync();
+        await ReachFirstDecisionAsync(() => _checker.Calls == 1);
         Assert.Null(Notifications.LastScheduledUpdateCheckUtc);
 
-        await AdvanceAsync(TimeSpan.FromHours(1));
+        _time.Advance(TimeSpan.FromHours(1));
+        await BackgroundLoop.WaitUntilAsync(() => Notifications.LastScheduledUpdateCheckUtc is not null);
 
         Assert.Equal(2, _checker.Calls);
         Assert.NotNull(Notifications.LastScheduledUpdateCheckUtc);
@@ -151,10 +163,11 @@ public sealed class ScheduledUpdateCheckHostedServiceTests : IDisposable
     public async Task StopAsync_EndsTheLoop()
     {
         _checker.Result = UpdateCheckResult.Failed;
-        await StartAndReachFirstDecisionAsync();
+        await ReachFirstDecisionAsync(() => _checker.Calls == 1);
 
+        // StopAsync waits for the loop to finish, so nothing can run after this point.
         await _service.StopAsync(CancellationToken.None);
-        await AdvanceAsync(TimeSpan.FromHours(3));
+        _time.Advance(TimeSpan.FromHours(3));
 
         Assert.Equal(1, _checker.Calls);
     }
@@ -169,7 +182,9 @@ public sealed class ScheduledUpdateCheckHostedServiceTests : IDisposable
 
     private sealed class FakeUpdateChecker : IUpdateChecker
     {
-        public int Calls { get; private set; }
+        private int _calls;
+
+        public int Calls => Volatile.Read(ref _calls);
 
         public UpdateCheckResult Result { get; set; } = UpdateCheckResult.Succeeded(1);
 
@@ -177,7 +192,7 @@ public sealed class ScheduledUpdateCheckHostedServiceTests : IDisposable
 
         public Task<UpdateCheckResult> CheckAsync(CancellationToken cancellationToken)
         {
-            Calls++;
+            Interlocked.Increment(ref _calls);
             if (FailNextCall)
             {
                 FailNextCall = false;
