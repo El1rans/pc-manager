@@ -14,11 +14,12 @@ public sealed class StartupServiceTests
     private readonly FakeStartupFolderReader _folders = new();
     private readonly FakeFileProductInfoReader _fileInfo = new();
     private readonly FakeStartupInfoReader _startupInfo = new();
+    private readonly FakeLogonTaskSource _tasks = new();
     private readonly FakeElevationService _elevation = new();
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero));
 
     private StartupService CreateService() =>
-        new(_registry, _folders, _fileInfo, _startupInfo, _elevation, NullLogger<StartupService>.Instance, _time);
+        new(_registry, _folders, _fileInfo, _startupInfo, _tasks, _elevation, NullLogger<StartupService>.Instance, _time);
 
     private void AddRunValue(StartupSource source, string name, string command)
     {
@@ -97,6 +98,147 @@ public sealed class StartupServiceTests
 
         Assert.Equal(StartupImpact.NotMeasured, Assert.Single(entries).Impact);
         Assert.True(service.ImpactNeedsAdmin);
+    }
+
+    [Fact]
+    public async Task ListAsync_ListsLogonTasksAsTheirOwnSource()
+    {
+        _tasks.Tasks.Add(new LogonTask(@"\Vendor\Sync", "Sync", AppPath, IsEnabled: true, IsMachineWide: false));
+        _tasks.Tasks.Add(new LogonTask(@"\Off", "Off", null, IsEnabled: false, IsMachineWide: false));
+        _fileInfo.Infos[AppPath] = new FileProductInfo("Foo Sync", "Foo", "Foo Inc");
+        _startupInfo.Records.Add(new StartupInfoRecord(AppPath, 2000, 0));
+
+        var entries = await CreateService().ListAsync(TestContext.Current.CancellationToken);
+
+        var sync = entries.Single(e => e.Id == @"LogonTask|\Vendor\Sync");
+        Assert.Equal(StartupSource.LogonTask, sync.Source);
+        Assert.Equal("Scheduled task", sync.Source.ToLabel());
+        Assert.Equal("Foo Sync", sync.DisplayName);
+        Assert.Equal("Foo Inc", sync.Publisher);
+        Assert.True(sync.IsEnabled);
+        Assert.Equal(StartupImpact.High, sync.Impact);
+        Assert.False(sync.RequiresAdmin);
+        var off = entries.Single(e => e.ItemName == @"\Off");
+        Assert.Equal("Off", off.DisplayName);
+        Assert.False(off.IsEnabled);
+        Assert.Empty(_registry.Writes);
+    }
+
+    [Fact]
+    public async Task ListAsync_MicrosoftFolderTask_IsRecommendedToKeep()
+    {
+        _tasks.Tasks.Add(new LogonTask(@"\Microsoft\Office\Telemetry", "Telemetry", @"C:\Tools\x.exe", true, false));
+        _tasks.Tasks.Add(new LogonTask(@"\Vendor\Other", "Other", @"C:\Tools\y.exe", true, false));
+
+        var entries = await CreateService().ListAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(entries.Single(e => e.ItemName.StartsWith(@"\Microsoft\", StringComparison.Ordinal)).RecommendedToKeep);
+        Assert.False(entries.Single(e => e.ItemName == @"\Vendor\Other").RecommendedToKeep);
+    }
+
+    [Fact]
+    public async Task ListAsync_TaskSchedulerUnreadable_IsSkippedNotFatal()
+    {
+        AddRunValue(StartupSource.CurrentUserRun, "A", AppPath);
+        _tasks.ReadException = new IOException("scheduler down");
+
+        var entries = await CreateService().ListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(StartupSource.CurrentUserRun, Assert.Single(entries).Source);
+    }
+
+    [Fact]
+    public async Task SetEnabledAsync_Task_WritesOnlyTheEnabledFlag()
+    {
+        _tasks.Tasks.Add(new LogonTask(@"\Vendor\Sync", "Sync", AppPath, true, false));
+        var service = CreateService();
+        await service.ListAsync(TestContext.Current.CancellationToken);
+
+        var off = await service.SetEnabledAsync(@"LogonTask|\Vendor\Sync", false, TestContext.Current.CancellationToken);
+        var on = await service.SetEnabledAsync(@"LogonTask|\Vendor\Sync", true, TestContext.Current.CancellationToken);
+
+        Assert.Equal(StartupChangeResult.Changed, off);
+        Assert.Equal(StartupChangeResult.Changed, on);
+        Assert.Equal([(@"\Vendor\Sync", false), (@"\Vendor\Sync", true)], _tasks.Changes);
+        Assert.Empty(_registry.Writes);
+    }
+
+    [Fact]
+    public async Task SetEnabledAsync_MachineWideTaskWhenNotElevated_IsRefusedWithoutChange()
+    {
+        _tasks.Tasks.Add(new LogonTask(@"\Vendor\Svc", "Svc", AppPath, true, IsMachineWide: true));
+        _elevation.IsElevated = false;
+        var service = CreateService();
+        await service.ListAsync(TestContext.Current.CancellationToken);
+
+        var result = await service.SetEnabledAsync(@"LogonTask|\Vendor\Svc", false, TestContext.Current.CancellationToken);
+
+        Assert.Equal(StartupChangeResult.NeedsAdmin, result);
+        Assert.Empty(_tasks.Changes);
+    }
+
+    [Fact]
+    public async Task SetEnabledAsync_MachineWideTaskWhenElevated_Changes()
+    {
+        _tasks.Tasks.Add(new LogonTask(@"\Vendor\Svc", "Svc", AppPath, true, IsMachineWide: true));
+        _elevation.IsElevated = true;
+        var service = CreateService();
+        await service.ListAsync(TestContext.Current.CancellationToken);
+
+        var result = await service.SetEnabledAsync(@"LogonTask|\Vendor\Svc", false, TestContext.Current.CancellationToken);
+
+        Assert.Equal(StartupChangeResult.Changed, result);
+    }
+
+    [Fact]
+    public async Task SetEnabledAsync_TaskAccessDenied_ReturnsNeedsAdmin()
+    {
+        _tasks.Tasks.Add(new LogonTask(@"\Vendor\Sync", "Sync", AppPath, true, false));
+        var service = CreateService();
+        await service.ListAsync(TestContext.Current.CancellationToken);
+        _tasks.SetException = new UnauthorizedAccessException();
+
+        var result = await service.SetEnabledAsync(@"LogonTask|\Vendor\Sync", false, TestContext.Current.CancellationToken);
+
+        Assert.Equal(StartupChangeResult.NeedsAdmin, result);
+    }
+
+    [Fact]
+    public async Task SetEnabledAsync_TaskOtherFailure_ReturnsFailed()
+    {
+        _tasks.Tasks.Add(new LogonTask(@"\Vendor\Sync", "Sync", AppPath, true, false));
+        var service = CreateService();
+        await service.ListAsync(TestContext.Current.CancellationToken);
+        _tasks.SetException = new IOException("gone");
+
+        var result = await service.SetEnabledAsync(@"LogonTask|\Vendor\Sync", false, TestContext.Current.CancellationToken);
+
+        Assert.Equal(StartupChangeResult.Failed, result);
+    }
+
+    [Fact]
+    public async Task SetEnabledAsync_TaskNotInLastListing_IsRefused()
+    {
+        var service = CreateService();
+        await service.ListAsync(TestContext.Current.CancellationToken);
+
+        var result = await service.SetEnabledAsync(@"LogonTask|\Anything", false, TestContext.Current.CancellationToken);
+
+        Assert.Equal(StartupChangeResult.NotFound, result);
+        Assert.Empty(_tasks.Changes);
+    }
+
+    [Theory]
+    [InlineData(@"\Microsoft\Windows", true)]
+    [InlineData(@"\Microsoft\Windows\Defrag", true)]
+    [InlineData(@"\microsoft\windows\x\y", true)]
+    [InlineData(@"\Microsoft", false)]
+    [InlineData(@"\Microsoft\Office", false)]
+    [InlineData(@"\Microsoft\WindowsApps", false)]
+    [InlineData(@"\", false)]
+    public void LogonTaskSource_SkipsOnlyTheWindowsOwnTree(string folder, bool skipped)
+    {
+        Assert.Equal(skipped, LogonTaskSource.IsWindowsOwn(folder));
     }
 
     [Fact]

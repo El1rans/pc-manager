@@ -17,6 +17,7 @@ public static class StartupServiceCollectionExtensions
         if (Monitoring.Demo.DemoDataMode.IsEnabled)
         {
             services.AddSingleton<IStartupInfoReader, StartupInfoReader>();
+        services.AddSingleton<ILogonTaskSource, LogonTaskSource>();
         services.AddSingleton<IStartupService, Demo.DemoStartupService>();
             return services;
         }

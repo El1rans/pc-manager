@@ -18,6 +18,8 @@ internal sealed class DemoStartupService : IStartupService
         Make(StartupSource.CurrentUserRun, "Spotify", "Spotify", "Spotify AB", false, true, StartupImpact.High),
         Make(StartupSource.MachineRun32, "AdobeGCInvoker", "Adobe Genuine Software Integrity", "Adobe Inc.", false, true, StartupImpact.Low),
         Make(StartupSource.CurrentUserFolder, "Photo Frame.lnk", "Photo Frame", null, false, false),
+        Make(StartupSource.LogonTask, @"\Backup Sync at logon", "Backup Sync", "Example Software Ltd", false, true, StartupImpact.Medium),
+        Make(StartupSource.LogonTask, @"\Microsoft\Office\Office Background Task Handler", "Microsoft Office background tasks", "Microsoft Corporation", true, false, StartupImpact.NotMeasured),
     ];
 
     public bool ImpactNeedsAdmin => false;
