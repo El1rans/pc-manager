@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-02
+
 ### Added
 
 - Theme setting: choose "Match Windows" (default), "Light" or "Dark" in the new "Appearance" card of the
