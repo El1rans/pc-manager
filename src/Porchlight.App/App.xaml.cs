@@ -10,6 +10,7 @@ using Porchlight.App.Controls;
 using Porchlight.App.Features.Browsers;
 using Porchlight.App.Features.Cleanup;
 using Porchlight.App.Features.Dashboard;
+using Porchlight.App.Features.GetApps;
 using Porchlight.App.Features.Hardware;
 using Porchlight.App.Features.Health;
 using Porchlight.App.Features.Lighting;
@@ -296,6 +297,8 @@ public partial class App : System.Windows.Application, IDisposable
 
         services.AddDashboardFeature();
         services.AddUpdatesFeature();
+        services.AddGetAppsFeature();
+        services.AddGetAppsFeature();
         services.AddHardwareFeature();
         services.AddLightingFeature();
         services.AddLedEffectsCore();
