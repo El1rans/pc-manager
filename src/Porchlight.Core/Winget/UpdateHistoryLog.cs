@@ -31,14 +31,15 @@ public static class UpdateHistoryLog
 
     /// <summary>Groups <paramref name="entries"/> by local day in <paramref name="zone"/>, newest day
     /// first and newest entry first within a day. Labels are "Today", "Yesterday", then e.g.
-    /// "Monday, 28 September" (in <paramref name="culture"/>, current culture when null).</summary>
+    /// "Monday, 28 September" (in <paramref name="culture"/>; when null, the invariant culture - the app's UI
+    /// is English-only, so day and month names must not follow the PC's regional format).</summary>
     public static IReadOnlyList<(string Label, IReadOnlyList<UpdateHistoryEntry> Entries)> GroupByDay(
         IEnumerable<UpdateHistoryEntry> entries, DateTimeOffset now, TimeZoneInfo zone, CultureInfo? culture = null)
     {
         ArgumentNullException.ThrowIfNull(entries);
         ArgumentNullException.ThrowIfNull(zone);
 
-        culture ??= CultureInfo.CurrentCulture;
+        culture ??= CultureInfo.InvariantCulture;
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, zone).DateTime);
 
         return entries

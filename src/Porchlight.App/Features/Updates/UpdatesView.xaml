@@ -58,7 +58,18 @@
                         <TextBlock Text="History"/>
                     </StackPanel>
                 </Button>
-                <TextBlock Text="Updates" Style="{StaticResource PageTitle}"/>
+                <TextBlock>
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource PageTitle}">
+                            <Setter Property="Text" Value="Updates"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsShowingHistory}" Value="True">
+                                    <Setter Property="Text" Value="Update history"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </DockPanel>
             <TextBlock Text="{Binding SummaryText}" Style="{StaticResource Secondary}" Margin="0,4,0,0"
                        Visibility="{Binding IsShowingHistory, Converter={StaticResource InverseBoolToVis}}"/>
