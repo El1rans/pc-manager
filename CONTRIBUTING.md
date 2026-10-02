@@ -74,6 +74,29 @@ compiles and what a release ships - is unaffected and does not contain this code
 environment variable (or just close the terminal) to go back to showing your real data next time
 you run Porchlight for actual use.
 
+### Isolated data folder
+
+Demo and test runs never touch your real `%APPDATA%\Porchlight` (settings.json, logs, custom
+animations, fan-control marker). Every per-user path comes from one place,
+`src/Porchlight.Core/Settings/AppDataPaths.cs`, and in a DEBUG build it is redirected:
+
+- `PORCHLIGHT_DEMO_DATA=1` on its own uses `%TEMP%\Porchlight-demo`. On first use it is seeded
+  with a `settings.json` that marks first-run as completed, so the setup wizard doesn't appear.
+  Delete the folder to start fresh.
+- `PORCHLIGHT_DATA_DIR=<absolute path>` uses that folder instead (with or without demo data) - e.g.
+  a throwaway folder per visual check, or to test the first-run wizard on an empty folder. A
+  relative path is rejected at startup rather than falling back to the real folder.
+
+```powershell
+$env:PORCHLIGHT_DATA_DIR = "$env:TEMP\porchlight-check"
+dotnet run -c Debug --project src/Porchlight.App
+```
+
+While either override is active, the one-time `PCManager` -> `Porchlight` folder migration is
+skipped entirely. A Release build ignores both variables. There is no need to back up or restore
+your real `settings.json` before a demo/test run. (Only the self-update installer download cache,
+`%LOCALAPPDATA%\Porchlight\Updates`, is not redirected - it holds no settings.)
+
 If a page you're screenshotting shows something demo data doesn't cover yet (e.g. a new feature's
 own machine-identifying data), extend `AddMonitoring`'s demo branch and the relevant `Demo.*`
 fake, rather than redacting a real screenshot after the fact.

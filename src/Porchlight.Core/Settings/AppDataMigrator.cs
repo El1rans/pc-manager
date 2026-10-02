@@ -26,7 +26,8 @@ public static partial class AppDataMigrator
     /// </summary>
     private static readonly int[] SettingsCopyRetryDelaysMs = [100, 100, 150, 150, 200];
 
-    /// <summary>The current app-data folder, <c>%APPDATA%\Porchlight</c>.</summary>
+    /// <summary>The current app-data folder, <c>%APPDATA%\Porchlight</c> - always the real one,
+    /// even while <see cref="AppDataPaths.Root"/> is overridden (migration is skipped then).</summary>
     public static string NewDirectory { get; } = BuildDirectory(NewFolderName);
 
     /// <summary>The pre-rebrand app-data folder, <c>%APPDATA%\PCManager</c>.</summary>
@@ -41,8 +42,18 @@ public static partial class AppDataMigrator
     /// <c>%APPDATA%\Porchlight\logs</c> itself, which would make <see cref="NewDirectory"/> already
     /// exist and skip migration entirely - see the call site in <c>App.OnStartup</c>.
     /// </summary>
-    public static void MigrateIfNeeded(ILogger logger) =>
+    /// <remarks>Skipped entirely while a DEBUG data-folder override is active
+    /// (<see cref="AppDataPaths.IsOverridden"/>): a demo/test run must never read from - or create -
+    /// anything under the real <c>%APPDATA%</c>.</remarks>
+    public static void MigrateIfNeeded(ILogger logger)
+    {
+        if (AppDataPaths.IsOverridden)
+        {
+            return;
+        }
+
         MigrateIfNeeded(logger, NewDirectory, LegacyDirectory, Thread.Sleep);
+    }
 
     /// <summary>Test seam: lets tests point this at temp directories instead of the real
     /// <c>%APPDATA%</c> locations, with the real <see cref="Thread.Sleep(TimeSpan)"/> backoff.</summary>
@@ -166,8 +177,8 @@ public static partial class AppDataMigrator
         }
     }
 
-    private static string BuildDirectory(string folderName) => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), folderName);
+    private static string BuildDirectory(string folderName) =>
+        Path.Combine(AppDataPaths.RealApplicationData, folderName);
 
     // Source-generated (guarded by IsEnabled internally) so the message is never formatted when
     // the relevant log level is disabled - see CA1873.

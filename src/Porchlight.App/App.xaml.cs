@@ -78,6 +78,10 @@ public partial class App : System.Windows.Application, IDisposable
         // Until settings are loaded (below) follow Windows; the saved choice replaces this before any window exists.
         ThemeMode = ThemeMode.System;
 
+        // DEBUG-only: a demo/test run (PORCHLIGHT_DATA_DIR / PORCHLIGHT_DEMO_DATA) gets its own
+        // data folder, never the real %APPDATA%\Porchlight - see AppDataPaths. No-op otherwise.
+        AppDataPaths.PrepareOverrideFolder();
+
         var logPath = BuildLogPath();
 
         // A bootstrap logger so a failure before (or during) host construction is still on record,
@@ -257,14 +261,7 @@ public partial class App : System.Windows.Application, IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private static string BuildLogPath()
-    {
-        var logDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Porchlight",
-            "logs");
-        return Path.Combine(logDirectory, "porchlight-.log");
-    }
+    private static string BuildLogPath() => Path.Combine(AppDataPaths.LogsDirectory, "porchlight-.log");
 
     private static void ConfigureLogging(HostApplicationBuilder builder, string logPath)
     {

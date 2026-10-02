@@ -247,9 +247,5 @@ public sealed class CustomAnimationLibrary : ICustomAnimationLibrary
     private static CustomAnimationInfo ToInfo(string id, CustomAnimation animation) =>
         new(id, animation.Name, animation.Description, animation.Frames.Count, animation.TotalDuration);
 
-    private static string DefaultFolder() =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Porchlight",
-            "Animations");
+    private static string DefaultFolder() => Path.Combine(Settings.AppDataPaths.Root, "Animations");
 }

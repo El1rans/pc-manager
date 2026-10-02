@@ -1245,8 +1245,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     [RelayCommand]
     private void OpenLogFolder()
     {
-        var path = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Porchlight", "logs");
+        var path = AppDataPaths.LogsDirectory;
         try
         {
             Directory.CreateDirectory(path);
