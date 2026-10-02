@@ -62,6 +62,20 @@ public interface IWingetClient
         string id, bool silent, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Runs <c>winget search --query &lt;query&gt; --source winget --count 50
+    /// --accept-source-agreements --disable-interactivity</c> and parses it with
+    /// <see cref="WingetSearchTableParser"/>. No match is an empty list, not an error.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">winget failed for a reason other than "no match".</exception>
+    Task<IReadOnlyList<WingetSearchResult>> SearchAsync(string query, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Runs <c>winget list --source winget --accept-source-agreements --disable-interactivity</c>
+    /// and returns the ids of the installed packages (case-insensitive). Empty when none match.
+    /// </summary>
+    Task<IReadOnlySet<string>> ListInstalledIdsAsync(CancellationToken cancellationToken);
+
+    /// <summary>
     /// Runs <c>winget export -o &lt;filePath&gt; --accept-source-agreements --disable-interactivity</c>,
     /// saving the list of installed apps to a file (used by the Updates page's "Move to a new PC").
     /// </summary>

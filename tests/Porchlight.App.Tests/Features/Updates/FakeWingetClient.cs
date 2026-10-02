@@ -100,13 +100,24 @@ internal sealed class FakeWingetClient : IWingetClient
         string id, bool silent, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken)
     {
         InstallCalls.Add(id);
+        InstallSilentFlags.Add(silent);
+
+        foreach (var line in InstallProgressLines)
+        {
+            progress?.Report(line);
+        }
 
         if (Gate is not null)
         {
             await Gate.Task.ConfigureAwait(true);
         }
 
-        return InstallResult;
+        if (InstallException is not null)
+        {
+            throw InstallException;
+        }
+
+        return InstallResultsById.TryGetValue(id, out var configured) ? configured : InstallResult;
     }
 
     /// <summary>Result <see cref="ExportAsync"/> returns.</summary>
@@ -124,6 +135,60 @@ internal sealed class FakeWingetClient : IWingetClient
     {
         ExportCalls.Add(filePath);
         return Task.FromResult(ExportResult);
+    }
+
+    /// <summary>Results <see cref="SearchAsync"/> returns (the GetApps tests drive this).</summary>
+    public List<WingetSearchResult> SearchResults { get; } = [];
+
+    /// <summary>When set, <see cref="SearchAsync"/> throws this instead of returning results.</summary>
+    public Exception? SearchException { get; set; }
+
+    /// <summary>When set, <see cref="SearchAsync"/> awaits this task first.</summary>
+    public TaskCompletionSource? SearchGate { get; set; }
+
+    public List<string> SearchCalls { get; } = [];
+
+    /// <summary>Ids <see cref="ListInstalledIdsAsync"/> reports as installed.</summary>
+    public HashSet<string> InstalledIds { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>When set, <see cref="ListInstalledIdsAsync"/> awaits this task first.</summary>
+    public TaskCompletionSource? ListGate { get; set; }
+
+    public List<bool> InstallSilentFlags { get; } = [];
+
+    /// <summary>Lines <see cref="InstallAsync"/> reports to its <c>progress</c> before awaiting the gate.</summary>
+    public List<string> InstallProgressLines { get; } = [];
+
+    /// <summary>Per-package-id result for <see cref="InstallAsync"/>; falls back to <see cref="InstallResult"/>.</summary>
+    public Dictionary<string, WingetResult> InstallResultsById { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Throws this from <see cref="InstallAsync"/> when set.</summary>
+    public Exception? InstallException { get; set; }
+
+    public async Task<IReadOnlyList<WingetSearchResult>> SearchAsync(string query, CancellationToken cancellationToken)
+    {
+        SearchCalls.Add(query);
+        if (SearchGate is not null)
+        {
+            await SearchGate.Task.WaitAsync(cancellationToken).ConfigureAwait(true);
+        }
+
+        if (SearchException is not null)
+        {
+            throw SearchException;
+        }
+
+        return [.. SearchResults];
+    }
+
+    public async Task<IReadOnlySet<string>> ListInstalledIdsAsync(CancellationToken cancellationToken)
+    {
+        if (ListGate is not null)
+        {
+            await ListGate.Task.WaitAsync(cancellationToken).ConfigureAwait(true);
+        }
+
+        return new HashSet<string>(InstalledIds, StringComparer.OrdinalIgnoreCase);
     }
 
     public Task<WingetResult> ImportAsync(

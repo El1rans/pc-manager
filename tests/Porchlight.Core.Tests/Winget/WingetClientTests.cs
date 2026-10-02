@@ -125,6 +125,85 @@ public sealed class WingetClientTests
     }
 
     [Fact]
+    public async Task SearchAsync_BuildsExpectedArgumentsAndParses()
+    {
+        var runner = new FakeProcessRunner
+        {
+            NextLines =
+            [
+                "Name             Id           Version Match",
+                "---------------------------------------------",
+                "VLC media player VideoLAN.VLC 3.0.23  Moniker: vlc",
+            ],
+        };
+        var client = new WingetClient(runner, NullLogger<WingetClient>.Instance);
+
+        var results = await client.SearchAsync("vlc player", CancellationToken.None);
+
+        Assert.Equal(
+            [
+                "search", "--query", "vlc player", "--source", "winget", "--count", "50",
+                "--accept-source-agreements", "--disable-interactivity",
+            ],
+            runner.RunCalls[0].Arguments);
+        Assert.Equal("VideoLAN.VLC", Assert.Single(results).Id);
+    }
+
+    [Fact]
+    public async Task SearchAsync_NoPackageFoundExitCode_ReturnsEmpty()
+    {
+        var runner = new FakeProcessRunner
+        {
+            NextExitCode = WingetExitCodes.NoApplicationsFound,
+            NextLines = ["No package found matching input criteria."],
+        };
+        var client = new WingetClient(runner, NullLogger<WingetClient>.Instance);
+
+        var results = await client.SearchAsync("zzzz", CancellationToken.None);
+
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task SearchAsync_OtherFailure_Throws()
+    {
+        var runner = new FakeProcessRunner { NextExitCode = WingetExitCodes.ServiceUnavailable };
+        var client = new WingetClient(runner, NullLogger<WingetClient>.Instance);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.SearchAsync("vlc", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task SearchAsync_BlankQuery_Throws()
+    {
+        var client = new WingetClient(new FakeProcessRunner(), NullLogger<WingetClient>.Instance);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.SearchAsync("  ", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ListInstalledIdsAsync_BuildsExpectedArgumentsAndParses()
+    {
+        var runner = new FakeProcessRunner
+        {
+            NextLines =
+            [
+                "Name    Id              Version Available",
+                "---------------------------------------",
+                "AnyDesk AnyDesk.AnyDesk 9.8.0   ",
+            ],
+        };
+        var client = new WingetClient(runner, NullLogger<WingetClient>.Instance);
+
+        var ids = await client.ListInstalledIdsAsync(CancellationToken.None);
+
+        Assert.Equal(
+            ["list", "--source", "winget", "--accept-source-agreements", "--disable-interactivity"],
+            runner.RunCalls[0].Arguments);
+        Assert.Contains("anydesk.anydesk", ids);
+    }
+
+    [Fact]
     public async Task InstallAsync_BuildsExpectedArguments()
     {
         var runner = new FakeProcessRunner();

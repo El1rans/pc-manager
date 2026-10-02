@@ -42,6 +42,12 @@ internal sealed class FakeWingetClient : IWingetClient
         string filePath, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken) =>
         Task.FromResult(new WingetResult(0, []));
 
+    public Task<IReadOnlyList<WingetSearchResult>> SearchAsync(string query, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<WingetSearchResult>>([]);
+
+    public Task<IReadOnlySet<string>> ListInstalledIdsAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlySet<string>>(new HashSet<string>());
+
     public Task<WingetResult> ImportAsync(
         string filePath, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken) =>
         Task.FromResult(new WingetResult(0, []));

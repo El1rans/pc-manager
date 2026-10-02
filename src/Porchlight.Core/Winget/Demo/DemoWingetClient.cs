@@ -89,6 +89,30 @@ internal sealed class DemoWingetClient : IWingetClient
         return Task.FromResult(new WingetResult(0, [$"Successfully installed {id} (demo mode)."]));
     }
 
+    public Task<IReadOnlyList<WingetSearchResult>> SearchAsync(string query, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<WingetSearchResult> fakeCatalog =
+        [
+            new("Demo Browser", "Demo.Browser", "121.0.3"),
+            new("Demo Photo Viewer", "Demo.PhotoViewer", "4.3.0"),
+            new("Demo Video Player", "Demo.VideoPlayer", "3.0.1"),
+            new("Demo Music Player", "Demo.MusicPlayer", "1.8.2"),
+            new("Demo Archiver", "Demo.Archiver", "7.23.0"),
+        ];
+        IReadOnlyList<WingetSearchResult> matches =
+        [
+            .. fakeCatalog.Where(r => r.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || r.Id.Contains(query, StringComparison.OrdinalIgnoreCase)),
+        ];
+        return Task.FromResult(matches);
+    }
+
+    public Task<IReadOnlySet<string>> ListInstalledIdsAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlySet<string> installed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Demo.PhotoViewer" };
+        return Task.FromResult(installed);
+    }
+
     public Task<WingetResult> ExportAsync(
         string filePath, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken)
     {
