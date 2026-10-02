@@ -7,3 +7,5 @@ Ideas that are not built yet. Nothing here is a promise.
 - Process list with CPU/RAM, kill or open file location
 - Windows services viewer
 - Startup impact ratings and logon scheduled tasks for the Startup apps page
+
+Specced and in progress: specs 26-30 in `docs/specs/` cover all five items above.

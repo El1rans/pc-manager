@@ -125,16 +125,16 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
-    public void CategoryCatalog_HasTheSixCategories_HelpAndSettingsPinned_SettingsLast()
+    public void CategoryCatalog_HasTheSevenCategories_HelpAndSettingsPinned_SettingsLast()
     {
         var all = PageCategoryCatalog.All.ToList();
 
-        Assert.Equal(6, all.Count);
+        Assert.Equal(7, all.Count);
         Assert.Equal(
             [PageCategory.Help, PageCategory.Settings],
             all.Where(c => c.IsPinnedToBottom).OrderBy(c => c.Order).Select(c => c.Category));
         Assert.Equal(
-            [PageCategory.Overview, PageCategory.TuneUp, PageCategory.InternetAndSafety, PageCategory.Hardware],
+            [PageCategory.Overview, PageCategory.TuneUp, PageCategory.Apps, PageCategory.InternetAndSafety, PageCategory.Hardware],
             all.Where(c => !c.IsPinnedToBottom).OrderBy(c => c.Order).Select(c => c.Category));
     }
 

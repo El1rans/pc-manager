@@ -5,6 +5,7 @@ public enum PageCategory
 {
     Overview,
     TuneUp,
+    Apps,
     InternetAndSafety,
     Hardware,
     Help,
