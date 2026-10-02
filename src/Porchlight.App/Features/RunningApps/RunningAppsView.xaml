@@ -60,7 +60,7 @@
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel MaxWidth="900" HorizontalAlignment="Stretch" Margin="0,0,12,0">
+        <StackPanel MaxWidth="900" HorizontalAlignment="Left" Margin="0,0,12,0">
             <TextBlock Text="Running apps" Style="{StaticResource PageTitle}"/>
             <TextBlock Style="{StaticResource Secondary}" TextWrapping="Wrap" Margin="0,4,0,8"
                        Text="What is running right now and how much of your PC it is using. Updates every 2 seconds while you are on this page."/>
@@ -75,6 +75,7 @@
                           AutomationProperties.Name="Sort by"/>
                 <TextBlock DockPanel.Dock="Right" Text="Sort by" Style="{StaticResource Secondary}" VerticalAlignment="Center"
                            Margin="12,0,0,0"/>
+                <TextBlock DockPanel.Dock="Left" Text="Filter:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                 <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
                          AutomationProperties.Name="Filter apps by name" ToolTip="Filter by name"/>
             </DockPanel>
