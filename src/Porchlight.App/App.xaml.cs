@@ -17,6 +17,7 @@ using Porchlight.App.Features.Lighting;
 using Porchlight.App.Features.Network;
 using Porchlight.App.Features.Notifications;
 using Porchlight.App.Features.RemoteSupport;
+using Porchlight.App.Features.RunningApps;
 using Porchlight.App.Features.Settings;
 using Porchlight.App.Features.Setup;
 using Porchlight.App.Features.Startup;
@@ -305,6 +306,7 @@ public partial class App : System.Windows.Application, IDisposable
         services.AddRemoteSupportFeature();
         services.AddCleanupFeature();
         services.AddStartupFeature();
+        services.AddRunningAppsFeature();
         services.AddHealthFeature();
         services.AddNetworkFeature();
         services.AddBrowsersFeature();

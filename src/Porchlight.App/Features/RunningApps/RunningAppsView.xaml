@@ -1,0 +1,97 @@
+<UserControl x:Class="Porchlight.App.Features.RunningApps.RunningAppsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:local="clr-namespace:Porchlight.App.Features.RunningApps"
+             d:DataContext="{d:DesignInstance local:RunningAppsViewModel}"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600">
+
+    <UserControl.Resources>
+        <GridLength x:Key="NumberColumnWidth">80</GridLength>
+
+        <DataTemplate x:Key="RowTemplate" DataType="{x:Type local:RunningAppViewModel}">
+            <Border Style="{StaticResource Card}" Margin="0,0,0,6" Padding="12,8"
+                    AutomationProperties.Name="{Binding RowAutomationName}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="{StaticResource NumberColumnWidth}"/>
+                        <ColumnDefinition Width="{StaticResource NumberColumnWidth}"/>
+                        <ColumnDefinition Width="Auto" MinWidth="250"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontWeight="SemiBold"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,12,0"
+                               ToolTip="{Binding ExecutablePath}"/>
+                    <TextBlock Grid.Column="1" Text="{Binding CpuText}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                               Typography.NumeralAlignment="Tabular"/>
+                    <TextBlock Grid.Column="2" Text="{Binding MemoryText}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                               Typography.NumeralAlignment="Tabular"/>
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="12,0,0,0">
+                        <Button Content="Open file location" Margin="0,0,8,0"
+                                IsEnabled="{Binding HasPath}"
+                                Command="{Binding DataContext.OpenFileLocationCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding}"
+                                AutomationProperties.Name="{Binding OpenLocationAutomationName}"/>
+                        <Button Content="End task"
+                                Visibility="{Binding CanEnd, Converter={StaticResource BoolToVis}}"
+                                Command="{Binding DataContext.EndTaskCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding}"
+                                AutomationProperties.Name="{Binding EndAutomationName}"/>
+                        <Button Content="End task" IsEnabled="False"
+                                Visibility="{Binding CannotEnd, Converter={StaticResource BoolToVis}}"
+                                ToolTip="Windows needs this"
+                                AutomationProperties.Name="End task not available, Windows needs this"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type local:RunningAppSectionViewModel}">
+            <Expander IsExpanded="{Binding IsExpanded, Mode=TwoWay}" HorizontalContentAlignment="Stretch" Margin="0,0,0,8">
+                <Expander.Header>
+                    <TextBlock Text="{Binding HeaderText}" Style="{StaticResource CardTitle}" Margin="0"
+                               AutomationProperties.Name="{Binding HeaderText}"/>
+                </Expander.Header>
+                <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource RowTemplate}" Margin="0,8,0,0"
+                              AutomationProperties.Name="{Binding HeaderText}"/>
+            </Expander>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel MaxWidth="900" HorizontalAlignment="Left" Margin="0,0,12,0">
+            <TextBlock Text="Running apps" Style="{StaticResource PageTitle}"/>
+            <TextBlock Style="{StaticResource Secondary}" TextWrapping="Wrap" Margin="0,4,0,8"
+                       Text="What is running right now and how much of your PC it is using. Updates every 2 seconds while you are on this page."/>
+
+            <TextBlock Text="{Binding Summary}" Margin="0,0,0,8" TextWrapping="Wrap"
+                       Visibility="{Binding Summary, Converter={StaticResource StringToVis}}"/>
+
+            <DockPanel Margin="0,0,0,12" LastChildFill="True">
+                <ComboBox DockPanel.Dock="Right" Width="150" Margin="12,0,0,0"
+                          ItemsSource="{Binding SortOptions}" DisplayMemberPath="Label"
+                          SelectedValuePath="Sort" SelectedValue="{Binding SelectedSort}"
+                          AutomationProperties.Name="Sort by"/>
+                <TextBlock DockPanel.Dock="Right" Text="Sort by" Style="{StaticResource Secondary}" VerticalAlignment="Center"
+                           Margin="12,0,0,0"/>
+                <TextBlock DockPanel.Dock="Left" Text="Filter:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
+                         AutomationProperties.Name="Filter apps by name" ToolTip="Filter by name"/>
+            </DockPanel>
+
+            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="0,0,0,12"
+                       Visibility="{Binding Message, Converter={StaticResource StringToVis}}"/>
+            <DockPanel Margin="0,0,0,12" Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVis}}">
+                <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" Style="{StaticResource Icon}" Margin="0,0,8,0"
+                           Foreground="{DynamicResource SystemFillColorCautionBrush}"/>
+                <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap"/>
+            </DockPanel>
+
+            <TextBlock Text="Nothing matches. Try a different name." Style="{StaticResource Secondary}" Margin="0,0,0,12"
+                       Visibility="{Binding ShowEmptyState, Converter={StaticResource BoolToVis}}"/>
+
+            <ItemsControl ItemsSource="{Binding Sections}"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
