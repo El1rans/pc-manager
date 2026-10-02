@@ -31,6 +31,10 @@ public static partial class WingetExitCodes
     /// package's manifest are applicable to this system (architecture, OS version, etc.).</summary>
     public const int NoApplicableInstaller = unchecked((int)0x8A150010);
 
+    /// <summary>APPINSTALLER_CLI_ERROR_NO_APPLICATIONS_FOUND - <c>winget search</c>/<c>list</c>
+    /// matched nothing ("No package found matching input criteria."). Not an error for a search.</summary>
+    public const int NoApplicationsFound = unchecked((int)0x8A150014);
+
     /// <summary>APPINSTALLER_CLI_ERROR_INSTALLER_HASH_MISMATCH - the downloaded installer's hash did
     /// not match the manifest, so winget refused to run it.</summary>
     public const int InstallerHashMismatch = unchecked((int)0x8A150011);

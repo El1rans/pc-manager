@@ -39,6 +39,34 @@ public static partial class WingetTableParser
         ArgumentNullException.ThrowIfNull(lines);
 
         var packages = new List<WingetPackage>();
+        foreach (var row in ParseRows(lines, minimumColumns: 4, logger))
+        {
+            var fields = row.Fields;
+            var source = fields.Count > 4 ? fields[4] : string.Empty;
+            packages.Add(new WingetPackage(
+                Name: fields[0],
+                Id: fields[1],
+                InstalledVersion: fields[2],
+                AvailableVersion: fields[3],
+                Source: source,
+                RequiresExplicit: row.TableIndex > 1));
+        }
+
+        return packages;
+    }
+
+    /// <summary>
+    /// The shared column-splitting logic: finds every dashed-separator table in
+    /// <paramref name="lines"/> and slices each data row into one trimmed field per header column
+    /// (see the type remarks). Reused by <see cref="WingetSearchTableParser"/> and
+    /// <see cref="WingetInstalledIdsParser"/>, whose tables differ only in their columns.
+    /// </summary>
+    /// <param name="minimumColumns">A table whose header has fewer columns is skipped, and a row too
+    /// short to reach the last of these columns ends the table (winget's summary line).</param>
+    internal static List<WingetTableRow> ParseRows(
+        IReadOnlyList<string> lines, int minimumColumns, ILogger? logger = null)
+    {
+        var rows = new List<WingetTableRow>();
         var tableIndex = 0;
 
         for (var i = 1; i < lines.Count; i++)
@@ -50,7 +78,7 @@ public static partial class WingetTableParser
 
             tableIndex++;
             var columnStarts = FindColumnStarts(lines[i - 1]);
-            if (columnStarts.Count < 4)
+            if (columnStarts.Count < minimumColumns)
             {
                 continue;
             }
@@ -59,7 +87,7 @@ public static partial class WingetTableParser
             for (; j < lines.Count; j++)
             {
                 var line = lines[j];
-                if (string.IsNullOrWhiteSpace(line) || DisplayWidth(line) <= columnStarts[3])
+                if (string.IsNullOrWhiteSpace(line) || DisplayWidth(line) <= columnStarts[minimumColumns - 1])
                 {
                     break;
                 }
@@ -79,20 +107,13 @@ public static partial class WingetTableParser
                     continue;
                 }
 
-                var source = fields.Count > 4 ? fields[4] : string.Empty;
-                packages.Add(new WingetPackage(
-                    Name: fields[0],
-                    Id: fields[1],
-                    InstalledVersion: fields[2],
-                    AvailableVersion: fields[3],
-                    Source: source,
-                    RequiresExplicit: tableIndex > 1));
+                rows.Add(new WingetTableRow(fields, tableIndex));
             }
 
             i = j;
         }
 
-        return packages;
+        return rows;
     }
 
     /// <summary>Column start offsets, in display cells: the position of the first character of each

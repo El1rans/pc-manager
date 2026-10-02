@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Porchlight.Core.Processes;
 
@@ -7,6 +8,9 @@ namespace Porchlight.Core.Winget;
 /// <inheritdoc cref="IWingetClient"/>
 public sealed partial class WingetClient : IWingetClient
 {
+    /// <summary>Most results <c>winget search</c> is asked for (the Get apps page's list cap).</summary>
+    private const int SearchResultLimit = 50;
+
     private readonly IProcessRunner _processRunner;
     private readonly ILogger<WingetClient> _logger;
 
@@ -99,6 +103,36 @@ public sealed partial class WingetClient : IWingetClient
 
         var result = await RunAsync(arguments, log, progress, cancellationToken).ConfigureAwait(false);
         return new WingetResult(result.ExitCode, result.StandardOutputLines);
+    }
+
+    public async Task<IReadOnlyList<WingetSearchResult>> SearchAsync(string query, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(query);
+
+        string[] arguments =
+        [
+            "search",
+            "--query", query,
+            "--source", "winget",
+            "--count", SearchResultLimit.ToString(CultureInfo.InvariantCulture),
+            "--accept-source-agreements",
+            "--disable-interactivity",
+        ];
+        var result = await RunAsync(arguments, onLine: null, onProgress: null, cancellationToken).ConfigureAwait(false);
+        if (result.ExitCode is not 0 and not WingetExitCodes.NoApplicationsFound)
+        {
+            throw new InvalidOperationException(
+                $"winget search failed with exit code 0x{unchecked((uint)result.ExitCode):X8}.");
+        }
+
+        return WingetSearchTableParser.Parse(result.StandardOutputLines, _logger);
+    }
+
+    public async Task<IReadOnlySet<string>> ListInstalledIdsAsync(CancellationToken cancellationToken)
+    {
+        string[] arguments = ["list", "--source", "winget", "--accept-source-agreements", "--disable-interactivity"];
+        var result = await RunAsync(arguments, onLine: null, onProgress: null, cancellationToken).ConfigureAwait(false);
+        return WingetInstalledIdsParser.Parse(result.StandardOutputLines, _logger);
     }
 
     public async Task<WingetResult> ExportAsync(
