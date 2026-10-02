@@ -16,6 +16,7 @@ public sealed partial class StartupService : IStartupService
     private readonly IStartupRegistry _registry;
     private readonly IStartupFolderReader _folders;
     private readonly IFileProductInfoReader _fileInfo;
+    private readonly IStartupInfoReader _startupInfo;
     private readonly IElevationService _elevation;
     private readonly ILogger<StartupService> _logger;
     private readonly TimeProvider _timeProvider;
@@ -23,11 +24,13 @@ public sealed partial class StartupService : IStartupService
 
     // Ids handed out by the last ListAsync; SetEnabledAsync refuses anything else.
     private volatile Dictionary<string, StartupEntry> _known = [];
+    private volatile bool _impactNeedsAdmin;
 
     public StartupService(
         IStartupRegistry registry,
         IStartupFolderReader folders,
         IFileProductInfoReader fileInfo,
+        IStartupInfoReader startupInfo,
         IElevationService elevation,
         ILogger<StartupService> logger,
         TimeProvider? timeProvider = null)
@@ -35,10 +38,13 @@ public sealed partial class StartupService : IStartupService
         _registry = registry;
         _folders = folders;
         _fileInfo = fileInfo;
+        _startupInfo = startupInfo;
         _elevation = elevation;
         _logger = logger;
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
+
+    public bool ImpactNeedsAdmin => _impactNeedsAdmin;
 
     public Task<IReadOnlyList<StartupEntry>> ListAsync(CancellationToken cancellationToken) =>
         Task.Run<IReadOnlyList<StartupEntry>>(() => ListCore(cancellationToken), cancellationToken);
@@ -84,9 +90,26 @@ public sealed partial class StartupService : IStartupService
             entries.AddRange(items.Select(i => BuildEntry(source, i.FileName, i.TargetPath ?? i.FileName, i.TargetPath)));
         }
 
+        AttachImpact(entries);
         entries.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase));
         _known = entries.ToDictionary(e => e.Id, StringComparer.Ordinal);
         return entries;
+    }
+
+    private void AttachImpact(List<StartupEntry> entries)
+    {
+        var trace = _startupInfo.Read();
+        _impactNeedsAdmin = trace.AccessDenied;
+        if (trace.Records.Count == 0)
+        {
+            return;
+        }
+
+        var rater = new StartupImpactRater(trace.Records);
+        for (var i = 0; i < entries.Count; i++)
+        {
+            entries[i] = entries[i] with { Impact = rater.Rate(entries[i].ExecutablePath) };
+        }
     }
 
     private StartupEntry BuildEntry(StartupSource source, string itemName, string command, string? candidatePath)

@@ -104,6 +104,8 @@ public sealed class StartupViewModelTests
     {
         public IReadOnlyList<StartupEntry> Entries { get; set; } = [];
 
+        public bool ImpactNeedsAdmin { get; set; }
+
         public StartupChangeResult Result { get; set; } = StartupChangeResult.Changed;
 
         public List<(string Id, bool Enabled)> Changes { get; } = [];

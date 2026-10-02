@@ -13,11 +13,12 @@ public sealed class StartupServiceTests
     private readonly FakeStartupRegistry _registry = new();
     private readonly FakeStartupFolderReader _folders = new();
     private readonly FakeFileProductInfoReader _fileInfo = new();
+    private readonly FakeStartupInfoReader _startupInfo = new();
     private readonly FakeElevationService _elevation = new();
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero));
 
     private StartupService CreateService() =>
-        new(_registry, _folders, _fileInfo, _elevation, NullLogger<StartupService>.Instance, _time);
+        new(_registry, _folders, _fileInfo, _startupInfo, _elevation, NullLogger<StartupService>.Instance, _time);
 
     private void AddRunValue(StartupSource source, string name, string command)
     {
@@ -65,6 +66,37 @@ public sealed class StartupServiceTests
         Assert.Equal("Bare", bare.DisplayName);
         Assert.Null(bare.ExecutablePath);
         Assert.DoesNotContain("rundll32.exe", _fileInfo.Requested);
+    }
+
+    [Fact]
+    public async Task ListAsync_AttachesImpactFromTheStartupTrace()
+    {
+        AddRunValue(StartupSource.CurrentUserRun, "Heavy", AppPath);
+        AddRunValue(StartupSource.CurrentUserRun, "Light", @"C:\Tools\light.exe");
+        AddRunValue(StartupSource.CurrentUserRun, "Unknown", @"C:\Tools\unknown.exe");
+        _startupInfo.Records.Add(new StartupInfoRecord(AppPath, 2000, 0));
+        _startupInfo.Records.Add(new StartupInfoRecord(@"C:\Tools\light.exe", 10, 10));
+        var service = CreateService();
+
+        var entries = await service.ListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(StartupImpact.High, entries.Single(e => e.ItemName == "Heavy").Impact);
+        Assert.Equal(StartupImpact.Low, entries.Single(e => e.ItemName == "Light").Impact);
+        Assert.Equal(StartupImpact.NotMeasured, entries.Single(e => e.ItemName == "Unknown").Impact);
+        Assert.False(service.ImpactNeedsAdmin);
+    }
+
+    [Fact]
+    public async Task ListAsync_TraceAccessDenied_EverythingNotMeasuredAndFlagged()
+    {
+        AddRunValue(StartupSource.CurrentUserRun, "A", AppPath);
+        _startupInfo.AccessDenied = true;
+        var service = CreateService();
+
+        var entries = await service.ListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(StartupImpact.NotMeasured, Assert.Single(entries).Impact);
+        Assert.True(service.ImpactNeedsAdmin);
     }
 
     [Fact]

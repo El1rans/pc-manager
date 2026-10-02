@@ -12,13 +12,15 @@ internal sealed class DemoStartupService : IStartupService
 
     private readonly List<StartupEntry> _entries =
     [
-        Make(StartupSource.MachineRun, "SecurityHealth", "Windows Security notification icon", "Microsoft Corporation", true, true),
-        Make(StartupSource.CurrentUserRun, "AnyDesk", "AnyDesk", "philandro Software GmbH", true, true),
-        Make(StartupSource.CurrentUserRun, "OneDrive", "Microsoft OneDrive", "Microsoft Corporation", false, true),
-        Make(StartupSource.CurrentUserRun, "Spotify", "Spotify", "Spotify AB", false, true),
-        Make(StartupSource.MachineRun32, "AdobeGCInvoker", "Adobe Genuine Software Integrity", "Adobe Inc.", false, true),
+        Make(StartupSource.MachineRun, "SecurityHealth", "Windows Security notification icon", "Microsoft Corporation", true, true, StartupImpact.Low),
+        Make(StartupSource.CurrentUserRun, "AnyDesk", "AnyDesk", "philandro Software GmbH", true, true, StartupImpact.Medium),
+        Make(StartupSource.CurrentUserRun, "OneDrive", "Microsoft OneDrive", "Microsoft Corporation", false, true, StartupImpact.High),
+        Make(StartupSource.CurrentUserRun, "Spotify", "Spotify", "Spotify AB", false, true, StartupImpact.High),
+        Make(StartupSource.MachineRun32, "AdobeGCInvoker", "Adobe Genuine Software Integrity", "Adobe Inc.", false, true, StartupImpact.Low),
         Make(StartupSource.CurrentUserFolder, "Photo Frame.lnk", "Photo Frame", null, false, false),
     ];
+
+    public bool ImpactNeedsAdmin => false;
 
     public Task<IReadOnlyList<StartupEntry>> ListAsync(CancellationToken cancellationToken)
     {
@@ -44,10 +46,11 @@ internal sealed class DemoStartupService : IStartupService
     }
 
     private static StartupEntry Make(
-        StartupSource source, string itemName, string displayName, string? publisher, bool keep, bool enabled) =>
+        StartupSource source, string itemName, string displayName, string? publisher, bool keep, bool enabled,
+        StartupImpact impact = StartupImpact.NotMeasured) =>
         new($"{source}|{itemName}", source, itemName, displayName, publisher, null,
             keep ? "Part of Windows or a tool Porchlight sets up. It's best to leave this on."
                  : "Starts by itself when you sign in to Windows. Turning it off doesn't remove the program.",
-            keep, enabled);
+            keep, enabled, impact);
 }
 #endif
