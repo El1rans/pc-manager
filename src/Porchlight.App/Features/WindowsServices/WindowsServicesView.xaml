@@ -23,6 +23,7 @@
                 <CheckBox DockPanel.Dock="Right" Content="Show Windows services" Margin="12,0,0,0"
                           IsChecked="{Binding ShowWindowsServices, Mode=TwoWay}"
                           AutomationProperties.Name="Show Windows services"/>
+                <TextBlock DockPanel.Dock="Left" Text="Filter:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                 <TextBox Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}"
                          AutomationProperties.Name="Search services"
                          ToolTip="Search by name, publisher or description"/>
