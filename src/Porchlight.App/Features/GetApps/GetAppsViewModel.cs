@@ -34,6 +34,8 @@ public sealed partial class GetAppsViewModel : PageViewModelBase, IBusyGuard, ID
 
     private readonly IWingetClient _wingetClient;
     private readonly ISettingsStore _settingsStore;
+    private readonly IUpdateHistoryStore _historyStore;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<GetAppsViewModel> _logger;
 
     private HashSet<string> _installedIds = new(StringComparer.OrdinalIgnoreCase);
@@ -59,10 +61,17 @@ public sealed partial class GetAppsViewModel : PageViewModelBase, IBusyGuard, ID
     [ObservableProperty]
     private string? _errorText;
 
-    public GetAppsViewModel(IWingetClient wingetClient, ISettingsStore settingsStore, ILogger<GetAppsViewModel> logger)
+    public GetAppsViewModel(
+        IWingetClient wingetClient,
+        ISettingsStore settingsStore,
+        IUpdateHistoryStore historyStore,
+        TimeProvider timeProvider,
+        ILogger<GetAppsViewModel> logger)
     {
         _wingetClient = wingetClient;
         _settingsStore = settingsStore;
+        _historyStore = historyStore;
+        _timeProvider = timeProvider;
         _logger = logger;
 
         Results = [];
@@ -250,6 +259,7 @@ public sealed partial class GetAppsViewModel : PageViewModelBase, IBusyGuard, ID
         {
             row.ResultText = AppResultViewModel.InstalledText;
             row.ResultIsError = false;
+            RecordHistory(row, succeeded: true, result.ExitCode);
             return true;
         }
 
@@ -257,6 +267,7 @@ public sealed partial class GetAppsViewModel : PageViewModelBase, IBusyGuard, ID
         {
             row.ResultText = "Installed. Restart your PC to finish.";
             row.ResultIsError = false;
+            RecordHistory(row, succeeded: true, result.ExitCode);
             return true;
         }
 
@@ -264,7 +275,33 @@ public sealed partial class GetAppsViewModel : PageViewModelBase, IBusyGuard, ID
         // code stays in the log.
         row.ResultText = DescribeInstallFailure(outcome.Kind);
         row.ResultIsError = true;
+        RecordHistory(row, succeeded: false, result.ExitCode);
         return false;
+    }
+
+    /// <summary>Adds the install to the Updates page's history (spec 26). Never throws: a history
+    /// write failure must not turn a finished install into an error.</summary>
+    private void RecordHistory(AppResultViewModel row, bool succeeded, int exitCode)
+    {
+        try
+        {
+            _historyStore.Add(new UpdateHistoryEntry
+            {
+                TimestampUtc = _timeProvider.GetUtcNow(),
+                PackageId = row.Id,
+                PackageName = row.Name,
+                ToVersion = string.IsNullOrWhiteSpace(row.Version) ? null : row.Version,
+                Action = UpdateHistoryAction.Install,
+                Succeeded = succeeded,
+                OutcomeTitle = succeeded ? "Installed" : "Didn't install",
+                Explanation = succeeded ? string.Empty : row.ResultText ?? string.Empty,
+                ExitCode = exitCode,
+            });
+        }
+        catch (Exception ex)
+        {
+            LogHistoryWriteFailed(ex, row.Id);
+        }
     }
 
     public static string DescribeInstallFailure(WingetOutcomeKind kind) => kind switch
@@ -336,6 +373,9 @@ public sealed partial class GetAppsViewModel : PageViewModelBase, IBusyGuard, ID
     }
 
     public void Dispose() => _searchCts.Dispose();
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't record the install of {PackageId} in the update history.")]
+    private partial void LogHistoryWriteFailed(Exception ex, string packageId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Install of {PackageId} finished: {Title} (winget code {ExitCode}).")]
     private partial void LogInstallFinished(string packageId, string title, string exitCode);

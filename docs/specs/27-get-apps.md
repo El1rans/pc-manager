@@ -20,6 +20,8 @@ a real risk for non-technical users. Porchlight already drives winget, so this m
   Updates page) so the shell warns before closing mid-install.
 - Result is a plain sentence on the row: "Installed" (success), or the friendly winget outcome
   from spec 09 (`WingetOutcome` / `WingetExitCodes`) with what to do next.
+- Every finished install (success or failure) is added to the update history from spec 26 as an
+  "Installed" entry, with the same explanation the row showed.
 - DEBUG demo mode with fake search results and a fake install.
 
 ## Non-goals
@@ -27,7 +29,6 @@ a real risk for non-technical users. Porchlight already drives winget, so this m
 - Microsoft Store (`msstore`) source - it needs Store agreements and account-bound licensing; only
   the `winget` community source is searched.
 - Uninstalling apps, choosing install location/scope/version, ratings or screenshots.
-- Recording installs in update history (spec 26) - a follow-up wires that once both have landed.
 
 ## Design
 

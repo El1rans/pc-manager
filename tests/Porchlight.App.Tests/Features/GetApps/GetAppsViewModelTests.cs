@@ -32,7 +32,10 @@ public sealed class GetAppsViewModelTests : IDisposable
         }
     }
 
-    private GetAppsViewModel Create() => new(_winget, _settingsStore, NullLogger<GetAppsViewModel>.Instance);
+    private readonly FakeUpdateHistoryStore _history = new();
+
+    private GetAppsViewModel Create() =>
+        new(_winget, _settingsStore, _history, TimeProvider.System, NullLogger<GetAppsViewModel>.Instance);
 
     private static WingetSearchResult Result(string id, string name = "", string version = "1.0") =>
         new(string.IsNullOrEmpty(name) ? id : name, id, version);
@@ -472,5 +475,47 @@ public sealed class GetAppsViewModelTests : IDisposable
 
         Assert.False(string.IsNullOrWhiteSpace(text));
         Assert.DoesNotContain("update", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Install_Success_IsRecordedInUpdateHistory()
+    {
+        using var vm = Create();
+        var row = vm.PopularApps[0];
+
+        await row.InstallCommand.ExecuteAsync(null);
+
+        var entry = Assert.Single(_history.GetAll());
+        Assert.Equal(row.Id, entry.PackageId);
+        Assert.Equal(UpdateHistoryAction.Install, entry.Action);
+        Assert.True(entry.Succeeded);
+        Assert.Null(entry.FromVersion);
+    }
+
+    [Fact]
+    public async Task Install_Failure_IsRecordedWithTheShownExplanation()
+    {
+        _winget.InstallResult = new WingetResult(WingetExitCodes.InstallNoNetwork, []);
+        using var vm = Create();
+        var row = vm.PopularApps[0];
+
+        await row.InstallCommand.ExecuteAsync(null);
+
+        var entry = Assert.Single(_history.GetAll());
+        Assert.False(entry.Succeeded);
+        Assert.Equal(row.ResultText, entry.Explanation);
+    }
+
+    [Fact]
+    public async Task Install_HistoryWriteFails_InstallStillReportsSuccess()
+    {
+        _history.ThrowOnAdd = true;
+        using var vm = Create();
+        var row = vm.PopularApps[0];
+
+        await row.InstallCommand.ExecuteAsync(null);
+
+        Assert.True(row.IsInstalled);
+        Assert.False(row.ResultIsError);
     }
 }
