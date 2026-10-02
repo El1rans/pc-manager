@@ -53,11 +53,7 @@ public sealed class SettingsStore : ISettingsStore
 
     public AppSettings Current => _current;
 
-    private static string DefaultSettingsPath() =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Porchlight",
-            "settings.json");
+    private static string DefaultSettingsPath() => AppDataPaths.SettingsFile;
 
     public void Save()
     {

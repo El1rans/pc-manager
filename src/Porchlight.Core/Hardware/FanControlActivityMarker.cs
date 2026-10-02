@@ -20,8 +20,7 @@ public sealed class FanControlActivityMarker : IFanControlActivityMarker
         _path = path;
     }
 
-    private static string DefaultPath() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Porchlight", "fancontrol.active");
+    private static string DefaultPath() => Path.Combine(Settings.AppDataPaths.Root, "fancontrol.active");
 
     public bool Exists()
     {
