@@ -2,7 +2,7 @@
 
 A technical reference of what Porchlight does. For a friendlier walk through each page, see the [page guides](../README.md#pages).
 
-- App shell with a navigation rail of six entries - Overview, Tune-up (Updates, Startup apps, Free up space, Health check), Internet & safety (Internet, Browser add-ons),
+- App shell with a navigation rail of seven entries - Overview, Tune-up (Updates, Startup apps, Free up space, Health check), Apps & services (Get apps, Running apps, Services), Internet & safety (Internet, Browser add-ons),
   Hardware (Sensors & fans, Lighting) Get help (Get help, Web console) and Settings (General, Notifications, Optional features; both of the last two are pinned at the bottom) - with a tab row above the page for categories that hold more than one, following
   Windows light/dark theme, with the app version shown in the sidebar footer.
 - Browser add-ons page: read-only list of the add-ons installed in Edge, Chrome, Brave and Firefox
@@ -103,8 +103,13 @@ A technical reference of what Porchlight does. For a friendlier walk through eac
   "What is this?" line, and marks Windows/Microsoft items and Porchlight's own tools (AnyDesk,
   OpenRGB) as "Recommended to keep". Turn items off and on exactly like Task Manager (the
   `StartupApproved` value): nothing is ever deleted, so it is always reversible, and no startup
-  program is ever launched. Items for all users need administrator rights. No startup-impact rating
-  and no scheduled tasks are shown (see `specs/13-startup-apps.md`).
+  program is ever launched. Items for all users need administrator rights (see `specs/13-startup-apps.md`).
+  Each item shows a High / Medium / Low startup impact from Windows' own StartupInfo measurements
+  (Task Manager's thresholds: more than 1 s CPU or 3 MB disk is high, under 300 ms and 300 KB is low),
+  with "Sort by impact"; reading them needs administrator rights, otherwise items show "Not measured".
+  Scheduled tasks with a logon trigger (outside `\Microsoft\Windows\`, and not Porchlight's own) are
+  listed as "Scheduled task" items and turned off/on through the task's Enabled flag only
+  (see `specs/30-startup-impact-and-tasks.md`).
 - Health check: a plain-language page with five cards - disk health (per physical disk: Healthy /
   Warning - back up your files soon / Unknown, from Windows' storage and failure-prediction data);
   Windows repair (`sfc /scannow`, then `DISM /RestoreHealth` offered only if SFC couldn't fix everything;
@@ -141,3 +146,21 @@ A technical reference of what Porchlight does. For a friendlier walk through eac
   new key any time to lock out old links). Off by default; port 8765 unless you pick another. Use it
   on your home network, or through a VPN such as Tailscale when away - don't forward the port on
   your router. See `specs/21-web-console.md`.
+- Update history (Updates page): every update, reinstall and install run from Porchlight (including
+  Get apps) is logged with the version change, action, result and time, and shown grouped by day
+  behind a "History" button, with "Clear history". Stored in its own `update-history.json` (last 500
+  entries, atomic writes, a corrupt file is set aside instead of crashing). See `specs/26-update-history.md`.
+- Get apps: searches the `winget` community catalog (`winget search --source winget`), marks apps
+  that are already installed, and installs one app at a time with live progress and a plain-language
+  result; a curated "Popular apps" list shows while the search box is empty. Only ids from the
+  current results can be installed, and a running install is never cancelled. See `specs/27-get-apps.md`.
+- Running apps: live list of running programs grouped by executable (Apps / Background / Windows),
+  with CPU % and memory, refreshed every 2 s only while the page is shown, a filter and sorting.
+  "End task" asks first, refuses Windows and critical processes and Porchlight itself, and checks
+  each process's start time so a reused process id is never ended; "Open file location" selects the
+  file in Explorer. See `specs/28-running-apps.md`.
+- Services: lists services from other apps (Windows' own are hidden by default and read-only) with
+  plain descriptions, publisher, status and start type, and can start, stop, restart or change the
+  start type of third-party services when running as administrator. Driver services and Microsoft
+  services are never changed; stopping a service with running dependents is refused. See
+  `specs/29-windows-services.md`.

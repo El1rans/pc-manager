@@ -81,8 +81,12 @@ made-up data - everything else in the app runs normally:
   control anything real (`src/Porchlight.Core/Hardware/Demo/DemoHardwareService.cs`,
   `HardwareServiceCollectionExtensions.AddHardwareCore`).
 - Lighting: `ILightingService`, reporting a fixed, made-up device list instead of connecting to a
-  real OpenRGB SDK server (`src/Porchlight.Core/Lighting/Demo/DemoLightingService.cs`,
-  `LightingServiceCollectionExtensions.AddLightingCore`).
+  real OpenRGB SDK server, and `ILightingConflictDetector`, reporting no conflicting lighting software
+  (`src/Porchlight.Core/Lighting/Demo/`, `LightingServiceCollectionExtensions.AddLightingCore`).
+- Update history: a made-up week of history (`src/Porchlight.Core/Winget/Demo/FakeUpdateHistoryStore.cs`).
+- Startup apps, Running apps and Services: made-up lists that never read or change the real startup
+  items, processes or services (`src/Porchlight.Core/Startup/Demo/`, `src/Porchlight.Core/RunningApps/Demo/`,
+  `src/Porchlight.Core/WindowsServices/Demo/`).
 
 The check and every fake above only exist in a DEBUG build (`#if DEBUG`); a Release build - what CI
 compiles and what a release ships - is unaffected and does not contain this code at all. Unset the
@@ -106,6 +110,9 @@ animations, fan-control marker). Every per-user path comes from one place,
 $env:PORCHLIGHT_DATA_DIR = "$env:TEMP\porchlight-check"
 dotnet run -c Debug --project src/Porchlight.App
 ```
+
+A run with either override also uses its own single-instance lock, so it starts alongside a real,
+running Porchlight instead of just bringing that one to the front.
 
 While either override is active, the one-time `PCManager` -> `Porchlight` folder migration is
 skipped entirely. A Release build ignores both variables. There is no need to back up or restore

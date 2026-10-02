@@ -41,6 +41,22 @@ When a row is selected, a details strip appears with its status explanation and 
 
 Helps when you get a new computer. **Save my app list...** writes the list of installed programs to a file; on the new PC, **Install apps from a list...** reads that file, shows you what will be installed, and installs it once you click **Install these apps**.
 
+## Update history
+
+The **History** button at the top right switches the page to a list of every update, reinstall and
+install Porchlight has run - including apps installed from [Get apps](get-apps.md) - grouped by day
+("Today", "Yesterday", then the date), newest first.
+
+![Update history grouped by day, each row with the app, the version change, what was done, the result and the time](../screenshots/update-history.png)
+
+Each row shows the app, the version change (for example "1.2.0 → 1.3.1"), what was done (Updated,
+Reinstalled or Installed), the result (**Done** or **Didn't work**, with the reason underneath) and
+the time. **Clear history** empties the list after asking first; **Back to updates** returns to the
+list of available updates.
+
+Only changes made from Porchlight are listed - not updates that Windows or a program installed by
+itself. The history is kept on this PC only, up to the last 500 entries.
+
 ## Log (collapsed section)
 
 The detailed output from the update tool, for troubleshooting or to show a helper. **Open log folder** opens the folder where logs are kept; **Clear** empties the on-screen log.

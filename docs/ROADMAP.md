@@ -2,10 +2,6 @@
 
 Ideas that are not built yet. Nothing here is a promise.
 
-- Update history for the Updates page
-- Install new apps from a search box
-- Process list with CPU/RAM, kill or open file location
-- Windows services viewer
-- Startup impact ratings and logon scheduled tasks for the Startup apps page
-
-Specced and in progress: specs 26-30 in `docs/specs/` cover all five items above.
+Nothing is planned right now. The last batch of ideas (update history, installing apps from a
+search box, a running-apps list, a services viewer, and startup impact plus logon tasks) shipped as
+specs 26-30 in `docs/specs/`.
