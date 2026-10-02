@@ -8,4 +8,5 @@ public enum PageCategory
     InternetAndSafety,
     Hardware,
     Help,
+    Settings,
 }

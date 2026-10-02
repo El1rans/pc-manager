@@ -19,7 +19,7 @@ Download `Porchlight-Setup-<version>.exe` from the [Releases](https://github.com
     signed kernel driver Porchlight's Hardware page needs for full sensor access and software fan
     control.
   - If `winget` is not available on your PC, Setup skips these and tells you so - Porchlight's own
-    "Set up optional features" (in the sidebar) can install them later.
+    Settings > Optional features (in the sidebar) can install them later.
   - You can also choose to create a desktop shortcut and/or start Porchlight when anyone signs in
     to this PC.
 - Uninstalling Porchlight (Windows Settings > Apps) does **not** remove AnyDesk, OpenRGB or the

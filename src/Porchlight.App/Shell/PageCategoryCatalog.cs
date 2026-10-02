@@ -4,12 +4,13 @@ namespace Porchlight.App.Shell;
 /// pinning. See docs/specs/22-nav-categories.md.</summary>
 public static class PageCategoryCatalog
 {
-    // Segoe Fluent Icons: Home, Repair, Globe, TVMonitor, People.
+    // Segoe Fluent Icons: Home, Repair, Globe, TVMonitor, People, Settings.
     private const string HomeGlyph = "";
     private const string RepairGlyph = "";
     private const string GlobeGlyph = "";
     private const string TvMonitorGlyph = "";
     private const string PeopleGlyph = "";
+    private const string SettingsGlyph = "";
 
     private static readonly IReadOnlyDictionary<PageCategory, PageCategoryInfo> Infos =
         new Dictionary<PageCategory, PageCategoryInfo>
@@ -19,6 +20,7 @@ public static class PageCategoryCatalog
             [PageCategory.InternetAndSafety] = new(PageCategory.InternetAndSafety, "Internet & safety", GlobeGlyph, 2, false),
             [PageCategory.Hardware] = new(PageCategory.Hardware, "Hardware", TvMonitorGlyph, 3, false),
             [PageCategory.Help] = new(PageCategory.Help, "Get help", PeopleGlyph, 4, true),
+            [PageCategory.Settings] = new(PageCategory.Settings, "Settings", SettingsGlyph, 5, true),
         };
 
     /// <summary>Every category, unordered.</summary>

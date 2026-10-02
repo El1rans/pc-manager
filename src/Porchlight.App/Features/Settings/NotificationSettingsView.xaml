@@ -1,0 +1,38 @@
+<UserControl x:Class="Porchlight.App.Features.Settings.NotificationSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:settings="clr-namespace:Porchlight.App.Features.Settings"
+             d:DataContext="{d:DesignInstance settings:NotificationSettingsViewModel}"
+             mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="600">
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel MaxWidth="640" HorizontalAlignment="Left" Margin="0,0,16,16">
+      <TextBlock Style="{StaticResource Secondary}" Margin="0,0,0,16" TextWrapping="Wrap"
+                 Text="Porchlight can stay in the corner of your screen and tell you when something needs attention. It never installs anything by itself."/>
+
+      <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+        <StackPanel>
+          <TextBlock Text="Tell me when" Style="{StaticResource CardTitle}"/>
+          <CheckBox Content="A drive is almost full" IsChecked="{Binding AlertLowDisk}" Margin="0,0,0,8"/>
+          <CheckBox Content="My PC is running too hot" IsChecked="{Binding AlertTemperature}" Margin="0,0,0,8"/>
+          <CheckBox Content="App updates are ready" IsChecked="{Binding AlertUpdates}" Margin="0,0,0,8"/>
+          <CheckBox Content="My PC has needed a restart for a few days" IsChecked="{Binding AlertRestartPending}"/>
+          <TextBlock Style="{StaticResource Secondary}" Margin="0,8,0,0" TextWrapping="Wrap"
+                     Text="Each message is shown at most once a day. Temperature messages need Porchlight to run as administrator with the hardware driver installed."/>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}">
+        <StackPanel>
+          <TextBlock Text="Check for app updates" Style="{StaticResource CardTitle}"/>
+          <ComboBox ItemsSource="{Binding ScheduleOptions}" SelectedItem="{Binding SelectedSchedule}"
+                    DisplayMemberPath="Label" HorizontalAlignment="Left" MinWidth="160"
+                    AutomationProperties.Name="How often to check for app updates"/>
+          <TextBlock Style="{StaticResource Secondary}" Margin="0,8,0,0" TextWrapping="Wrap"
+                     Text="Porchlight only looks for updates. You choose when to install them."/>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

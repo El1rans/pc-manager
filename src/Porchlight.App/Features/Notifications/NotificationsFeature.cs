@@ -6,7 +6,8 @@ using Porchlight.Core.Alerts;
 namespace Porchlight.App.Features.Notifications;
 
 /// <summary>Registers the tray icon, background alerts, scheduled update checks and the
-/// Notifications dialog. Adds no page to the navigation rail. See
+/// login-launch refresh. Adds no page to the navigation rail (the Settings pages are in
+/// <c>Features/Settings</c>). See
 /// <c>docs/specs/15-tray-and-alerts.md</c>.</summary>
 public static class NotificationsFeature
 {
@@ -25,9 +26,6 @@ public static class NotificationsFeature
         services.AddHostedService<ScheduledUpdateCheckHostedService>();
         services.AddHostedService<LoginLaunchRefreshHostedService>();
 
-        services.AddSingleton<INotificationsLauncher, NotificationsLauncher>();
-        services.AddTransient<NotificationsViewModel>();
-        services.AddTransient<NotificationsWindow>();
-        return services;
+                return services;
     }
 }

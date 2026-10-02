@@ -16,6 +16,7 @@ using Porchlight.App.Features.Lighting;
 using Porchlight.App.Features.Network;
 using Porchlight.App.Features.Notifications;
 using Porchlight.App.Features.RemoteSupport;
+using Porchlight.App.Features.Settings;
 using Porchlight.App.Features.Setup;
 using Porchlight.App.Features.Startup;
 using Porchlight.App.Features.Updates;
@@ -309,6 +310,7 @@ public partial class App : System.Windows.Application, IDisposable
         services.AddNetworkFeature();
         services.AddBrowsersFeature();
         services.AddNotificationsFeature();
+        services.AddSettingsFeature();
         services.AddWebConsoleFeature();
     }
 

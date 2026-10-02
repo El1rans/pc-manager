@@ -3,6 +3,7 @@ using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using Porchlight.App.Features.Notifications;
 using Porchlight.App.Features.RemoteSupport;
+using Porchlight.App.Features.Settings;
 using Porchlight.App.Features.Updates;
 using Porchlight.App.Shell;
 using Porchlight.Core.Tray;
@@ -19,7 +20,6 @@ public sealed class TrayService : IDisposable
     private readonly ITrayIcon _trayIcon;
     private readonly IQuickStatsProvider _statsProvider;
     private readonly IShellWindowService _shell;
-    private readonly INotificationsLauncher _notificationsLauncher;
     private readonly IUpdateChecker _updateChecker;
     private readonly ILogger<TrayService> _logger;
     private DispatcherTimer? _timer;
@@ -29,14 +29,12 @@ public sealed class TrayService : IDisposable
         ITrayIcon trayIcon,
         IQuickStatsProvider statsProvider,
         IShellWindowService shell,
-        INotificationsLauncher notificationsLauncher,
         IUpdateChecker updateChecker,
         ILogger<TrayService> logger)
     {
         _trayIcon = trayIcon;
         _statsProvider = statsProvider;
         _shell = shell;
-        _notificationsLauncher = notificationsLauncher;
         _updateChecker = updateChecker;
         _logger = logger;
     }
@@ -50,7 +48,7 @@ public sealed class TrayService : IDisposable
             new TrayMenuItem("Open Porchlight", _shell.ShowMainWindow),
             new TrayMenuItem("Check for updates", CheckForUpdates),
             new TrayMenuItem("Get help", () => _shell.NavigateTo(typeof(RemoteSupportViewModel))),
-            new TrayMenuItem("Notifications settings", _notificationsLauncher.Show),
+            new TrayMenuItem("Notifications settings", () => _shell.NavigateTo(typeof(NotificationSettingsViewModel))),
             TrayMenuItem.Separator,
             new TrayMenuItem("Exit", _shell.RequestExit),
         ]);

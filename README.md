@@ -55,9 +55,8 @@ Each link opens a guide that explains everything on that page.
 - [Get help](docs/pages/get-help.md) - let family connect, and send them a check-up.
 - [Web console](docs/pages/web-console.md) - watch this PC's stats from a phone (read-only).
 
-**Other windows** (opened from the buttons at the bottom of the left menu)
-- [Set up optional features](docs/pages/set-up-optional-features.md) - install AnyDesk, OpenRGB and the PawnIO driver.
-- [Notifications](docs/pages/notifications.md) - tray behaviour, alerts, how often to check for updates.
+**Settings** (pinned at the bottom of the left menu, below Get help)
+- [Settings](docs/pages/settings.md) - three tabs: General (theme, start at sign-in, tray), Notifications (alerts, update checks) and Optional features (AnyDesk, OpenRGB, PawnIO driver).
 
 For a technical list of everything Porchlight does, see [docs/FEATURES.md](docs/FEATURES.md).
 
@@ -66,7 +65,7 @@ For a technical list of everything Porchlight does, see [docs/FEATURES.md](docs/
 Download `Porchlight-Setup-<version>.exe` from the [Releases](https://github.com/El1rans/porchlight/releases) page and run it.
 
 - The installer is unsigned for now, so Windows SmartScreen will warn about it. Click **More info**, then **Run anyway**. See the [code signing policy](docs/CODE_SIGNING_POLICY.md).
-- Setup can also install optional helpers with `winget`: AnyDesk (remote help), OpenRGB (RGB lighting) and the PawnIO driver (fan control and sensors). You can add them later from "Set up optional features".
+- Setup can also install optional helpers with `winget`: AnyDesk (remote help), OpenRGB (RGB lighting) and the PawnIO driver (fan control and sensors). You can add them later from Settings > Optional features.
 - Installed copies update themselves from inside the app (Tune-up > Updates) - see [docs/specs/23-self-update.md](docs/specs/23-self-update.md).
 
 More detail (silent install, uninstalling, upgrading from PC Manager): [docs/INSTALL.md](docs/INSTALL.md).

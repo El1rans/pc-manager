@@ -84,3 +84,23 @@ The Hardware page's tab reads "Sensors & fans". Its rail/page `Title` stays "Har
       update, unsubscribe on dispose), navigation by type selecting category + tab, remembered tab,
       `FindBusyPage` including pinned pages.
 - [ ] README "Features" nav description updated; `dotnet build -c Release` 0 warnings; tests pass.
+
+## Addendum: Settings category (branch `feat/settings-page`)
+
+The sidebar footer's "Set up optional features" and "Notifications" buttons are gone, replaced by a
+sixth category, **Settings** (`PageCategory.Settings`, gear glyph, order 5), pinned to the bottom of the
+rail *below* Get help (Get help is used more often, so it stays closest to the content; Settings is
+the least-visited entry and sits last). Its pages (tabs), in `Features/Settings/`, registered by
+`AddSettingsFeature`:
+
+| Order | Tab | View model | Content |
+|---|---|---|---|
+| 0 | General | `GeneralSettingsViewModel` | Theme, start at sign-in (real task state re-read in `OnNavigatedToAsync`), keep in tray |
+| 1 | Notifications | `NotificationSettingsViewModel` | "Tell me when" alerts, update-check schedule |
+| 2 | Optional features | `OptionalFeaturesViewModel` | One shared `ComponentCardViewModel` per component, "Run first-time setup again" |
+
+`NotificationsWindow`, `NotificationsViewModel`, `INotificationsLauncher` and the footer commands were
+removed. The tray's "Notifications settings" item now calls `IShellWindowService.NavigateTo` for
+`NotificationSettingsViewModel`. The first-run Setup window and `ISetupLauncher` stay (first launch and the
+button on Optional features). The nav rail uses its own `NavRailItem` style (subtle Fluent fills plus an
+accent bar) because the stock selected-item fill was too dark in Light theme.

@@ -31,6 +31,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The sidebar footer buttons "Set up optional features" and "Notifications" are replaced by a **Settings** page
+  pinned at the bottom of the left menu, with General (theme, start at sign-in, keep in tray), Notifications
+  (alerts, update checks) and Optional features (AnyDesk, OpenRGB, PawnIO) tabs. The tray's "Notifications
+  settings" opens it. The left menu's selected item is lighter in Light theme.
 - Dashboard: CPU shows on the very first update instead of waiting ~1 s (5 s+ after boot) for the
   performance counters; they now start loading at app launch, so GPU and disk arrive sooner too.
 - Hardware: the Sensors tab opens with every card collapsed (each header already shows its key
