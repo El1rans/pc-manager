@@ -13,6 +13,7 @@
     <PackageReference Include="LibreHardwareMonitorLib" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="System.Management" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" />
     <PackageReference Include="System.Diagnostics.PerformanceCounter" />
   </ItemGroup>
 
