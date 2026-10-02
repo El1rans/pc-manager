@@ -34,8 +34,14 @@ public sealed partial class StartupViewModel : PageViewModelBase
     private string? _errorMessage;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Summary), nameof(ShowEmptyState), nameof(ShowAdminBanner))]
+    [NotifyPropertyChangedFor(nameof(Summary), nameof(ShowEmptyState), nameof(ShowAdminBanner), nameof(ShowImpactHint))]
     private bool _hasLoaded;
+
+    [ObservableProperty]
+    private bool _sortByImpact;
+
+    private IReadOnlyList<StartupEntryViewModel> _loaded = [];
+    private bool _impactNeedsAdmin;
 
     public StartupViewModel(IStartupService service, IElevationService elevation, ILogger<StartupViewModel> logger)
     {
@@ -57,6 +63,9 @@ public sealed partial class StartupViewModel : PageViewModelBase
 
     public bool ShowAdminBanner => !_elevation.IsElevated && Items.Any(i => i.Entry.RequiresAdmin);
 
+    /// <summary>One plain line (not the full banner): impact can't be read without administrator rights.</summary>
+    public bool ShowImpactHint => HasLoaded && _impactNeedsAdmin && !_elevation.IsElevated;
+
     public bool ShowEmptyState => HasLoaded && !IsLoading && Items.Count == 0 && ErrorMessage is null;
 
     public string Summary
@@ -70,11 +79,38 @@ public sealed partial class StartupViewModel : PageViewModelBase
 
             var on = Items.Count(i => i.IsEnabled);
             var noun = Items.Count == 1 ? "app starts" : "apps start";
-            return $"{Items.Count} {noun} with Windows: {on} on, {Items.Count - on} off.";
+            var text = $"{Items.Count} {noun} with Windows: {on} on, {Items.Count - on} off";
+
+            // Only items that are still on can slow the next sign-in.
+            var high = Items.Count(i => i.IsEnabled && i.IsHighImpact);
+            if (high > 0)
+            {
+                text += $", {high} {(high == 1 ? "has" : "have")} high impact";
+            }
+
+            return text + ".";
         }
     }
 
     public override Task OnNavigatedToAsync(CancellationToken cancellationToken) => LoadAsync(cancellationToken);
+
+    partial void OnSortByImpactChanged(bool value) => ApplyOrder();
+
+    private void ApplyOrder()
+    {
+        IEnumerable<StartupEntryViewModel> ordered = _loaded;
+        if (SortByImpact)
+        {
+            // Highest impact first; the service's name order is kept within a rating (stable sort).
+            ordered = _loaded.OrderByDescending(i => i.Impact);
+        }
+
+        Items.Clear();
+        foreach (var item in ordered)
+        {
+            Items.Add(item);
+        }
+    }
 
     [RelayCommand]
     private Task RefreshAsync() => LoadAsync(CancellationToken.None);
@@ -126,11 +162,9 @@ public sealed partial class StartupViewModel : PageViewModelBase
         try
         {
             var entries = await _service.ListAsync(cancellationToken);
-            Items.Clear();
-            foreach (var entry in entries)
-            {
-                Items.Add(new StartupEntryViewModel(entry, _elevation.IsElevated));
-            }
+            _loaded = [.. entries.Select(e => new StartupEntryViewModel(e, _elevation.IsElevated))];
+            _impactNeedsAdmin = _service.ImpactNeedsAdmin;
+            ApplyOrder();
 
             HasLoaded = true;
         }
@@ -150,6 +184,7 @@ public sealed partial class StartupViewModel : PageViewModelBase
             OnPropertyChanged(nameof(Summary));
             OnPropertyChanged(nameof(ShowAdminBanner));
             OnPropertyChanged(nameof(ShowEmptyState));
+            OnPropertyChanged(nameof(ShowImpactHint));
         }
     }
 }

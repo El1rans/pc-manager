@@ -16,12 +16,20 @@
             <DockPanel Margin="0,0,0,12">
                 <Button DockPanel.Dock="Right" Content="Refresh" Command="{Binding RefreshCommand}"
                         AutomationProperties.Name="Refresh the startup list"/>
+                <CheckBox DockPanel.Dock="Right" Content="Sort by impact" IsChecked="{Binding SortByImpact}" Margin="0,0,16,0"
+                          AutomationProperties.Name="Sort the startup list by impact"/>
                 <TextBlock Text="{Binding Summary}" VerticalAlignment="Center" TextWrapping="Wrap"/>
             </DockPanel>
 
             <controls:AdminRequiredBanner
                 Message="Some items are for all users on this PC. Restart as administrator to change them."
                 Visibility="{Binding ShowAdminBanner, Converter={StaticResource BoolToVis}}"/>
+
+            <DockPanel Margin="0,0,0,12" Visibility="{Binding ShowImpactHint, Converter={StaticResource BoolToVis}}">
+                <Button DockPanel.Dock="Right" Content="Restart as administrator" Margin="12,0,0,0" Click="OnRestartAsAdminClick"
+                        AutomationProperties.Name="Restart Porchlight as administrator to see startup impact"/>
+                <TextBlock Text="Run Porchlight as administrator to see startup impact." TextWrapping="Wrap" VerticalAlignment="Center"/>
+            </DockPanel>
 
             <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="0,0,0,12"
                        Visibility="{Binding Message, Converter={StaticResource StringToVis}}"/>
@@ -50,6 +58,10 @@
                                         <Run Text=" - "/>
                                         <Run Text="{Binding SourceLabel, Mode=OneWay}"/>
                                     </TextBlock>
+                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                        <TextBlock Text="{Binding ImpactGlyph}" Style="{StaticResource Icon}" Margin="0,0,6,0"/>
+                                        <TextBlock Text="{Binding ImpactText}"/>
+                                    </StackPanel>
                                     <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                                     <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
                                                 Visibility="{Binding RecommendedToKeep, Converter={StaticResource BoolToVis}}">

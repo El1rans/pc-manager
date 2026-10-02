@@ -36,6 +36,27 @@ public sealed partial class StartupEntryViewModel : ObservableObject
 
     public string Hint => Entry.Hint;
 
+    public StartupImpact Impact => Entry.Impact;
+
+    public string ImpactText => Impact switch
+    {
+        StartupImpact.High => "High impact",
+        StartupImpact.Medium => "Medium impact",
+        StartupImpact.Low => "Low impact",
+        _ => "Not measured",
+    };
+
+    // Segoe Fluent Icons: warning, info, check mark, help. Paired with the text, never colour alone.
+    public string ImpactGlyph => Impact switch
+    {
+        StartupImpact.High => "\uE7BA",
+        StartupImpact.Medium => "\uE946",
+        StartupImpact.Low => "\uE73E",
+        _ => "\uE897",
+    };
+
+    public bool IsHighImpact => Impact == StartupImpact.High;
+
     public bool RecommendedToKeep => Entry.RecommendedToKeep;
 
     public string StatusText => IsEnabled ? "On" : "Off";
