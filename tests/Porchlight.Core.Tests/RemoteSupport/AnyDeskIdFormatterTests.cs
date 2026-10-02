@@ -30,13 +30,11 @@ public sealed class AnyDeskIdFormatterTests
     public void Format_NullOrBlank_ReturnsEmpty(string? address) =>
         Assert.Equal(string.Empty, AnyDeskIdFormatter.Format(address));
 
-    [Fact]
-    public void CopyValue_NumericId_ReturnsDigitsOnlyNoSpaces() =>
-        Assert.Equal("123456789", AnyDeskIdFormatter.CopyValue("123456789"));
-
-    [Fact]
-    public void CopyValue_FormattedNumericId_StripsSpacesBackToDigits() =>
-        Assert.Equal("1234567890", AnyDeskIdFormatter.CopyValue("1 234 567 890"));
+    [Theory]
+    [InlineData("123456789", "123456789")] // already digits only
+    [InlineData("1 234 567 890", "1234567890")] // formatted: spaces stripped back to digits
+    public void CopyValue_NumericId_ReturnsDigitsOnlyNoSpaces(string address, string expected) =>
+        Assert.Equal(expected, AnyDeskIdFormatter.CopyValue(address));
 
     [Fact]
     public void CopyValue_Alias_ReturnsTrimmedAliasUnchanged() =>

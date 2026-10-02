@@ -1,6 +1,6 @@
 using Porchlight.Core.Elevation;
 
-namespace Porchlight.Core.Tests.Components;
+namespace Porchlight.App.Tests.TestDoubles;
 
 /// <summary>Shared <see cref="IElevationService"/> fake: set <see cref="IsElevated"/> via the
 /// constructor or the property; <see cref="RestartElevated"/> returns <see cref="RestartResult"/>.</summary>

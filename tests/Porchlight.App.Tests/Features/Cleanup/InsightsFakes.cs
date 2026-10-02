@@ -61,17 +61,6 @@ internal sealed class FakeInsightsRecycler : IRecycler
     }
 }
 
-internal sealed class FakeInsightsProcessRunner : IProcessRunner
-{
-    public List<(string FileName, IReadOnlyList<string> Arguments)> Detached { get; } = [];
-
-    public Task<ProcessRunResult> RunAsync(
-        string fileName, IReadOnlyList<string> arguments, IProgress<string>? onLine, IProgress<string>? onProgress,
-        CancellationToken cancellationToken) => Task.FromResult(new ProcessRunResult(0, [], []));
-
-    public void StartDetached(string fileName, IReadOnlyList<string> arguments) => Detached.Add((fileName, arguments));
-}
-
 internal sealed class FakeInsightsConfirmation : IConfirmationDialog
 {
     public bool Answer { get; set; } = true;

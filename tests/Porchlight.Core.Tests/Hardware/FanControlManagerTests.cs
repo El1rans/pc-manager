@@ -125,8 +125,10 @@ public sealed class FanControlManagerTests : IDisposable
         Assert.Equal(999, _fan.CurrentPercent);
     }
 
-    [Fact]
-    public void OnSnapshot_NotElevatedWithSavedFixedProfile_ArmedAndEnabled_NeverCallsSetPercent()
+    [Theory]
+    [InlineData(HardwareStatus.NotElevated)]
+    [InlineData(HardwareStatus.DriverMissing)]
+    public void OnSnapshot_NotReadyWithSavedFixedProfile_ArmedAndEnabled_NeverCallsSetPercent(HardwareStatus status)
     {
         // R3-1: even with control armed+enabled (e.g. a profile saved during an earlier *elevated*
         // session), a NotElevated/DriverMissing snapshot must never call SetPercent at all - a
@@ -137,22 +139,10 @@ public sealed class FanControlManagerTests : IDisposable
         using var manager = CreateManager();
         manager.Activate();
 
-        _hardwareService.RaiseSnapshot(HardwareSnapshot.Empty(HardwareStatus.NotElevated));
+        _hardwareService.RaiseSnapshot(HardwareSnapshot.Empty(status));
 
         Assert.Equal(0, _fan.SetPercentCallCount);
         Assert.Null(_fan.CurrentPercent);
-    }
-
-    [Fact]
-    public void OnSnapshot_DriverMissingWithSavedFixedProfile_ArmedAndEnabled_NeverCallsSetPercent()
-    {
-        EnableFixedFan(40);
-        using var manager = CreateManager();
-        manager.Activate();
-
-        _hardwareService.RaiseSnapshot(HardwareSnapshot.Empty(HardwareStatus.DriverMissing));
-
-        Assert.Equal(0, _fan.SetPercentCallCount);
     }
 
     [Fact]

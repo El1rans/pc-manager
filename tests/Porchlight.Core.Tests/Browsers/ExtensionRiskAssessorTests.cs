@@ -112,18 +112,13 @@ public sealed class ExtensionRiskAssessorTests
         Assert.Equal(ExtensionRiskLevel.Review, result.Level);
     }
 
-    [Fact]
-    public void SideloadedWithAllSites_IsWorthRemoving()
+    [Theory]
+    [InlineData(ExtensionSource.Sideloaded, null, "<all_urls>")]
+    [InlineData(ExtensionSource.Policy, "proxy", null)]
+    public void NonStoreSourceWithPowerfulAccess_IsWorthRemoving(ExtensionSource source, string? permission, string? host)
     {
-        var result = ExtensionRiskAssessor.Assess(Make(ExtensionSource.Sideloaded, hosts: ["<all_urls>"]), Now);
-
-        Assert.Equal(ExtensionRiskLevel.WorthRemoving, result.Level);
-    }
-
-    [Fact]
-    public void PolicyWithProxy_IsWorthRemoving()
-    {
-        var result = ExtensionRiskAssessor.Assess(Make(ExtensionSource.Policy, permissions: ["proxy"]), Now);
+        var result = ExtensionRiskAssessor.Assess(
+            Make(source, permissions: permission is null ? null : [permission], hosts: host is null ? null : [host]), Now);
 
         Assert.Equal(ExtensionRiskLevel.WorthRemoving, result.Level);
     }

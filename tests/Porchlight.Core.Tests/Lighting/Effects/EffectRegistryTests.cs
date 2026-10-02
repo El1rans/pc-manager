@@ -54,20 +54,14 @@ public sealed class EffectRegistryTests
         Assert.Null(EffectRegistry.CreateWithOverlay("Not a real effect", settings: null, withUpdatesAlert: true));
     }
 
-    [Fact]
-    public void CreateWithOverlay_WithUpdatesAlertFalse_ReturnsBaseEffect()
+    [Theory]
+    [InlineData(false, typeof(RainbowWaveEffect))] // no alert: the base effect
+    [InlineData(true, typeof(UpdatesAlertEffect))] // alert: wrapped in the overlay
+    public void CreateWithOverlay_KnownName_ReturnsBaseOrWrappedEffectPerUpdatesAlert(bool withUpdatesAlert, Type expectedType)
     {
-        var effect = EffectRegistry.CreateWithOverlay("Rainbow wave", settings: null, withUpdatesAlert: false);
+        var effect = EffectRegistry.CreateWithOverlay("Rainbow wave", settings: null, withUpdatesAlert: withUpdatesAlert);
 
-        Assert.IsType<RainbowWaveEffect>(effect);
-    }
-
-    [Fact]
-    public void CreateWithOverlay_WithUpdatesAlertTrue_WrapsInUpdatesAlertEffect()
-    {
-        var effect = EffectRegistry.CreateWithOverlay("Rainbow wave", settings: null, withUpdatesAlert: true);
-
-        Assert.IsType<UpdatesAlertEffect>(effect);
+        Assert.IsType(expectedType, effect);
     }
 
     private static readonly string[] ExpectedNames =

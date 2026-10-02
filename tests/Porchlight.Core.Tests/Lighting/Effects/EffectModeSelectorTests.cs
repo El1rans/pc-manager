@@ -20,18 +20,12 @@ public sealed class EffectModeSelectorTests
         Assert.Equal(1, selected.Index);
     }
 
-    [Fact]
-    public void SelectDirectMode_DirectModeNotPerLed_ReturnsNull()
+    [Theory]
+    [InlineData("Direct")] // a Direct mode that is not per-LED
+    [InlineData("Static")] // no Direct mode at all
+    public void SelectDirectMode_NoPerLedDirectMode_ReturnsNull(string modeName)
     {
-        IReadOnlyList<EffectModeInfo> modes = [new EffectModeInfo(0, "Direct", IsPerLed: false)];
-
-        Assert.Null(EffectModeSelector.SelectDirectMode(modes));
-    }
-
-    [Fact]
-    public void SelectDirectMode_NoDirectMode_ReturnsNull()
-    {
-        IReadOnlyList<EffectModeInfo> modes = [new EffectModeInfo(0, "Static", IsPerLed: false)];
+        IReadOnlyList<EffectModeInfo> modes = [new EffectModeInfo(0, modeName, IsPerLed: false)];
 
         Assert.Null(EffectModeSelector.SelectDirectMode(modes));
     }

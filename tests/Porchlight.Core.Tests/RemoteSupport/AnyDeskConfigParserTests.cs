@@ -5,48 +5,26 @@ namespace Porchlight.Core.Tests.RemoteSupport;
 
 public sealed class AnyDeskConfigParserTests
 {
-    [Fact]
-    public void Parse_IdPresent_ReturnsId()
+    [Theory]
+    [InlineData("ad.anynet.id=123456789\nad.anynet.alias=\n")]
+    [InlineData("ad.security.update_channel=main\r\nad.anynet.id=123456789\r\nad.anynet.alias=\r\n")] // Windows line endings
+    public void Parse_IdWithEmptyAlias_ReturnsIdAndNullAlias(string text)
     {
-        const string text = "ad.anynet.id=123456789\nad.anynet.alias=\n";
-
         var (id, alias) = AnyDeskConfigParser.Parse(text);
 
         Assert.Equal("123456789", id);
         Assert.Null(alias);
     }
 
-    [Fact]
-    public void Parse_IdMissing_ReturnsNull()
+    [Theory]
+    [InlineData("ad.anynet.alias=mom-laptop\nad.security.update_channel=main\n")]
+    [InlineData("ad.anynet.alias=mom-laptop\n")]
+    public void Parse_AliasWithoutId_ReturnsAliasAndNullId(string text)
     {
-        const string text = "ad.anynet.alias=mom-laptop\nad.security.update_channel=main\n";
-
         var (id, alias) = AnyDeskConfigParser.Parse(text);
 
         Assert.Null(id);
         Assert.Equal("mom-laptop", alias);
-    }
-
-    [Fact]
-    public void Parse_AliasOnly_ReturnsAliasAndNullId()
-    {
-        const string text = "ad.anynet.alias=mom-laptop\n";
-
-        var (id, alias) = AnyDeskConfigParser.Parse(text);
-
-        Assert.Null(id);
-        Assert.Equal("mom-laptop", alias);
-    }
-
-    [Fact]
-    public void Parse_WindowsLineEndings_ParsesCorrectly()
-    {
-        const string text = "ad.security.update_channel=main\r\nad.anynet.id=123456789\r\nad.anynet.alias=\r\n";
-
-        var (id, alias) = AnyDeskConfigParser.Parse(text);
-
-        Assert.Equal("123456789", id);
-        Assert.Null(alias);
     }
 
     [Fact]

@@ -10,23 +10,15 @@ public sealed class UnusedSensorTrackerTests
     private static SensorReading Reading(string id, SensorType type, double? value) =>
         new(id, "Test sensor", type, value, value, value, DateTimeOffset.UtcNow);
 
-    [Fact]
-    public void Observe_AlwaysZero_StaysUnused()
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(null)]
+    public void Observe_AlwaysZeroOrNull_StaysUnused(double? value)
     {
         var tracker = new UnusedSensorTracker();
         for (var i = 0; i < 5; i++)
         {
-            Assert.False(tracker.Observe(Reading("fan-1", SensorType.Fan, 0)));
-        }
-    }
-
-    [Fact]
-    public void Observe_AlwaysNull_StaysUnused()
-    {
-        var tracker = new UnusedSensorTracker();
-        for (var i = 0; i < 5; i++)
-        {
-            Assert.False(tracker.Observe(Reading("fan-1", SensorType.Fan, null)));
+            Assert.False(tracker.Observe(Reading("fan-1", SensorType.Fan, value)));
         }
     }
 

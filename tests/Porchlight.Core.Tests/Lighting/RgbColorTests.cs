@@ -45,22 +45,6 @@ public sealed class RgbColorTests
     }
 
     [Fact]
-    public void Scale_FullBrightness_ReturnsSameColor()
-    {
-        var color = new RgbColor(200, 100, 50);
-
-        Assert.Equal(color, color.Scale(1.0));
-    }
-
-    [Fact]
-    public void Scale_Zero_ReturnsBlack()
-    {
-        var color = new RgbColor(200, 100, 50);
-
-        Assert.Equal(RgbColor.Black, color.Scale(0.0));
-    }
-
-    [Fact]
     public void Scale_Half_RoundsEachChannel()
     {
         var color = new RgbColor(200, 101, 1);
@@ -71,14 +55,16 @@ public sealed class RgbColorTests
     }
 
     [Theory]
-    [InlineData(-1)]
-    [InlineData(2)]
-    public void Scale_OutOfRangeFactor_Clamps(double factor)
+    [InlineData(1.0)] // full brightness: same color
+    [InlineData(0.0)] // zero: black
+    [InlineData(-1)] // out of range: clamps to zero
+    [InlineData(2)] // out of range: clamps to full brightness
+    public void Scale_BoundaryAndOutOfRangeFactors_ClampToBlackOrOriginal(double factor)
     {
         var color = new RgbColor(200, 100, 50);
 
         var scaled = color.Scale(factor);
 
-        Assert.Equal(factor < 0 ? RgbColor.Black : color, scaled);
+        Assert.Equal(factor <= 0 ? RgbColor.Black : color, scaled);
     }
 }

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Porchlight.App.Features.Cleanup;
+using Porchlight.App.Tests.TestDoubles;
 using Porchlight.Core.Cleanup;
 using Xunit;
 
@@ -13,7 +14,7 @@ public sealed class DiskMapViewModelTests
 
     private readonly TreeFileSystem _fs = new();
     private readonly FakeInsightsRecycler _recycler = new();
-    private readonly FakeInsightsProcessRunner _runner = new();
+    private readonly FakeProcessRunner _runner = new();
     private readonly FakeInsightsConfirmation _confirmation = new();
     private readonly FakeFolderPicker _picker = new();
 
@@ -211,10 +212,10 @@ public sealed class DiskMapViewModelTests
         viewModel.ShowInFolderCommand.Execute(viewModel.Rows.Single(r => r.Name == "Documents"));
         viewModel.ShowInFolderCommand.Execute(viewModel.Rows.Single(r => r.Name == "readme.txt"));
 
-        Assert.Equal("explorer.exe", _runner.Detached[0].FileName);
-        Assert.Equal([Docs], _runner.Detached[0].Arguments);
-        Assert.Equal("/select,", _runner.Detached[1].Arguments[0]);
-        Assert.Equal(Profile + @"\readme.txt", _runner.Detached[1].Arguments[1]);
+        Assert.Equal("explorer.exe", _runner.StartDetachedCalls[0].FileName);
+        Assert.Equal([Docs], _runner.StartDetachedCalls[0].Arguments);
+        Assert.Equal("/select,", _runner.StartDetachedCalls[1].Arguments[0]);
+        Assert.Equal(Profile + @"\readme.txt", _runner.StartDetachedCalls[1].Arguments[1]);
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using Porchlight.App.Shell;
 using Microsoft.Extensions.Logging.Abstractions;
 using Porchlight.App.Features.Startup;
+using Porchlight.App.Tests.TestDoubles;
 using Porchlight.Core.Elevation;
 using Porchlight.Core.Startup;
 using Xunit;
@@ -10,7 +11,7 @@ namespace Porchlight.App.Tests.Features.Startup;
 public sealed class StartupViewModelTests
 {
     private readonly FakeStartupService _service = new();
-    private readonly FakeElevation _elevation = new();
+    private readonly FakeElevationService _elevation = new();
 
     private StartupViewModel Create() => new(_service, _elevation, NullLogger<StartupViewModel>.Instance);
 
@@ -116,10 +117,4 @@ public sealed class StartupViewModelTests
         }
     }
 
-    private sealed class FakeElevation : IElevationService
-    {
-        public bool IsElevated { get; set; }
-
-        public bool RestartElevated() => true;
-    }
 }

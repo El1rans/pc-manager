@@ -14,7 +14,8 @@ public sealed class ScheduledUpdateCheckHostedService(
     AlertEvaluator evaluator,
     AlertNotifier notifier,
     ISettingsStore settingsStore,
-    ILogger<ScheduledUpdateCheckHostedService> logger) : IHostedService, IDisposable
+    ILogger<ScheduledUpdateCheckHostedService> logger,
+    TimeProvider? timeProvider = null) : IHostedService, IDisposable
 {
     /// <summary>Waits past the startup check (<c>UpdatesAutoCheckHostedService</c>) before the
     /// first schedule decision, so the two never run back to back.</summary>
@@ -22,6 +23,7 @@ public sealed class ScheduledUpdateCheckHostedService(
 
     private static readonly TimeSpan Interval = TimeSpan.FromHours(1);
 
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
     private CancellationTokenSource? _cts;
     private Task _loop = Task.CompletedTask;
 
@@ -63,8 +65,8 @@ public sealed class ScheduledUpdateCheckHostedService(
     {
         try
         {
-            await Task.Delay(InitialDelay, cancellationToken).ConfigureAwait(false);
-            using var timer = new PeriodicTimer(Interval);
+            await Task.Delay(InitialDelay, _time, cancellationToken).ConfigureAwait(false);
+            using var timer = new PeriodicTimer(Interval, _time);
             do
             {
                 await CheckIfDueAsync(cancellationToken).ConfigureAwait(false);
@@ -82,7 +84,7 @@ public sealed class ScheduledUpdateCheckHostedService(
         try
         {
             var settings = settingsStore.Current.Notifications;
-            var now = TimeProvider.System.GetUtcNow();
+            var now = _time.GetUtcNow();
             if (!UpdateCheckPolicy.IsDue(settings.UpdateCheckSchedule, settings.LastScheduledUpdateCheckUtc, now))
             {
                 return;

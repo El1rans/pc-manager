@@ -81,21 +81,12 @@ public sealed class FanCurveTests
         Assert.False(ok);
     }
 
-    [Fact]
-    public void TryCreate_NaNTemperature_Fails()
+    [Theory]
+    [InlineData(double.NaN, 30)] // NaN temperature
+    [InlineData(30, double.PositiveInfinity)] // infinite percent
+    public void TryCreate_NonFiniteValue_Fails(double temperature, double percent)
     {
-        FanCurvePoint[] points = [new(double.NaN, 30), new(70, 100)];
-
-        var ok = FanCurve.TryCreate(points, minPercent: 20, out _, out var error);
-
-        Assert.False(ok);
-        Assert.Contains("finite", error, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void TryCreate_InfinitePercent_Fails()
-    {
-        FanCurvePoint[] points = [new(30, double.PositiveInfinity), new(70, 100)];
+        FanCurvePoint[] points = [new(temperature, percent), new(70, 100)];
 
         var ok = FanCurve.TryCreate(points, minPercent: 20, out _, out var error);
 

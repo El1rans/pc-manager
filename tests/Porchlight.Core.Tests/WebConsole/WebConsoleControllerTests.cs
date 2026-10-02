@@ -27,15 +27,6 @@ public class WebConsoleControllerTests
     }
 
     [Fact]
-    public void First_start_keeps_a_free_default_port()
-    {
-        _controller.SetEnabled(true);
-
-        Assert.Equal(WebConsoleOptions.DefaultPort, _server.Port);
-        Assert.Equal(WebConsoleOptions.DefaultPort, _settings.Current.WebConsole.Port);
-    }
-
-    [Fact]
     public void Later_starts_never_move_the_port_so_the_address_stays_the_same()
     {
         _controller.SetEnabled(true);
@@ -93,6 +84,7 @@ public class WebConsoleControllerTests
         _controller.SetEnabled(true);
 
         Assert.True(_settings.Current.WebConsole.Enabled);
+        Assert.Equal(WebConsoleOptions.DefaultPort, _settings.Current.WebConsole.Port);
         Assert.Equal(32, _settings.Current.WebConsole.AccessKey.Length);
         Assert.Equal(WebConsoleState.Running, _server.State);
         Assert.Equal(WebConsoleOptions.DefaultPort, _server.Port);

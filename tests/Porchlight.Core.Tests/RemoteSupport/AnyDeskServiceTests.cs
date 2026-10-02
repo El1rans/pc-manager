@@ -152,26 +152,13 @@ public sealed class AnyDeskServiceTests
         Assert.Equal("111222333", state.Id);
     }
 
-    [Fact]
-    public async Task GetStateAsync_ElevatedAndPathTrusted_StillUsesCli()
+    [Theory]
+    [InlineData(true, true)] // elevated but the path is trusted: still uses the CLI
+    [InlineData(false, false)] // not elevated: uses the CLI even when the path is not trusted
+    public async Task GetStateAsync_CliAllowed_UsesCli(bool isElevated, bool pathIsTrusted)
     {
-        _elevationService.IsElevated = true;
-        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath, PathIsTrusted: true);
-        _processRunner.SetResult("--get-id", 0, "123456789");
-        _processRunner.SetResult("--get-alias", 0, string.Empty);
-        var service = CreateService();
-
-        var state = await service.GetStateAsync(TestContext.Current.CancellationToken);
-
-        Assert.NotEmpty(_processRunner.RunArguments);
-        Assert.Equal("123456789", state.Id);
-    }
-
-    [Fact]
-    public async Task GetStateAsync_NotElevated_UsesCliEvenWhenPathNotTrusted()
-    {
-        _elevationService.IsElevated = false;
-        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath, PathIsTrusted: false);
+        _elevationService.IsElevated = isElevated;
+        _componentService.CurrentStatus = new ComponentStatus(ComponentState.Installed, "9.7.16", ExePath, PathIsTrusted: pathIsTrusted);
         _processRunner.SetResult("--get-id", 0, "123456789");
         _processRunner.SetResult("--get-alias", 0, string.Empty);
         var service = CreateService();

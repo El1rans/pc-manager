@@ -77,32 +77,20 @@ public class RepairParserTests
         Assert.False(DismOutputParser.TryParseProgress("The restore operation completed successfully.", out _));
     }
 
-    [Fact]
-    public void Dism_success_on_exit_zero()
+    public static TheoryData<int, string[], DismOutcome> DismOutcomeCases => new()
     {
-        Assert.Equal(DismOutcome.Succeeded, DismOutputParser.Parse(0, ["The restore operation completed successfully."]));
-    }
+        { 0, ["The restore operation completed successfully."], DismOutcome.Succeeded }, // Success on exit zero.
+        { 740, ["Error: 740", "Elevated permissions are required."], DismOutcome.NeedsAdmin },
+        { -2146498529, ["Error: 0x800f081f", "The source files could not be found."], DismOutcome.SourceNotFound },
+        { 1, ["Error: 87"], DismOutcome.Failed }, // Any other failure.
+    };
 
-    [Fact]
-    public void Dism_needs_admin()
+    [Theory]
+    [MemberData(nameof(DismOutcomeCases))]
+    public void Dism_outcome_from_exit_code_and_output(int exitCode, string[] lines, DismOutcome expected)
     {
-        Assert.Equal(DismOutcome.NeedsAdmin, DismOutputParser.Parse(740, ["Error: 740", "Elevated permissions are required."]));
+        Assert.Equal(expected, DismOutputParser.Parse(exitCode, lines));
     }
-
-    [Fact]
-    public void Dism_source_not_found()
-    {
-        Assert.Equal(
-            DismOutcome.SourceNotFound,
-            DismOutputParser.Parse(-2146498529, ["Error: 0x800f081f", "The source files could not be found."]));
-    }
-
-    [Fact]
-    public void Dism_other_failure()
-    {
-        Assert.Equal(DismOutcome.Failed, DismOutputParser.Parse(1, ["Error: 87"]));
-    }
-
     [Fact]
     public void Only_could_not_repair_offers_dism()
     {

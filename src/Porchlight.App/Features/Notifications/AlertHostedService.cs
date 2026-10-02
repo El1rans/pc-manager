@@ -13,7 +13,8 @@ public sealed class AlertHostedService(
     AlertEvaluator evaluator,
     AlertNotifier notifier,
     ISettingsStore settingsStore,
-    ILogger<AlertHostedService> logger) : IHostedService, IDisposable
+    ILogger<AlertHostedService> logger,
+    TimeProvider? timeProvider = null) : IHostedService, IDisposable
 {
     private static readonly TimeSpan InitialDelay = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
@@ -21,6 +22,7 @@ public sealed class AlertHostedService(
     /// <summary>Gap between two balloons raised in the same round, so each is readable before the next.</summary>
     private static readonly TimeSpan BalloonSpacing = TimeSpan.FromSeconds(8);
 
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
     private CancellationTokenSource? _cts;
     private Task _loop = Task.CompletedTask;
 
@@ -62,8 +64,8 @@ public sealed class AlertHostedService(
     {
         try
         {
-            await Task.Delay(InitialDelay, cancellationToken).ConfigureAwait(false);
-            using var timer = new PeriodicTimer(Interval);
+            await Task.Delay(InitialDelay, _time, cancellationToken).ConfigureAwait(false);
+            using var timer = new PeriodicTimer(Interval, _time);
             do
             {
                 await EvaluateOnceAsync(cancellationToken).ConfigureAwait(false);
@@ -86,7 +88,7 @@ public sealed class AlertHostedService(
             {
                 if (i > 0)
                 {
-                    await Task.Delay(BalloonSpacing, cancellationToken).ConfigureAwait(false);
+                    await Task.Delay(BalloonSpacing, _time, cancellationToken).ConfigureAwait(false);
                 }
 
                 notifier.Show(alerts[i]);
