@@ -23,6 +23,7 @@ using Porchlight.App.Features.Setup;
 using Porchlight.App.Features.Startup;
 using Porchlight.App.Features.Updates;
 using Porchlight.App.Features.WebConsole;
+using Porchlight.App.Features.WindowsServices;
 using Porchlight.App.Shell;
 using Porchlight.App.Tray;
 using Porchlight.Core.Components;
@@ -313,6 +314,7 @@ public partial class App : System.Windows.Application, IDisposable
         services.AddNotificationsFeature();
         services.AddSettingsFeature();
         services.AddWebConsoleFeature();
+        services.AddWindowsServicesFeature();
     }
 
     /// <summary>Applies every feature's <see cref="PageRegistration"/> to the view locator. Runs

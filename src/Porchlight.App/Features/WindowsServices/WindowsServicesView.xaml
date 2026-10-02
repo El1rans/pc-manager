@@ -1,0 +1,100 @@
+<UserControl x:Class="Porchlight.App.Features.WindowsServices.WindowsServicesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="clr-namespace:Porchlight.App.Controls"
+             xmlns:services="clr-namespace:Porchlight.App.Features.WindowsServices"
+             d:DataContext="{d:DesignInstance services:WindowsServicesViewModel}"
+             mc:Ignorable="d">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel MaxWidth="820" HorizontalAlignment="Left">
+            <TextBlock Text="Services" Style="{StaticResource PageTitle}"/>
+            <TextBlock Style="{StaticResource Secondary}" TextWrapping="Wrap" Margin="0,4,0,8"
+                       Text="Services are background helpers that apps install. Most are harmless, but you can stop or turn off the ones you don't need. Windows' own services are hidden unless you ask to see them."/>
+
+            <DockPanel Margin="0,0,0,8">
+                <Button DockPanel.Dock="Right" Content="Refresh" Command="{Binding RefreshCommand}"
+                        AutomationProperties.Name="Refresh the services list"/>
+                <TextBlock Text="{Binding Summary}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            </DockPanel>
+
+            <DockPanel Margin="0,0,0,12">
+                <CheckBox DockPanel.Dock="Right" Content="Show Windows services" Margin="12,0,0,0"
+                          IsChecked="{Binding ShowWindowsServices, Mode=TwoWay}"
+                          AutomationProperties.Name="Show Windows services"/>
+                <TextBox Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}"
+                         AutomationProperties.Name="Search services"
+                         ToolTip="Search by name, publisher or description"/>
+            </DockPanel>
+
+            <controls:AdminRequiredBanner
+                Message="Stopping or changing a service needs administrator rights. Restart as administrator to do that."
+                Visibility="{Binding ShowAdminBanner, Converter={StaticResource BoolToVis}}"/>
+
+            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="0,0,0,12"
+                       Visibility="{Binding Message, Converter={StaticResource StringToVis}}"/>
+            <DockPanel Margin="0,0,0,12" Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVis}}">
+                <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" Style="{StaticResource Icon}" Margin="0,0,8,0"
+                           Foreground="{DynamicResource SystemFillColorCautionBrush}"/>
+                <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap"/>
+            </DockPanel>
+
+            <TextBlock Text="No services match." Style="{StaticResource Secondary}"
+                       Visibility="{Binding ShowEmptyState, Converter={StaticResource BoolToVis}}"/>
+
+            <ItemsControl ItemsSource="{Binding Services}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type services:ServiceRowViewModel}">
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Publisher}" Style="{StaticResource Secondary}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                        <TextBlock Text="{Binding StateGlyph}" Style="{StaticResource Icon}" Margin="0,0,6,0"/>
+                                        <TextBlock Text="{Binding StateText}" FontWeight="SemiBold"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" MinWidth="200">
+                                    <ComboBox ItemsSource="{Binding StartTypeOptions}"
+                                              SelectedItem="{Binding SelectedStartOption, Mode=TwoWay}"
+                                              DisplayMemberPath="Label"
+                                              IsEnabled="{Binding CanChange}"
+                                              Visibility="{Binding IsChangeable, Converter={StaticResource BoolToVis}}"
+                                              AutomationProperties.Name="{Binding StartTypeAutomationName}"/>
+                                    <TextBlock Text="{Binding StartTypeText}" Style="{StaticResource Secondary}" TextWrapping="Wrap"
+                                               Visibility="{Binding IsChangeable, Converter={StaticResource InverseBoolToVis}}"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
+                                                Visibility="{Binding IsChangeable, Converter={StaticResource BoolToVis}}">
+                                        <Button Content="Start" IsEnabled="{Binding CanStart}" Margin="0,0,6,0"
+                                                Command="{Binding DataContext.StartCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                AutomationProperties.Name="{Binding StartAutomationName}"/>
+                                        <Button Content="Stop" IsEnabled="{Binding CanStop}" Margin="0,0,6,0"
+                                                Command="{Binding DataContext.StopCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                AutomationProperties.Name="{Binding StopAutomationName}"/>
+                                        <Button Content="Restart" IsEnabled="{Binding CanRestart}"
+                                                Command="{Binding DataContext.RestartCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                AutomationProperties.Name="{Binding RestartAutomationName}"/>
+                                    </StackPanel>
+                                    <TextBlock Text="Needs administrator" Style="{StaticResource Secondary}" Margin="0,4,0,0"
+                                               Visibility="{Binding ShowNeedsAdmin, Converter={StaticResource BoolToVis}}"/>
+                                    <TextBlock Text="Part of Windows. Not changed here." Style="{StaticResource Secondary}" Margin="0,4,0,0"
+                                               Visibility="{Binding IsMicrosoft, Converter={StaticResource BoolToVis}}"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
