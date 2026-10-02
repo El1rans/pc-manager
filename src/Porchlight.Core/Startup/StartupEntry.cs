@@ -10,6 +10,9 @@ namespace Porchlight.Core.Startup;
 /// <param name="Hint">Plain "What is this?" sentence.</param>
 /// <param name="RecommendedToKeep">Windows/Microsoft or Porchlight's own.</param>
 /// <param name="IsEnabled">Whether it will start at the next sign-in.</param>
+/// <param name="Impact">How much it slowed recent sign-ins, from Windows' own startup trace.</param>
+/// <param name="IsMachineWide">A per-machine item even though its source is per-user (a logon task that
+/// runs as another account or with highest privileges); changing it needs administrator rights.</param>
 public sealed record StartupEntry(
     string Id,
     StartupSource Source,
@@ -19,8 +22,10 @@ public sealed record StartupEntry(
     string? ExecutablePath,
     string Hint,
     bool RecommendedToKeep,
-    bool IsEnabled)
+    bool IsEnabled,
+    StartupImpact Impact = StartupImpact.NotMeasured,
+    bool IsMachineWide = false)
 {
     /// <summary>Changing this entry needs administrator rights.</summary>
-    public bool RequiresAdmin => Source.IsPerMachine();
+    public bool RequiresAdmin => Source.IsPerMachine() || IsMachineWide;
 }

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hand-written sample in the shape of a Windows StartupInfo trace. The real folder
+     (System32\wdi\LogFiles\StartupInfo) needs administrator rights and could not be read when
+     this was written, so the schema is a best guess; the parser is deliberately tolerant. -->
+<StartupInfo>
+  <Boot BootId="1">
+    <Process>
+      <ImagePath>\Device\HarddiskVolume3\Program Files\Chat\chat.exe</ImagePath>
+      <CpuTimeMs>1450</CpuTimeMs>
+      <DiskBytes>524288</DiskBytes>
+    </Process>
+    <Process>
+      <ImagePath>C:\Tools\Sync\sync.exe</ImagePath>
+      <CpuTimeMs>320</CpuTimeMs>
+      <DiskBytes>1024</DiskBytes>
+    </Process>
+    <Process ImagePath="C:\Tools\Tiny\tiny.exe" CpuTimeMs="12" DiskBytes="2048" />
+    <Process>
+      <ImagePath>C:\Tools\NoNumbers\nonumbers.exe</ImagePath>
+    </Process>
+    <Process>
+      <CpuTimeMs>99</CpuTimeMs>
+    </Process>
+  </Boot>
+</StartupInfo>

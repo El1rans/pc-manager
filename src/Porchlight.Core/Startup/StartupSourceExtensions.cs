@@ -13,5 +13,6 @@ public static class StartupSourceExtensions
         source is StartupSource.CurrentUserFolder or StartupSource.MachineFolder;
 
     /// <summary>Plain-language description of who the item applies to.</summary>
-    public static string ToLabel(this StartupSource source) => source.IsPerMachine() ? "All users" : "Your account";
+    public static string ToLabel(this StartupSource source) =>
+        source == StartupSource.LogonTask ? "Scheduled task" : source.IsPerMachine() ? "All users" : "Your account";
 }

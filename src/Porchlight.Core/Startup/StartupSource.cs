@@ -18,4 +18,9 @@ public enum StartupSource
 
     /// <summary>The all-users Startup folder.</summary>
     MachineFolder,
+
+    /// <summary>A scheduled task with a logon trigger. Switched on/off through the task's own
+    /// <c>Enabled</c> flag, not <c>StartupApproved</c>. Whether it needs administrator rights is
+    /// per task (<see cref="StartupEntry.IsMachineWide"/>).</summary>
+    LogonTask,
 }
