@@ -41,20 +41,29 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Title + summary -->
         <StackPanel Grid.Row="0" Margin="0,0,0,16">
-            <TextBlock Text="Updates" Style="{StaticResource PageTitle}"/>
-            <TextBlock Text="{Binding SummaryText}" Style="{StaticResource Secondary}" Margin="0,4,0,0"/>
+            <DockPanel LastChildFill="True">
+                <Button DockPanel.Dock="Right" Content="Back to updates" Command="{Binding HideHistoryCommand}"
+                        VerticalAlignment="Center" AutomationProperties.Name="Back to updates"
+                        Visibility="{Binding IsShowingHistory, Converter={StaticResource BoolToVis}}"/>
+                <Button DockPanel.Dock="Right" VerticalAlignment="Center" Command="{Binding ShowHistoryCommand}"
+                        AutomationProperties.Name="History"
+                        Visibility="{Binding IsShowingHistory, Converter={StaticResource InverseBoolToVis}}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE81C;" Style="{StaticResource Icon}" Margin="0,0,6,0"/>
+                        <TextBlock Text="History"/>
+                    </StackPanel>
+                </Button>
+                <TextBlock Text="Updates" Style="{StaticResource PageTitle}"/>
+            </DockPanel>
+            <TextBlock Text="{Binding SummaryText}" Style="{StaticResource Secondary}" Margin="0,4,0,0"
+                       Visibility="{Binding IsShowingHistory, Converter={StaticResource InverseBoolToVis}}"/>
+            <TextBlock Text="Updates run from Porchlight." Style="{StaticResource Secondary}" Margin="0,4,0,0"
+                       Visibility="{Binding IsShowingHistory, Converter={StaticResource BoolToVis}}"/>
 
             <!-- Porchlight's own update (docs/specs/23-self-update.md): only shown when GitHub has a
                  newer release. An installed copy gets "Update now"; a portable one a Download link. -->
@@ -97,8 +106,30 @@
             </Border>
         </StackPanel>
 
+        <!-- Updates list body (hidden while the history is shown) -->
+        <Grid Grid.Row="1">
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsShowingHistory}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
         <!-- Toolbar -->
-        <DockPanel Grid.Row="1" Margin="0,0,0,10" LastChildFill="True">
+        <DockPanel Grid.Row="0" Margin="0,0,0,10" LastChildFill="True">
             <CheckBox DockPanel.Dock="Right" Content="Show ignored" VerticalAlignment="Center"
                       Margin="8,0,0,0" IsChecked="{Binding ShowIgnored}"/>
             <Button DockPanel.Dock="Left" Content="Refresh" Command="{Binding RefreshCommand}" Margin="0,0,8,0"/>
@@ -110,7 +141,7 @@
         </DockPanel>
 
         <!-- Package list -->
-        <DataGrid x:Name="PackagesGrid" Grid.Row="2"
+        <DataGrid x:Name="PackagesGrid" Grid.Row="1"
                   ItemsSource="{Binding PackagesView}"
                   SelectedItem="{Binding SelectedRow}"
                   AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
@@ -183,7 +214,7 @@
         <!-- Selected row details + actions - see docs/specs/09-friendly-update-outcomes.md's row
              actions: Reinstall..., Hide this update, Try again / Try install again. Only shown
              once a row is selected and only the button(s) that apply to its SuggestedAction. -->
-        <Border Grid.Row="3" Padding="12,8" Margin="0,10,0,0">
+        <Border Grid.Row="2" Padding="12,8" Margin="0,10,0,0">
             <Border.Style>
                 <Style TargetType="Border" BasedOn="{StaticResource Card}">
                     <Style.Triggers>
@@ -220,7 +251,7 @@
 
         <!-- Reinstall confirmation - see docs/specs/09-friendly-update-outcomes.md: "Reinstall
              requires confirmation". -->
-        <Border Grid.Row="4" Style="{StaticResource Card}" Padding="12,8" Margin="0,8,0,0"
+        <Border Grid.Row="3" Style="{StaticResource Card}" Padding="12,8" Margin="0,8,0,0"
                 Visibility="{Binding ReinstallConfirmationMessage, Converter={StaticResource StringToVis}}">
             <DockPanel LastChildFill="True">
                 <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
@@ -233,7 +264,7 @@
         </Border>
 
         <!-- "Hide this update" one-line confirmation - dismissible. -->
-        <Border Grid.Row="5" Style="{StaticResource Card}" Padding="12,8" Margin="0,8,0,0"
+        <Border Grid.Row="4" Style="{StaticResource Card}" Padding="12,8" Margin="0,8,0,0"
                 Visibility="{Binding HideConfirmationMessage, Converter={StaticResource StringToVis}}">
             <DockPanel LastChildFill="True">
                 <Button DockPanel.Dock="Right" Content="Dismiss" Margin="8,0,0,0"
@@ -244,7 +275,7 @@
 
         <!-- Actions: checkboxes on their own line, buttons on the next - keeps both readable down
              to 900px wide instead of competing for the same row. -->
-        <StackPanel Grid.Row="6" Margin="0,12,0,0">
+        <StackPanel Grid.Row="5" Margin="0,12,0,0">
             <WrapPanel>
                 <CheckBox Content="Silent install (hide installer windows)" IsChecked="{Binding Silent}" Margin="0,0,16,4"/>
                 <CheckBox Content="Include apps with unknown version" IsChecked="{Binding IncludeUnknown}"
@@ -293,7 +324,7 @@
 
         <!-- Progress: current step (queue position / stopping / finished summary) and winget's own
              latest progress line shown side by side rather than combined into one string. -->
-        <StackPanel Grid.Row="7" Margin="0,10,0,0">
+        <StackPanel Grid.Row="6" Margin="0,10,0,0">
             <ProgressBar Height="4" IsIndeterminate="True" BorderThickness="0"
                          Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"/>
             <DockPanel Margin="0,4,0,0" LastChildFill="True">
@@ -306,7 +337,7 @@
         </StackPanel>
 
         <!-- Log -->
-        <Expander Grid.Row="8" Header="Log" Margin="0,8,0,0" IsExpanded="{Binding IsLogExpanded}">
+        <Expander Grid.Row="7" Header="Log" Margin="0,8,0,0" IsExpanded="{Binding IsLogExpanded}">
             <DockPanel Margin="0,6,0,0">
                 <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
                     <Button Content="Open log folder" Command="{Binding OpenLogFolderCommand}" Margin="0,0,8,0"/>
@@ -318,5 +349,74 @@
                          TextWrapping="NoWrap" TextChanged="LogTextBox_TextChanged"/>
             </DockPanel>
         </Expander>
+        </Grid>
+
+        <!-- History body (docs/specs/26-update-history.md) -->
+        <Grid Grid.Row="1" Visibility="{Binding IsShowingHistory, Converter={StaticResource BoolToVis}}">
+            <Grid DataContext="{Binding History}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Button Grid.Row="0" Content="Clear history" Command="{Binding ClearCommand}" HorizontalAlignment="Left"
+                        Margin="0,0,0,10" AutomationProperties.Name="Clear history"/>
+                <TextBlock Grid.Row="1" Text="Nothing here yet. Updates you run from Porchlight will show up here."
+                           Style="{StaticResource Secondary}" TextWrapping="Wrap"
+                           Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}"/>
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                              Visibility="{Binding HasEntries, Converter={StaticResource BoolToVis}}">
+                    <ItemsControl ItemsSource="{Binding Groups}" AutomationProperties.Name="Update history">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="0,0,0,14">
+                                    <TextBlock Text="{Binding Label}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <ItemsControl ItemsSource="{Binding Entries}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Style="{StaticResource Card}" Padding="12,8" Margin="0,0,0,6"
+                                                        AutomationProperties.Name="{Binding AutomationName}"
+                                                        ToolTip="{Binding Explanation}">
+                                                    <Grid>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                        </Grid.RowDefinitions>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" MinWidth="140"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="{Binding PackageName}" FontWeight="SemiBold"
+                                                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding VersionText}" Margin="12,0,0,0"
+                                                                   VerticalAlignment="Center" Style="{StaticResource Secondary}"/>
+                                                        <TextBlock Grid.Column="2" Text="{Binding ActionText}" Margin="12,0,0,0"
+                                                                   VerticalAlignment="Center" Style="{StaticResource Secondary}"/>
+                                                        <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="12,0,0,0"
+                                                                    VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Glyph}" Style="{StaticResource Icon}"
+                                                                       Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                            <TextBlock Text="{Binding ResultText}" VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                        <TextBlock Grid.Column="4" Text="{Binding TimeText}" Margin="12,0,0,0"
+                                                                   VerticalAlignment="Center" Style="{StaticResource Secondary}"/>
+                                                        <TextBlock Grid.Row="1" Grid.ColumnSpan="5" Text="{Binding Explanation}"
+                                                                   Style="{StaticResource Secondary}" TextWrapping="Wrap"
+                                                                   Margin="0,4,0,0"
+                                                                   Visibility="{Binding Explanation, Converter={StaticResource StringToVis}}"/>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
     </Grid>
 </UserControl>
