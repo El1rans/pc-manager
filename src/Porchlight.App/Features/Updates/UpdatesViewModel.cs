@@ -11,6 +11,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using Porchlight.App.Features.Cleanup;
 using Porchlight.App.Shell;
 using Porchlight.Core.Processes;
 using Porchlight.Core.Settings;
@@ -70,6 +71,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     private readonly IWingetClient _wingetClient;
     private readonly ReinstallWorkflow _reinstallWorkflow;
     private readonly ISettingsStore _settingsStore;
+    private readonly IUpdateHistoryStore _historyStore;
     private readonly IAppInUseDiagnosticsService _appInUseDiagnostics;
     private readonly IPendingUpdatesTracker _pendingUpdatesTracker;
     private readonly IFileDialogService _fileDialogs;
@@ -199,9 +201,10 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     public UpdatesViewModel(
         IWingetClient wingetClient, ISettingsStore settingsStore, IAppInUseDiagnosticsService appInUseDiagnostics,
         IPendingUpdatesTracker pendingUpdatesTracker, IFileDialogService fileDialogs,
-        PorchlightUpdateViewModel porchlightUpdate, ILogger<UpdatesViewModel> logger)
+        PorchlightUpdateViewModel porchlightUpdate, IUpdateHistoryStore historyStore,
+        IConfirmationDialog confirmation, ILogger<UpdatesViewModel> logger)
         : this(wingetClient, settingsStore, appInUseDiagnostics, pendingUpdatesTracker, fileDialogs, porchlightUpdate,
-            logger, TimeProvider.System)
+            historyStore, confirmation, logger, TimeProvider.System)
     {
     }
 
@@ -211,8 +214,11 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     public UpdatesViewModel(
         IWingetClient wingetClient, ISettingsStore settingsStore, IAppInUseDiagnosticsService appInUseDiagnostics,
         IPendingUpdatesTracker pendingUpdatesTracker, IFileDialogService fileDialogs,
-        PorchlightUpdateViewModel porchlightUpdate, ILogger<UpdatesViewModel> logger, TimeProvider timeProvider)
+        PorchlightUpdateViewModel porchlightUpdate, IUpdateHistoryStore historyStore,
+        IConfirmationDialog confirmation, ILogger<UpdatesViewModel> logger, TimeProvider timeProvider)
     {
+        _historyStore = historyStore;
+        History = new UpdateHistoryViewModel(historyStore, confirmation, timeProvider);
         _pendingUpdatesTracker = pendingUpdatesTracker;
         PorchlightUpdate = porchlightUpdate;
         PorchlightUpdate.PropertyChanged += OnPorchlightUpdateChanged;
@@ -257,11 +263,34 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     /// winget list below. See <c>docs/specs/23-self-update.md</c>.</summary>
     public PorchlightUpdateViewModel PorchlightUpdate { get; }
 
+    /// <summary>The History body (<c>docs/specs/26-update-history.md</c>).</summary>
+    public UpdateHistoryViewModel History { get; }
+
+    /// <summary>True while the page body shows the history list instead of the updates list.</summary>
+    [ObservableProperty]
+    private bool _isShowingHistory;
+
+    /// <summary>Switches the page body to the history list (reloading it). Safe mid-run: read-only.</summary>
+    [RelayCommand]
+    private void ShowHistory()
+    {
+        History.Load();
+        IsShowingHistory = true;
+    }
+
+    [RelayCommand]
+    private void HideHistory() => IsShowingHistory = false;
+
     public ObservableCollection<UpdatePackageViewModel> Packages { get; }
 
     public ICollectionView PackagesView { get; }
 
-    public override Task OnNavigatedToAsync(CancellationToken cancellationToken) => EnsureInitialCheckStartedAsync();
+    public override Task OnNavigatedToAsync(CancellationToken cancellationToken)
+    {
+        // Navigating away and back returns to the updates list, not the history.
+        IsShowingHistory = false;
+        return EnsureInitialCheckStartedAsync();
+    }
 
     /// <summary>
     /// Starts the very first check, the first time anything asks for it (either the app-startup
@@ -1065,8 +1094,11 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     /// the old install was actually replaced or a second copy was installed alongside it (observed
     /// for Google.CloudSDK), so that case is remembered as "already updated" rather than forgotten
     /// outright - see <see cref="UpdatePackageViewModel.IsPendingVersionConfirmation"/>.</summary>
-    private void PersistUpgradeOutcome(UpdatePackageViewModel row, WingetOutcome outcome)
+    private void PersistUpgradeOutcome(
+        UpdatePackageViewModel row, WingetOutcome outcome, UpdateHistoryAction action = UpdateHistoryAction.Update)
     {
+        RecordHistory(row, action, IsSuccess(outcome), outcome.Title, outcome.Explanation, outcome.ExitCode);
+
         if (outcome.Kind is WingetOutcomeKind.Updated or WingetOutcomeKind.UpdatedRestartNeeded)
         {
             if (row.InstalledVersion.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
@@ -1109,6 +1141,10 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     /// second-copy risk that upgrade has does not apply here.</summary>
     private void PersistReinstallOutcome(UpdatePackageViewModel row, ReinstallOutcome outcome)
     {
+        RecordHistory(
+            row, UpdateHistoryAction.Reinstall, outcome.Kind == ReinstallOutcomeKind.Reinstalled, outcome.Title,
+            outcome.Explanation, outcome.InstallOutcome?.ExitCode ?? outcome.UninstallOutcome.ExitCode);
+
         if (outcome.Kind == ReinstallOutcomeKind.Reinstalled)
         {
             ForgetPersistedOutcome(row.Id);
@@ -1135,12 +1171,13 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     /// treats it identically to a plain successful upgrade.</summary>
     private void PersistInstallOnlyOutcome(UpdatePackageViewModel row, WingetOutcome outcome)
     {
-        if (outcome.Kind is WingetOutcomeKind.Updated or WingetOutcomeKind.UpdatedRestartNeeded)
+        if (IsSuccess(outcome))
         {
-            PersistUpgradeOutcome(row, outcome);
+            PersistUpgradeOutcome(row, outcome, UpdateHistoryAction.Install);
             return;
         }
 
+        RecordHistory(row, UpdateHistoryAction.Install, false, outcome.Title, outcome.Explanation, outcome.ExitCode);
         RememberPersistedOutcome(new PersistedUpdateOutcome
         {
             PackageId = row.Id,
@@ -1152,6 +1189,45 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
             SuggestedAction = WingetSuggestedAction.Retry,
             IsCriticalReinstallFailure = true,
         });
+    }
+
+    private static bool IsSuccess(WingetOutcome outcome) =>
+        outcome.Kind is WingetOutcomeKind.Updated or WingetOutcomeKind.UpdatedRestartNeeded;
+
+    /// <summary>Adds one entry to the update history (<c>docs/specs/26-update-history.md</c>). Never
+    /// throws: a history problem must not break an update run.</summary>
+    private void RecordHistory(
+        UpdatePackageViewModel row, UpdateHistoryAction action, bool succeeded, string title, string explanation,
+        int exitCode)
+    {
+        try
+        {
+            var installed = row.InstalledVersion;
+            _historyStore.Add(new UpdateHistoryEntry
+            {
+                TimestampUtc = _timeProvider.GetUtcNow(),
+                PackageId = row.Id,
+                PackageName = row.Name,
+                FromVersion = string.IsNullOrWhiteSpace(installed) || installed.Equals("Unknown", StringComparison.OrdinalIgnoreCase)
+                    ? null
+                    : installed,
+                ToVersion = string.IsNullOrWhiteSpace(row.AvailableVersion) ? null : row.AvailableVersion,
+                Action = action,
+                Succeeded = succeeded,
+                OutcomeTitle = title,
+                Explanation = succeeded ? string.Empty : explanation,
+                ExitCode = exitCode,
+            });
+
+            if (IsShowingHistory)
+            {
+                History.Load();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Couldn't record {PackageId} in the update history.", row.Id);
+        }
     }
 
     private void RememberPersistedOutcome(PersistedUpdateOutcome outcome) =>

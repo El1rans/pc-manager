@@ -34,7 +34,8 @@ public sealed class UpdatesMoveToNewPcTests : IDisposable
 
     private UpdatesViewModel Create() =>
         new(_wingetClient, _settingsStore, new FakeAppInUseDiagnosticsService(), _tracker, _dialogs,
-            new PorchlightUpdateHarness().Create(), NullLogger<UpdatesViewModel>.Instance);
+            new PorchlightUpdateHarness().Create(), new FakeUpdateHistoryStore(), new FakeHistoryConfirmation(),
+            NullLogger<UpdatesViewModel>.Instance);
 
     private string WriteFile(string content)
     {

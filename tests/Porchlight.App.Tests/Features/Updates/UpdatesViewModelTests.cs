@@ -18,6 +18,8 @@ public sealed class UpdatesViewModelTests : IDisposable
     private readonly PendingUpdatesTracker _tracker = new();
     private readonly FakeFileDialogService _fileDialogs = new();
     private readonly PorchlightUpdateHarness _porchlight = new();
+    private readonly FakeUpdateHistoryStore _history = new();
+    private readonly FakeHistoryConfirmation _confirmation = new();
 
     public UpdatesViewModelTests()
     {
@@ -36,11 +38,11 @@ public sealed class UpdatesViewModelTests : IDisposable
 
     private UpdatesViewModel CreateViewModel() =>
         new(_wingetClient, _settingsStore, _appInUseDiagnostics, _tracker, _fileDialogs, _porchlight.Create(),
-            NullLogger<UpdatesViewModel>.Instance);
+            _history, _confirmation, NullLogger<UpdatesViewModel>.Instance);
 
     private UpdatesViewModel CreateViewModel(TimeProvider timeProvider) =>
         new(_wingetClient, _settingsStore, _appInUseDiagnostics, _tracker, _fileDialogs, _porchlight.Create(),
-            NullLogger<UpdatesViewModel>.Instance, timeProvider);
+            _history, _confirmation, NullLogger<UpdatesViewModel>.Instance, timeProvider);
 
     private static WingetPackage Package(
         string id, bool requiresExplicit = false, string name = "", string installedVersion = "1.0", string availableVersion = "2.0") =>
@@ -557,6 +559,175 @@ public sealed class UpdatesViewModelTests : IDisposable
 
         Assert.Equal(2, _wingetClient.UpgradeCalls.Count(id => id == "Some.Id"));
         Assert.Empty(_wingetClient.UninstallCalls);
+    }
+
+    [Fact]
+    public async Task UpdateSelectedAsync_Success_RecordsOneUpdateHistoryEntryWithVersions()
+    {
+        _wingetClient.UpgradeListResults.Enqueue([Package("Zoom.Zoom", name: "Zoom", installedVersion: "6.1.0", availableVersion: "6.2.1")]);
+        _wingetClient.UpgradeListResults.Enqueue([]);
+        var viewModel = CreateViewModel();
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+
+        var entry = Assert.Single(_history.GetAll());
+        Assert.Equal("Zoom.Zoom", entry.PackageId);
+        Assert.Equal("Zoom", entry.PackageName);
+        Assert.Equal("6.1.0", entry.FromVersion);
+        Assert.Equal("6.2.1", entry.ToVersion);
+        Assert.Equal(UpdateHistoryAction.Update, entry.Action);
+        Assert.True(entry.Succeeded);
+    }
+
+    [Fact]
+    public async Task UpdateSelectedAsync_UnknownInstalledVersion_RecordsNoFromVersion()
+    {
+        _wingetClient.UpgradeListResults.Enqueue([Package("A.Id", installedVersion: "Unknown", availableVersion: "3.0")]);
+        _wingetClient.UpgradeListResults.Enqueue([]);
+        var viewModel = CreateViewModel();
+        viewModel.IncludeUnknown = true;
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+
+        var entry = Assert.Single(_history.GetAll());
+        Assert.Null(entry.FromVersion);
+        Assert.Equal("3.0", entry.ToVersion);
+    }
+
+    [Fact]
+    public async Task UpdateSelectedAsync_Failure_RecordsOneFailedEntryWithFriendlyOutcome()
+    {
+        var package = Package("RARLab.WinRAR", name: "WinRAR");
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        _wingetClient.UpgradeListResults.Enqueue([package]);
+        _wingetClient.UpgradeResultsById["RARLab.WinRAR"] = new WingetResult(unchecked((int)0x8A15002B), []);
+        var viewModel = CreateViewModel();
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+
+        var entry = Assert.Single(_history.GetAll());
+        Assert.False(entry.Succeeded);
+        Assert.Equal(UpdateHistoryAction.Update, entry.Action);
+        Assert.Equal("Not available for this PC", entry.OutcomeTitle);
+        Assert.NotEmpty(entry.Explanation);
+        Assert.Equal(unchecked((int)0x8A15002B), entry.ExitCode);
+    }
+
+    [Fact]
+    public async Task ConfirmReinstallAsync_RecordsOneReinstallEntry()
+    {
+        var row = new UpdatePackageViewModel(Package("Some.Id", installedVersion: "1.0", availableVersion: "2.0"));
+        _wingetClient.UpgradeListResults.Enqueue([]);
+        var viewModel = CreateViewModel();
+        viewModel.RequestReinstallCommand.Execute(row);
+
+        await viewModel.ConfirmReinstallCommand.ExecuteAsync(null);
+
+        var entry = Assert.Single(_history.GetAll());
+        Assert.Equal(UpdateHistoryAction.Reinstall, entry.Action);
+        Assert.True(entry.Succeeded);
+        Assert.Equal("1.0", entry.FromVersion);
+        Assert.Equal("2.0", entry.ToVersion);
+    }
+
+    [Fact]
+    public async Task RetryRowAsync_InstallOnly_RecordsInstallEntry()
+    {
+        var row = new UpdatePackageViewModel(Package("Some.Id"));
+        _wingetClient.InstallResult = new WingetResult(unchecked((int)0x8A150107), []);
+        var viewModel = CreateViewModel();
+        viewModel.RequestReinstallCommand.Execute(row);
+        await viewModel.ConfirmReinstallCommand.ExecuteAsync(null);
+        Assert.True(row.IsCriticalReinstallFailure);
+
+        _wingetClient.InstallResult = new WingetResult(0, []);
+        _wingetClient.UpgradeListResults.Enqueue([]);
+        await viewModel.RetryRowCommand.ExecuteAsync(row);
+
+        var entries = _history.GetAll();
+        Assert.Equal(2, entries.Count);
+        Assert.Equal(UpdateHistoryAction.Reinstall, entries[0].Action);
+        Assert.False(entries[0].Succeeded);
+        Assert.Equal(UpdateHistoryAction.Install, entries[1].Action);
+        Assert.True(entries[1].Succeeded);
+    }
+
+    [Fact]
+    public async Task UpdateSelectedAsync_StopAfterCurrent_RecordsOnlyTheRunPackage()
+    {
+        _wingetClient.UpgradeListResults.Enqueue([Package("First"), Package("Second"), Package("Third")]);
+        _wingetClient.UpgradeListResults.Enqueue([]);
+        var viewModel = CreateViewModel();
+        await viewModel.RefreshAsync(quiet: false);
+        _wingetClient.OnUpgrading = id =>
+        {
+            if (id == "First")
+            {
+                viewModel.StopAfterCurrentCommand.Execute(null);
+            }
+        };
+
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+
+        Assert.Equal(["First"], _history.GetAll().Select(e => e.PackageId));
+    }
+
+    [Fact]
+    public async Task UpdateSelectedAsync_HistoryStoreThrows_DoesNotBreakTheRun()
+    {
+        _wingetClient.UpgradeListResults.Enqueue([Package("A.Id")]);
+        _wingetClient.UpgradeListResults.Enqueue([]);
+        _history.ThrowOnAdd = true;
+        var viewModel = CreateViewModel();
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+
+        Assert.Equal(["A.Id"], _wingetClient.UpgradeCalls);
+    }
+
+    [Fact]
+    public async Task ShowHistory_SwitchesBodyAndReloads_AndDuringARunStaysEnabled()
+    {
+        _wingetClient.UpgradeListResults.Enqueue([Package("A.Id")]);
+        _wingetClient.Gate = new TaskCompletionSource();
+        var viewModel = CreateViewModel();
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+        _history.Add(new UpdateHistoryEntry { TimestampUtc = DateTimeOffset.UtcNow, PackageName = "Old" });
+
+        var updateTask = viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+        await Task.Delay(20, TestContext.Current.CancellationToken);
+        Assert.True(viewModel.ShowHistoryCommand.CanExecute(null));
+        viewModel.ShowHistoryCommand.Execute(null);
+
+        Assert.True(viewModel.IsShowingHistory);
+        Assert.False(viewModel.History.IsEmpty);
+
+        viewModel.HideHistoryCommand.Execute(null);
+        Assert.False(viewModel.IsShowingHistory);
+
+        _wingetClient.Gate.SetResult();
+        await updateTask;
+    }
+
+    [Fact]
+    public async Task OnNavigatedTo_ReturnsToTheUpdatesList()
+    {
+        _wingetClient.UpgradeListResults.Enqueue([]);
+        var viewModel = CreateViewModel();
+        viewModel.ShowHistoryCommand.Execute(null);
+
+        await viewModel.OnNavigatedToAsync(CancellationToken.None);
+
+        Assert.False(viewModel.IsShowingHistory);
     }
 
     [Fact]

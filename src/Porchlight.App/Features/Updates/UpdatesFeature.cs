@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Porchlight.App.Features.Cleanup;
 using Porchlight.App.Features.RemoteSupport;
 using Porchlight.App.Shell;
 using Porchlight.Core.Processes;
@@ -14,6 +15,7 @@ public static class UpdatesFeature
     {
         services.AddWingetClient();
         services.TryAddSingleton<IFileDialogService, FileDialogService>();
+        services.TryAddSingleton<IConfirmationDialog, MessageBoxConfirmationDialog>();
         services.AddAppInUseDiagnostics();
         services.AddSelfUpdateCore();
         services.TryAddSingleton<IUrlLauncher, UrlLauncher>();
