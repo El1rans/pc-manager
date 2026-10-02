@@ -22,6 +22,26 @@ public sealed class StartupInfoParserTests
     }
 
     [Fact]
+    public void Parse_TaskManagerShape_ReadsTheNameAttributeNotTheParent()
+    {
+        const string xml = """
+            <StartupData>
+              <Process Name="C:\Program Files\Vendor\sync.exe" PID="4242" StartTime="2026-10-01T08:00:00Z">
+                <ParentPID>1200</ParentPID>
+                <ParentName>C:\Windows\explorer.exe</ParentName>
+                <DiskUsage>4194304</DiskUsage>
+                <CpuUsage>250</CpuUsage>
+              </Process>
+            </StartupData>
+            """;
+
+        var record = Assert.Single(StartupInfoParser.Parse(xml));
+
+        Assert.Equal(@"C:\Program Files\Vendor\sync.exe", record.ImagePath);
+        Assert.Equal((250, 4194304), (record.CpuTimeMs, record.DiskBytes));
+    }
+
+    [Fact]
     public void Parse_FixtureStream_GivesSameResultAsString()
     {
         using var stream = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Startup", "Fixtures", "SampleStartupInfo.xml"));

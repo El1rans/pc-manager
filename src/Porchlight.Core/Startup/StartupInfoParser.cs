@@ -100,7 +100,12 @@ public static class StartupInfoParser
         }
     }
 
+    // "name" covers the shape Task Manager's own files are believed to use -
+    // <Process Name="C:\...pp.exe"><CpuUsage>ms</CpuUsage><DiskUsage>bytes</DiskUsage>... - where the
+    // full image path sits in the Name attribute; LooksLikePath keeps plain names out. "ParentName"
+    // is excluded so a child's record is never attributed to its parent (explorer.exe).
     private static bool IsImageField(string lowerName) =>
+        lowerName == "name" ||
         lowerName.Contains("image", StringComparison.Ordinal) ||
         lowerName.Contains("path", StringComparison.Ordinal) ||
         lowerName.Contains("commandline", StringComparison.Ordinal) ||

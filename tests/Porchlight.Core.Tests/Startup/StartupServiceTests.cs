@@ -125,6 +125,18 @@ public sealed class StartupServiceTests
     }
 
     [Fact]
+    public async Task ListAsync_HidesPorchlightsOwnLoginTask()
+    {
+        _tasks.Tasks.Add(new LogonTask(@"\Porchlight", "Porchlight", AppPath, IsEnabled: true, IsMachineWide: false));
+        _tasks.Tasks.Add(new LogonTask(@"\Vendor\Sync", "Sync", AppPath, IsEnabled: true, IsMachineWide: false));
+
+        var entries = await CreateService().ListAsync(TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain(entries, e => e.Id == @"LogonTask|\Porchlight");
+        Assert.Contains(entries, e => e.Id == @"LogonTask|\Vendor\Sync");
+    }
+
+    [Fact]
     public async Task ListAsync_MicrosoftFolderTask_IsRecommendedToKeep()
     {
         _tasks.Tasks.Add(new LogonTask(@"\Microsoft\Office\Telemetry", "Telemetry", @"C:\Tools\x.exe", true, false));

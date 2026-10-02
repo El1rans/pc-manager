@@ -108,7 +108,9 @@ public sealed partial class StartupService : IStartupService
     {
         try
         {
-            return [.. _tasks.ReadLogonTasks().Select(BuildTaskEntry)];
+            // Porchlight's own "start when I sign in" task is owned by the Settings page's toggle
+            // (spec 24); listing it here too would give the user two switches for one thing.
+            return [.. _tasks.ReadLogonTasks().Where(t => !IsPorchlightLoginTask(t)).Select(BuildTaskEntry)];
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException or COMException)
         {
@@ -116,6 +118,9 @@ public sealed partial class StartupService : IStartupService
             return [];
         }
     }
+
+    private static bool IsPorchlightLoginTask(LogonTask task) =>
+        string.Equals(task.Path, @"\" + LoginLaunchTaskXml.TaskName, StringComparison.OrdinalIgnoreCase);
 
     private StartupEntry BuildTaskEntry(LogonTask task)
     {
