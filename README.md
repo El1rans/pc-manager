@@ -22,6 +22,14 @@ Screenshots use made-up demo data, not a real PC.
 
 ![Updates page listing programs with newer versions, with checkboxes and an Update selected button](docs/screenshots/updates.png)
 
+**Apps & services > Running apps** - what's slowing it down right now?
+
+![Running apps page listing programs grouped into Apps and Background with their CPU and memory use and an End task button](docs/screenshots/running-apps.png)
+
+**Apps & services > Get apps** - install a program safely, without hunting for a download page.
+
+![Get apps page with a search box and popular apps, each with an Install button](docs/screenshots/get-apps.png)
+
 **Hardware > Sensors & fans** - is it running hot?
 
 ![Hardware page with temperature, power and fan tiles above collapsed cards for each part](docs/screenshots/hardware.png)
@@ -38,10 +46,15 @@ Each link opens a guide that explains everything on that page.
 - [Dashboard](docs/pages/dashboard.md) - live stats, drive space, busiest programs.
 
 **Tune-up**
-- [Updates](docs/pages/updates.md) - see and install program updates.
-- [Startup apps](docs/pages/startup-apps.md) - choose what starts with Windows.
+- [Updates](docs/pages/updates.md) - see and install program updates, and look back at what was updated.
+- [Startup apps](docs/pages/startup-apps.md) - see what slows down sign-in and choose what starts with Windows.
 - [Free up space](docs/pages/free-up-space.md) - clear leftovers and find what fills a drive.
 - [Health check](docs/pages/health-check.md) - disk and battery health, Windows repair, recent problems.
+
+**Apps & services**
+- [Get apps](docs/pages/get-apps.md) - search for a program and install it from the official catalog.
+- [Running apps](docs/pages/running-apps.md) - what's running, how much it uses, and close a stuck program.
+- [Services](docs/pages/services.md) - background helpers that other programs installed; stop or turn off the ones you don't need.
 
 **Internet & safety**
 - [Internet](docs/pages/internet.md) - connection details, "fix my internet", speed test.

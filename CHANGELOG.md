@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- New **Apps & services** section in the left menu with three pages:
+  - **Get apps** - search the official `winget` catalog and install a program in one click, with a
+    list of popular apps (`docs/specs/27-get-apps.md`).
+  - **Running apps** - what's running right now with CPU and memory use, grouped like Task Manager,
+    with a safe "End task" and "Open file location" (`docs/specs/28-running-apps.md`).
+  - **Services** - background services that other programs installed, explained in plain words, with
+    start/stop and start-type changes for non-Windows services (`docs/specs/29-windows-services.md`).
+- **Update history** on the Updates page: every update, reinstall and install run from Porchlight,
+  grouped by day (`docs/specs/26-update-history.md`).
+- **Startup apps** shows a High/Medium/Low startup impact for each item from Windows' own
+  measurements, can sort by it, and also lists scheduled tasks that run at sign-in, which can be
+  turned off and on (`docs/specs/30-startup-impact-and-tasks.md`).
+
+### Changed
+
+- CI is faster: the installer build runs alongside build-and-test instead of after it, a new push to a
+  pull request cancels its older run, and docs-only pull requests skip the Windows build.
+- DEBUG demo runs (`PORCHLIGHT_DEMO_DATA=1`) can start while a real Porchlight is running, and no
+  longer show which lighting software is really running on the PC.
+
 ## [0.1.1] - 2026-10-02
 
 ### Added

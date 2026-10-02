@@ -1,5 +1,6 @@
 using System.IO;
 using System.Security;
+using Porchlight.Core.Settings;
 using Serilog;
 
 namespace Porchlight.App.Shell;
@@ -13,8 +14,14 @@ namespace Porchlight.App.Shell;
 /// </summary>
 public sealed class SingleInstanceGuard : IDisposable
 {
-    private const string MutexName = "Local\\PorchlightSingleInstance";
-    private const string ActivateEventName = "Local\\PorchlightActivate";
+    // A DEBUG demo/test run (AppDataPaths.IsOverridden, always false in Release) uses its own names,
+    // so it starts alongside a real, running Porchlight instead of just activating it - see
+    // CONTRIBUTING.md's "Screenshots" section.
+    private static readonly string MutexName =
+        AppDataPaths.IsOverridden ? "Local\\PorchlightSingleInstance-dev" : "Local\\PorchlightSingleInstance";
+
+    private static readonly string ActivateEventName =
+        AppDataPaths.IsOverridden ? "Local\\PorchlightActivate-dev" : "Local\\PorchlightActivate";
 
     /// <summary>How long a second instance waits for the first to finish exiting before assuming it
     /// is staying, signalling it and giving up.</summary>
