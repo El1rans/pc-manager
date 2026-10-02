@@ -301,8 +301,7 @@ public sealed class GetAppsViewModelTests : IDisposable
 
         Assert.False(row.IsInstalled);
         Assert.True(row.ResultIsError);
-        Assert.False(string.IsNullOrWhiteSpace(row.ResultText));
-        Assert.DoesNotContain("0x", row.ResultText);
+        Assert.Equal("Couldn't download the app. Check your internet connection and try again.", row.ResultText);
         Assert.True(row.InstallCommand.CanExecute(null));
         Assert.False(vm.IsBusyWithWork);
     }
@@ -456,5 +455,22 @@ public sealed class GetAppsViewModelTests : IDisposable
         {
             await Task.Delay(10, TestContext.Current.CancellationToken);
         }
+    }
+
+    [Theory]
+    [InlineData(WingetOutcomeKind.NoApplicableUpdate)]
+    [InlineData(WingetOutcomeKind.ReinstallRequired)]
+    [InlineData(WingetOutcomeKind.AppRunning)]
+    [InlineData(WingetOutcomeKind.Cancelled)]
+    [InlineData(WingetOutcomeKind.NeedsAdmin)]
+    [InlineData(WingetOutcomeKind.Blocked)]
+    [InlineData(WingetOutcomeKind.NetworkProblem)]
+    [InlineData(WingetOutcomeKind.Failed)]
+    public void DescribeInstallFailure_IsWordedForAnInstall(WingetOutcomeKind kind)
+    {
+        var text = GetAppsViewModel.DescribeInstallFailure(kind);
+
+        Assert.False(string.IsNullOrWhiteSpace(text));
+        Assert.DoesNotContain("update", text, StringComparison.OrdinalIgnoreCase);
     }
 }

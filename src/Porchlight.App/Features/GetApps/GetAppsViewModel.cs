@@ -260,11 +260,23 @@ public sealed partial class GetAppsViewModel : PageViewModelBase, IBusyGuard, ID
             return true;
         }
 
-        // The friendly outcome from spec 09, with what to do next; the code stays in the log.
-        row.ResultText = $"{outcome.Title}. {outcome.Explanation}";
+        // Spec 09's outcome kinds, worded for a first install rather than an update; the winget
+        // code stays in the log.
+        row.ResultText = DescribeInstallFailure(outcome.Kind);
         row.ResultIsError = true;
         return false;
     }
+
+    public static string DescribeInstallFailure(WingetOutcomeKind kind) => kind switch
+    {
+        WingetOutcomeKind.NoApplicableUpdate => "This app isn't available for this PC.",
+        WingetOutcomeKind.AppRunning => "The installer needs a file that's in use. Close other apps and try again.",
+        WingetOutcomeKind.Cancelled => "The install was cancelled. Press Install to try again.",
+        WingetOutcomeKind.NeedsAdmin => "The install needs administrator approval. Try again and choose Yes when Windows asks.",
+        WingetOutcomeKind.Blocked => "Your organization's settings block installing this app.",
+        WingetOutcomeKind.NetworkProblem => "Couldn't download the app. Check your internet connection and try again.",
+        _ => "The install didn't work. Restart your PC and try again.",
+    };
 
     private void MarkInstalled(string id)
     {
