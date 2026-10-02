@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-03
+
 ### Added
 
 - New **Apps & services** section in the left menu with three pages:
@@ -21,7 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   measurements, can sort by it, and also lists scheduled tasks that run at sign-in, which can be
   turned off and on (`docs/specs/30-startup-impact-and-tasks.md`).
 
-### Changed
+### Changed (for developers)
 
 - CI is faster: the installer build runs alongside build-and-test instead of after it, a new push to a
   pull request cancels its older run, and docs-only pull requests skip the Windows build.
