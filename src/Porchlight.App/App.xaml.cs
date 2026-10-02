@@ -298,7 +298,6 @@ public partial class App : System.Windows.Application, IDisposable
         services.AddDashboardFeature();
         services.AddUpdatesFeature();
         services.AddGetAppsFeature();
-        services.AddGetAppsFeature();
         services.AddHardwareFeature();
         services.AddLightingFeature();
         services.AddLedEffectsCore();
