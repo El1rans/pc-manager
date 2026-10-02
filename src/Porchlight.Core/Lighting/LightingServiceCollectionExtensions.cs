@@ -33,6 +33,7 @@ public static class LightingServiceCollectionExtensions
         if (Monitoring.Demo.DemoDataMode.IsEnabled)
         {
             services.AddSingleton<ILightingService, Demo.DemoLightingService>();
+            services.AddSingleton<ILightingConflictDetector, Demo.DemoLightingConflictDetector>();
             return services;
         }
 #endif
