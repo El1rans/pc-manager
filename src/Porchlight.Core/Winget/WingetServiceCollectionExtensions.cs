@@ -20,11 +20,13 @@ public static class WingetServiceCollectionExtensions
         if (Monitoring.Demo.DemoDataMode.IsEnabled)
         {
             services.AddSingleton<IWingetClient, Demo.DemoWingetClient>();
+            services.AddSingleton<IUpdateHistoryStore, Demo.FakeUpdateHistoryStore>();
             return services;
         }
 #endif
 
         services.AddSingleton<IWingetClient, WingetClient>();
+        services.AddSingleton<IUpdateHistoryStore, UpdateHistoryStore>();
         return services;
     }
 }
