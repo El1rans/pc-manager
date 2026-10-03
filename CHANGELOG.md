@@ -6,6 +6,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- New **Safety** page under Internet & safety, a calm answer to "is this PC safe?": whether the
+  antivirus and Windows Firewall are on and up to date (Windows Firewall is read directly), when
+  Windows last installed updates and whether they keep failing (with a "Check now" for updates
+  waiting), and which remote-control programs (TeamViewer, AnyDesk, RustDesk and others) are
+  installed or running. Porchlight's own AnyDesk is labelled as set up by Porchlight
+  (`docs/specs/31-safety-status.md`).
+- **Browser add-ons** now also checks each browser's home page, start-up pages, new-tab page and
+  search engine, and says "Looks fine", "Changed" or "Forced by a setting on this PC". Read-only: it
+  only points you to the browser's own settings (`docs/specs/32-browser-hijack-check.md`).
+- **Backup** card on the Health check page: is File History or OneDrive backing up your files, and
+  when did it last run? It also appears as a "Backups" section in the check-up report
+  (`docs/specs/33-backup-status.md`).
+- **Recent changes** page under Tune-up: a list of what Porchlight changed (startup items, services,
+  cleanups, installs, updates, removed apps), newest first, with Undo where it is possible. Settings > General
+  has a new "Create a restore point before big changes" option (on by default) that asks Windows for a
+  restore point before a batch of app updates or a service start-type change. The Services page can
+  now set "Starts with Windows (delayed)" (`docs/specs/34-recent-changes.md`).
+- **Remove apps** page under Apps & services: installed programs in a plain list with search and
+  sorting, a careful Remove button (winget first, then the program's own uninstaller), "Often
+  preinstalled" hints and system parts kept in a separate group
+  (`docs/specs/35-remove-apps.md`).
+- **Printers** page under Hardware, for "my printer won't print": each printer's state in plain
+  words, make default, clear stuck print jobs, print a test page, use an offline printer online, a
+  guided "Fix my printer" and restart the print service (`docs/specs/36-printer-fixes.md`).
+- **Text size** setting (Normal, Large, Extra large) in Settings > General that makes the text and
+  pictures on each page bigger straight away (`docs/specs/37-larger-text.md`).
+- Optional **check-up reminder** in Settings > Notifications: a tray reminder every week, 2 weeks or
+  month to send the check-up report to your helper. The Get help page shows when the last check-up
+  was and when the next reminder is. Porchlight still never sends anything itself
+  (`docs/specs/38-checkup-reminder.md`).
+- The **web console** has three new read-only views: Security, Updates waiting and Startup impact,
+  with a small menu at the top to jump between them (`docs/specs/39-web-console-more.md`).
+
+### Changed
+
+- Removing a program from the Remove apps page is recorded in Recent changes (as "Can't be undone").
+
+### Fixed
+
+- A flaky test of the Updates log (a race when entries were written close together) no longer fails
+  builds at random.
+
 ## [0.2.1] - 2026-10-03
 
 ### Fixed
