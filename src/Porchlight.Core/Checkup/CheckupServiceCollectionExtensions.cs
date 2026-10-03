@@ -17,6 +17,7 @@ public static class CheckupServiceCollectionExtensions
         services.AddSingleton<ICheckupSection, ComputerCheckupSection>();
         services.AddSingleton<ICheckupSection, RestartCheckupSection>();
         services.AddSingleton<ICheckupSection, DriveSpaceCheckupSection>();
+        services.AddSingleton<ICheckupSection, BackupCheckupSection>();
         services.AddSingleton<ICheckupSection, AppUpdatesCheckupSection>();
         services.AddSingleton<ICheckupSection, TemperatureCheckupSection>();
         services.AddSingleton<ICheckupSection, RemoteHelpCheckupSection>();
