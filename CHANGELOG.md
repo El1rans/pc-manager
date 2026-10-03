@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-03
+
+### Fixed
+
+- Porchlight 0.2.0 failed to start ("Porchlight could not start") because two services the Startup
+  apps page needs were only registered in the developer demo mode. A new test now builds the app's
+  real set of services on every CI run, so this kind of mistake fails the build instead of the app.
+  If 0.2.0 won't start for you, download and run the 0.2.1 installer from the Releases page - the
+  in-app updater can't run while the app doesn't start.
+
 ## [0.2.0] - 2026-10-03
 
 ### Added
