@@ -2,14 +2,21 @@
 
 A technical reference of what Porchlight does. For a friendlier walk through each page, see the [page guides](../README.md#pages).
 
-- App shell with a navigation rail of seven entries - Overview, Tune-up (Updates, Startup apps, Free up space, Health check), Apps & services (Get apps, Running apps, Services), Internet & safety (Internet, Browser add-ons),
-  Hardware (Sensors & fans, Lighting) Get help (Get help, Web console) and Settings (General, Notifications, Optional features; both of the last two are pinned at the bottom) - with a tab row above the page for categories that hold more than one, following
+- App shell with a navigation rail of seven entries - Overview, Tune-up (Updates, Startup apps, Free up space, Health check, Recent changes), Apps & services (Get apps, Running apps, Services, Remove apps), Internet & safety (Safety, Internet, Browser add-ons),
+  Hardware (Sensors & fans, Lighting, Printers) Get help (Get help, Web console) and Settings (General, Notifications, Optional features; both of the last two are pinned at the bottom) - with a tab row above the page for categories that hold more than one, following
   Windows light/dark theme, with the app version shown in the sidebar footer.
 - Browser add-ons page: read-only list of the add-ons installed in Edge, Chrome, Brave and Firefox
   (every profile), each with a plain-language note on what it can do (read all websites, see
   history, change proxy settings, ...), where it came from and a "Looks fine / Review / Worth
   removing" level. Porchlight never changes or removes anything in a browser; the page opens the
   browser's own add-ons page and explains how to remove one. Nothing leaves the PC.
+  A "Start-up and search settings" block at the top of each browser's card (Chrome, Edge, Brave and
+  Firefox, every profile) checks the home page, the pages that open at start-up, the new-tab page and
+  the default search engine, and marks each "Looks fine", "Changed" (an unfamiliar address, shown by
+  host name) or "Forced by a setting on this PC" (a browser policy in the registry points somewhere
+  unfamiliar). A pure `BrowserHijackClassifier` with a known-good list does the judging; it is
+  read-only, makes no network lookups, and a "Changed" result is advice, not a malware verdict.
+  Firefox policies are not read. See `specs/32-browser-hijack-check.md`.
 - Settings persisted as JSON under `%APPDATA%\Porchlight\settings.json`, atomic writes, corrupt-file
   recovery.
 - Free up space: one Scan measures safe junk (temporary files, browser caches, crash reports, Windows Update leftovers, optionally the Recycle Bin), then one Clean up button removes the ticked items. Files in use are left alone, and the page never follows shortcuts or links into other folders. It also suggests big files and old downloads (moved to the Recycle Bin only when you click, so they can be restored) and large apps (opens the app's own uninstaller). Personal files are never deleted automatically.
@@ -119,6 +126,13 @@ A technical reference of what Porchlight does. For a friendlier walk through eac
   crashes, blue screens, unexpected shutdowns, disk errors, failed updates - grouped and counted); and,
   on a laptop, battery wear. Any check that can't run shows "Couldn't check" instead of failing. See
   `specs/14-system-health.md`.
+  A sixth, read-only Backup card says whether anything is backing up your files: File History (on or
+  off, when it last ran) and OneDrive (signed in, and whether Desktop, Documents and Pictures are
+  protected), plus an "Also found" line for well-known backup tools that are never judged. The
+  verdict is Good (a backup in the last 7 days, or OneDrive protecting Desktop and Documents),
+  Warning (out of date or partial) or Problem ("Nothing is backing up your files"), with buttons to
+  open Windows' backup settings or OneDrive. It never changes a backup setting and also adds a
+  "Backups" section to the check-up report. See `specs/33-backup-status.md`.
 
 - Internet: connection status (Wi-Fi name and signal as bars and words, local IP, router, DNS),
   a guided "Fix my internet" check (network connection, router, website names, the internet) that
@@ -164,3 +178,51 @@ A technical reference of what Porchlight does. For a friendlier walk through eac
   start type of third-party services when running as administrator. Driver services and Microsoft
   services are never changed; stopping a service with running dependents is refused. See
   `specs/29-windows-services.md`.
+- Safety ("Is this PC safe?", Internet & safety): three cards that each load on their own.
+  *Security software* reads antivirus and third-party firewall state from Windows Security Center
+  (WMI `root\SecurityCenter2`, decoding the `productState` bitfield) and Windows' own firewall
+  directly from the firewall policy COM object, and gives one verdict (protected, antivirus off,
+  antivirus out of date, Windows Firewall off, or "Couldn't check") with a line per product.
+  *Windows Update* shows when Windows last installed updates (from the Windows Update Agent history,
+  ignoring Defender definition updates), failed attempts in the last 30 days, a pending restart, and
+  a "Check now" that counts updates waiting (a search that can take minutes, so only on request and
+  with a timeout). *Who can connect to this PC?* lists remote-access tools that are installed or
+  running (TeamViewer, AnyDesk, RustDesk, UltraViewer, Splashtop, Chrome Remote Desktop, LogMeIn,
+  ConnectWise/ScreenConnect, Supremo, Quick Assist), labels the AnyDesk Porchlight set up and warns
+  calmly about the rest. Read-only; buttons only open Windows Security and Windows Update. See
+  `specs/31-safety-status.md`.
+- Recent changes (Tune-up): a journal of what Porchlight changed (startup items, services, cleanups,
+  installs, updates, removed apps), newest first, with an Undo for the reversible ones (startup items, and
+  service start types and start/stop) and "Can't be undone" for the rest. Before a batch of app updates and before a
+  service's start type is changed, Porchlight asks Windows for a restore point when Settings >
+  General > "Create a restore point before big changes" is on (default), System Protection is on and
+  Windows' frequency limit allows it; a skipped or failed restore point never blocks the action. See
+  `specs/34-recent-changes.md`.
+- Remove apps (Apps & services): installed programs from the uninstall registry keys with name,
+  publisher, size and install date, a filter and sorting. Remove asks first, then uses
+  `winget uninstall --id ... --exact --silent` when winget knows the app, otherwise starts the
+  program's own uninstaller. Runtimes and drivers sit in a collapsed "System parts - usually keep"
+  group, AnyDesk/OpenRGB/PawnIO show "Managed by Porchlight" with no Remove button, Porchlight itself
+  is never listed, and an "Often preinstalled" hint (never "bad") marks trial antivirus, game bundles
+  and OEM helpers. Confirmed removals are recorded in Recent changes. See `specs/35-remove-apps.md`.
+- Printers (Hardware): printers from WMI `Win32_Printer` with state as icon + text (Ready, Printing,
+  Offline, Out of paper, Paper jam, Paused, Error), jobs waiting and network or direct connection;
+  virtual printers (PDF, XPS, OneNote, Fax) are in a collapsed group. Per printer: Make default,
+  Clear stuck print jobs (asks first), Print a test page, Use printer online. Page level: a guided
+  "Fix my printer", Restart the print service (needs administrator) and Open printer settings. See
+  `specs/36-printer-fixes.md`.
+- Text size: Settings > General > Text size (Normal 100%, Large 125%, Extra large 150%) scales the
+  page area immediately and at startup, stored as `Appearance.TextSize`. The navigation rail, tab
+  strip, tray menu and notifications stay the same size, and pages reflow and scroll rather than
+  clip at 900x600. See `specs/37-larger-text.md`.
+- Check-up reminder: an optional tray balloon (Settings > Notifications, off by default) every week,
+  2 weeks or month on a chosen weekday that nudges the person to send the check-up report. Clicking
+  it opens Get help. It waits a full period after a report, shows a missed reminder once, and never
+  sends anything. The check-up card shows "Last check-up" and "Next reminder". See
+  `specs/38-checkup-reminder.md`.
+- Web console, more views: read-only Security (`/api/security`), Updates waiting (`/api/updates`) and
+  Startup impact (`/api/startup`) sections reuse the same services as the app, with a small menu to
+  jump between sections. Every endpoint is GET-only; the access-key model is unchanged. See
+  `specs/39-web-console-more.md`.
+- Services: start type can also be "Starts with Windows (delayed)"; choosing plain "Starts with
+  Windows" clears the delayed flag. See `specs/34-recent-changes.md`.

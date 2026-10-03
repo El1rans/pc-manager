@@ -12,6 +12,22 @@ Lets you watch this PC's stats from a browser on your phone or another computer.
 - **Port** - the network "door number" the console uses, with a hint about the default. Type a new number and press **Apply** if the default is busy.
 - **Keep it private** - a reminder that anyone with the link can see this PC's stats (though never change anything). Use it on your home network; to check in from elsewhere, use a VPN such as Tailscale rather than opening the port on your router.
 
+## What the console shows
+
+Open the link on your phone or another computer and you will see the live tiles for CPU, memory, GPU,
+disk and network, and a small menu at the top that jumps to each section: **Overview**, **Security**,
+**Updates** and **Startup**. It only shows information.
+
+- **Security** - the same headline as the [Safety](safety.md) page, with antivirus and firewall, Windows
+  Update, and any remote-control programs found.
+- **Updates waiting** - the app updates found at the last check in Porchlight. It does not run a new check
+  from the console; if it says Porchlight has not checked yet, open [Updates](updates.md) on the PC.
+- **Startup impact** - programs that start with Windows, on or off, slowest first, with the High / Medium
+  / Low impact from [Startup apps](startup-apps.md). The impact can only be measured when Porchlight runs
+  as administrator on the PC.
+
+None of these views has a button that changes anything.
+
 ---
 
 [Back to the page list](../../README.md#pages)

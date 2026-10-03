@@ -39,6 +39,8 @@ Creates a short summary of how the PC is doing. You see all of it before anythin
 - **Your helper's email (optional)**, then **Create check-up**.
 - A preview of the report, with **Copy report**, **Save report...** and **Email it** (opens your email program with the report ready to send; Porchlight does not send anything itself).
 - A status message about what just happened.
+- **Last check-up** - the date of the last report you made, once there is one.
+- **Next reminder** - the date of the next reminder, while the optional reminder is on (turn it on in [Settings > Notifications](settings.md#notifications)). The reminder is a tray message that opens this page; the report is still made and sent by you.
 
 ---
 
