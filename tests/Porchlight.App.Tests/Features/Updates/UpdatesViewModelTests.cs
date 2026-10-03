@@ -3,6 +3,8 @@ using System.Linq;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Porchlight.App.Features.Updates;
+using Porchlight.App.Tests.TestDoubles;
+using Porchlight.Core.Changes;
 using Porchlight.Core.Settings;
 using Porchlight.Core.Winget;
 using Xunit;
@@ -43,6 +45,81 @@ public sealed class UpdatesViewModelTests : IDisposable
     private UpdatesViewModel CreateViewModel(TimeProvider timeProvider) =>
         new(_wingetClient, _settingsStore, _appInUseDiagnostics, _tracker, _fileDialogs, _porchlight.Create(),
             _history, _confirmation, NullLogger<UpdatesViewModel>.Instance, timeProvider);
+
+    private UpdatesViewModel CreateViewModel(IChangeJournal journal, IAutoRestorePoint restore) =>
+        new(_wingetClient, _settingsStore, _appInUseDiagnostics, _tracker, _fileDialogs, _porchlight.Create(),
+            _history, _confirmation, NullLogger<UpdatesViewModel>.Instance, journal, restore);
+
+    private sealed class RecordingRestorePoint(List<string> order) : IAutoRestorePoint
+    {
+        public List<string> Reasons { get; } = [];
+
+        public AutoRestorePointResult Result { get; set; } = new(AutoRestorePointOutcome.Created, "A restore point was made first.");
+
+        public Task<AutoRestorePointResult> EnsureAsync(string reason, CancellationToken cancellationToken)
+        {
+            Reasons.Add(reason);
+            order.Add("restore");
+            return Task.FromResult(Result);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateSelectedAsync_AsksForOneRestorePointBeforeTheFirstUpgrade()
+    {
+        var order = new List<string>();
+        var restore = new RecordingRestorePoint(order);
+        _wingetClient.UpgradeListResults.Enqueue([Package("First"), Package("Second")]);
+        _wingetClient.UpgradeListResults.Enqueue([]);
+        _wingetClient.OnUpgrading = id => order.Add("upgrade " + id);
+        var viewModel = CreateViewModel(new FakeJournal(), restore);
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+
+        Assert.Equal(["restore", "upgrade First", "upgrade Second"], order);
+        Assert.Single(restore.Reasons);
+    }
+
+    [Fact]
+    public async Task UpdateSelectedAsync_SkippedRestorePointStillUpdates()
+    {
+        var order = new List<string>();
+        var restore = new RecordingRestorePoint(order)
+        {
+            Result = new AutoRestorePointResult(AutoRestorePointOutcome.SkippedUnavailable, null),
+        };
+        _wingetClient.UpgradeListResults.Enqueue([Package("First")]);
+        _wingetClient.UpgradeListResults.Enqueue([]);
+        var viewModel = CreateViewModel(new FakeJournal(), restore);
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+
+        Assert.Equal(["First"], _wingetClient.UpgradeCalls);
+    }
+
+    [Fact]
+    public async Task UpdateSelectedAsync_RecordsSuccessfulUpdatesInTheJournalButNotFailures()
+    {
+        var journal = new FakeJournal();
+        _wingetClient.UpgradeListResults.Enqueue([Package("Succeeds", name: "Good App"), Package("Fails", name: "Bad App")]);
+        _wingetClient.UpgradeListResults.Enqueue([]);
+        _wingetClient.UpgradeResultsById["Succeeds"] = new WingetResult(0, []);
+        _wingetClient.UpgradeResultsById["Fails"] = new WingetResult(unchecked((int)0x87654321), []);
+        var viewModel = CreateViewModel(journal, new RecordingRestorePoint([]));
+        await viewModel.RefreshAsync(quiet: false);
+        viewModel.SelectAllCommand.Execute(null);
+
+        await viewModel.UpdateSelectedCommand.ExecuteAsync(null);
+
+        var recorded = Assert.Single(journal.Recorded);
+        Assert.Equal(ChangeArea.Updates, recorded.Area);
+        Assert.Equal("Updated Good App to 2.0", recorded.Description);
+        Assert.Null(recorded.UndoType);
+    }
 
     private static WingetPackage Package(
         string id, bool requiresExplicit = false, string name = "", string installedVersion = "1.0", string availableVersion = "2.0") =>

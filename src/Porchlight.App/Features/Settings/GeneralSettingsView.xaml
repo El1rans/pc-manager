@@ -45,6 +45,17 @@
                     AutomationProperties.Name="Keep Porchlight running in the tray when I close the window"/>
         </StackPanel>
       </Border>
+
+      <Border Style="{StaticResource Card}">
+        <StackPanel>
+          <TextBlock Text="Before big changes" Style="{StaticResource CardTitle}"/>
+          <CheckBox Content="Create a restore point before big changes"
+                    IsChecked="{Binding CreateRestorePointBeforeBigChanges}"
+                    AutomationProperties.Name="Create a restore point before big changes"/>
+          <TextBlock Style="{StaticResource Secondary}" TextWrapping="Wrap" Margin="0,4,0,0"
+                     Text="Before updating several apps or changing a service, Porchlight asks Windows for a restore point if System Protection is on. It never stops the change if Windows says no."/>
+        </StackPanel>
+      </Border>
     </StackPanel>
   </ScrollViewer>
 </UserControl>

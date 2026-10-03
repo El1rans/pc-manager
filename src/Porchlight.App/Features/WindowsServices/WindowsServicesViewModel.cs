@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Porchlight.App.Features.Cleanup;
 using Porchlight.App.Shell;
+using Porchlight.Core.Changes;
 using Porchlight.Core.WindowsServices;
 
 namespace Porchlight.App.Features.WindowsServices;
@@ -25,6 +26,8 @@ public sealed partial class WindowsServicesViewModel : PageViewModelBase
     private readonly IShellService _shell;
     private readonly IConfirmationDialog _confirm;
     private readonly ILogger<WindowsServicesViewModel> _logger;
+    private readonly IChangeJournal? _changeJournal;
+    private readonly IAutoRestorePoint? _autoRestorePoint;
     private List<ServiceRowViewModel> _allRows = [];
 
     [ObservableProperty]
@@ -51,8 +54,12 @@ public sealed partial class WindowsServicesViewModel : PageViewModelBase
         IWindowsServicesService service,
         IShellService shell,
         IConfirmationDialog confirm,
-        ILogger<WindowsServicesViewModel> logger)
+        ILogger<WindowsServicesViewModel> logger,
+        IChangeJournal? changeJournal = null,
+        IAutoRestorePoint? autoRestorePoint = null)
     {
+        _changeJournal = changeJournal;
+        _autoRestorePoint = autoRestorePoint;
         _service = service;
         _shell = shell;
         _confirm = confirm;
@@ -106,7 +113,7 @@ public sealed partial class WindowsServicesViewModel : PageViewModelBase
     private Task StartAsync(ServiceRowViewModel? row) =>
         row is null
             ? Task.CompletedTask
-            : RunAsync(row, "started", ct => _service.StartAsync(row.Name, ct));
+            : RunAsync(row, "started", ct => _service.StartAsync(row.Name, ct), () => RecordState(row, "Started", runningBefore: false));
 
     [RelayCommand]
     private async Task StopAsync(ServiceRowViewModel? row)
@@ -116,7 +123,7 @@ public sealed partial class WindowsServicesViewModel : PageViewModelBase
             return;
         }
 
-        await RunAsync(row, "stopped", ct => _service.StopAsync(row.Name, ct));
+        await RunAsync(row, "stopped", ct => _service.StopAsync(row.Name, ct), () => RecordState(row, "Stopped", runningBefore: true));
     }
 
     [RelayCommand]
@@ -127,7 +134,7 @@ public sealed partial class WindowsServicesViewModel : PageViewModelBase
             return;
         }
 
-        await RunAsync(row, "restarted", ct => _service.RestartAsync(row.Name, ct));
+        await RunAsync(row, "restarted", ct => _service.RestartAsync(row.Name, ct), () => RecordRestart(row));
     }
 
     private async Task OnStartTypeSelectedAsync(ServiceRowViewModel row, StartTypeOption previous, StartTypeOption selected)
@@ -139,14 +146,56 @@ public sealed partial class WindowsServicesViewModel : PageViewModelBase
             return;
         }
 
-        var changed = await RunAsync(row, $"set to \"{selected.Label}\"", ct => _service.SetStartTypeAsync(row.Name, selected.Type, ct));
+        var restoreNote = await EnsureRestorePointAsync();
+        var changed = await RunAsync(
+            row,
+            $"set to \"{selected.Label}\"",
+            ct => _service.SetStartTypeAsync(row.Name, selected.Type, ct),
+            () => RecordStartType(row, previous, selected),
+            restoreNote);
         if (!changed)
         {
             row.RevertStartOption(previous);
         }
     }
 
-    private async Task<bool> RunAsync(ServiceRowViewModel row, string doneText, Func<CancellationToken, Task<ServiceChangeOutcome>> change)
+    /// <summary>Before a start-type change, asks for a restore point when the setting is on and
+    /// Windows allows it. Never blocks the change; returns a quiet note to show, or null.</summary>
+    private async Task<string?> EnsureRestorePointAsync()
+    {
+        // Not elevated: the change will be refused anyway, so don't ask Windows for anything.
+        if (_autoRestorePoint is null || !IsElevated)
+        {
+            return null;
+        }
+
+        var result = await _autoRestorePoint.EnsureAsync("Porchlight: change a service", CancellationToken.None);
+        return result.Note;
+    }
+
+    private void RecordState(ServiceRowViewModel row, string verb, bool runningBefore) =>
+        _changeJournal?.Record(
+            ChangeArea.Services,
+            $"{verb} {row.DisplayName}",
+            ServiceStateUndoer.Type,
+            ServiceStateUndoer.CreatePayload(row.Name, row.DisplayName, runningBefore));
+
+    private void RecordRestart(ServiceRowViewModel row) =>
+        _changeJournal?.Record(ChangeArea.Services, $"Restarted {row.DisplayName}");
+
+    private void RecordStartType(ServiceRowViewModel row, StartTypeOption previous, StartTypeOption selected) =>
+        _changeJournal?.Record(
+            ChangeArea.Services,
+            $"Set {row.DisplayName} to \"{selected.Label}\"",
+            ServiceStartTypeUndoer.Type,
+            ServiceStartTypeUndoer.CreatePayload(row.Name, row.DisplayName, previous.Type));
+
+    private async Task<bool> RunAsync(
+        ServiceRowViewModel row,
+        string doneText,
+        Func<CancellationToken, Task<ServiceChangeOutcome>> change,
+        Action? recordChange = null,
+        string? note = null)
     {
         Message = null;
         ErrorMessage = null;
@@ -171,7 +220,8 @@ public sealed partial class WindowsServicesViewModel : PageViewModelBase
         switch (outcome.Result)
         {
             case ServiceChangeResult.Changed:
-                Message = $"{row.DisplayName} {doneText}.";
+                Message = note is null ? $"{row.DisplayName} {doneText}." : $"{row.DisplayName} {doneText}. {note}";
+                recordChange?.Invoke();
                 await RefreshQuietlyAsync();
                 return true;
             case ServiceChangeResult.NeedsAdmin:

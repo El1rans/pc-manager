@@ -2,6 +2,7 @@ using Porchlight.App.Shell;
 using Microsoft.Extensions.Logging.Abstractions;
 using Porchlight.App.Features.Startup;
 using Porchlight.App.Tests.TestDoubles;
+using Porchlight.Core.Changes;
 using Porchlight.Core.Elevation;
 using Porchlight.Core.Startup;
 using Xunit;
@@ -206,6 +207,37 @@ public sealed class StartupViewModelTests
         await vm.OnNavigatedToAsync(TestContext.Current.CancellationToken);
 
         Assert.True(vm.ShowEmptyState);
+    }
+
+    [Fact]
+    public async Task Toggle_RecordsAnUndoableChangeThatRestoresTheOldState()
+    {
+        _service.Entries = [Entry(StartupSource.CurrentUserRun, "Foo")];
+        var journal = new FakeJournal();
+        var vm = new StartupViewModel(_service, _elevation, NullLogger<StartupViewModel>.Instance, journal);
+        await vm.OnNavigatedToAsync(TestContext.Current.CancellationToken);
+
+        await vm.ToggleCommand.ExecuteAsync(vm.Items[0]);
+
+        var recorded = Assert.Single(journal.Recorded);
+        Assert.Equal(ChangeArea.Startup, recorded.Area);
+        Assert.Equal("Turned off Foo at startup", recorded.Description);
+        Assert.Equal(StartupChangeUndoer.Type, recorded.UndoType);
+        Assert.True(ChangeUndoPayload.TryDeserialize<StartupChangeUndoer.Payload>(recorded.UndoPayload)!.Enabled);
+    }
+
+    [Fact]
+    public async Task Toggle_FailureRecordsNothing()
+    {
+        _service.Entries = [Entry(StartupSource.CurrentUserRun, "Foo")];
+        _service.Result = StartupChangeResult.Failed;
+        var journal = new FakeJournal();
+        var vm = new StartupViewModel(_service, _elevation, NullLogger<StartupViewModel>.Instance, journal);
+        await vm.OnNavigatedToAsync(TestContext.Current.CancellationToken);
+
+        await vm.ToggleCommand.ExecuteAsync(vm.Items[0]);
+
+        Assert.Empty(journal.Recorded);
     }
 
     private sealed class FakeStartupService : IStartupService

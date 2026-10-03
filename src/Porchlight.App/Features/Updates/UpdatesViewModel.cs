@@ -13,6 +13,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Porchlight.App.Features.Cleanup;
 using Porchlight.App.Shell;
+using Porchlight.Core.Changes;
 using Porchlight.Core.Processes;
 using Porchlight.Core.Settings;
 using Porchlight.Core.Winget;
@@ -68,6 +69,8 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     public const string AdminPromptWaitingHintText =
         "Waiting for your permission - look for the Windows prompt on the taskbar.";
 
+    private readonly IChangeJournal? _changeJournal;
+    private readonly IAutoRestorePoint? _autoRestorePoint;
     private readonly IWingetClient _wingetClient;
     private readonly ReinstallWorkflow _reinstallWorkflow;
     private readonly ISettingsStore _settingsStore;
@@ -202,9 +205,10 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         IWingetClient wingetClient, ISettingsStore settingsStore, IAppInUseDiagnosticsService appInUseDiagnostics,
         IPendingUpdatesTracker pendingUpdatesTracker, IFileDialogService fileDialogs,
         PorchlightUpdateViewModel porchlightUpdate, IUpdateHistoryStore historyStore,
-        IConfirmationDialog confirmation, ILogger<UpdatesViewModel> logger)
+        IConfirmationDialog confirmation, ILogger<UpdatesViewModel> logger,
+        IChangeJournal? changeJournal = null, IAutoRestorePoint? autoRestorePoint = null)
         : this(wingetClient, settingsStore, appInUseDiagnostics, pendingUpdatesTracker, fileDialogs, porchlightUpdate,
-            historyStore, confirmation, logger, TimeProvider.System)
+            historyStore, confirmation, logger, TimeProvider.System, changeJournal, autoRestorePoint)
     {
     }
 
@@ -215,8 +219,11 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         IWingetClient wingetClient, ISettingsStore settingsStore, IAppInUseDiagnosticsService appInUseDiagnostics,
         IPendingUpdatesTracker pendingUpdatesTracker, IFileDialogService fileDialogs,
         PorchlightUpdateViewModel porchlightUpdate, IUpdateHistoryStore historyStore,
-        IConfirmationDialog confirmation, ILogger<UpdatesViewModel> logger, TimeProvider timeProvider)
+        IConfirmationDialog confirmation, ILogger<UpdatesViewModel> logger, TimeProvider timeProvider,
+        IChangeJournal? changeJournal = null, IAutoRestorePoint? autoRestorePoint = null)
     {
+        _changeJournal = changeJournal;
+        _autoRestorePoint = autoRestorePoint;
         _historyStore = historyStore;
         History = new UpdateHistoryViewModel(historyStore, confirmation, timeProvider);
         _pendingUpdatesTracker = pendingUpdatesTracker;
@@ -586,6 +593,8 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         var completed = 0;
 
         var stepProgress = new Progress<string>(text => ProgressLine = text);
+
+        await EnsureRestorePointAsync(selected.Count).ConfigureAwait(true);
 
         foreach (var row in selected)
         {
@@ -1191,6 +1200,37 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         });
     }
 
+    /// <summary>Before a batch of updates, asks for a restore point when the setting is on and Windows
+    /// allows it. Never blocks the batch; the outcome is only noted in the log.</summary>
+    private async Task EnsureRestorePointAsync(int packageCount)
+    {
+        if (_autoRestorePoint is null)
+        {
+            return;
+        }
+
+        CurrentStep = "Checking for a restore point first...";
+        var result = await _autoRestorePoint
+            .EnsureAsync($"Porchlight: update {packageCount.ToString(CultureInfo.InvariantCulture)} apps", CancellationToken.None)
+            .ConfigureAwait(true);
+        if (result.Note is not null)
+        {
+            AppendLog(result.Note);
+        }
+    }
+
+    private void RecordChange(UpdatePackageViewModel row, UpdateHistoryAction action)
+    {
+        var verb = action switch
+        {
+            UpdateHistoryAction.Install => "Installed",
+            UpdateHistoryAction.Reinstall => "Reinstalled",
+            _ => "Updated",
+        };
+        var version = string.IsNullOrWhiteSpace(row.AvailableVersion) ? string.Empty : $" to {row.AvailableVersion}";
+        _changeJournal?.Record(ChangeArea.Updates, $"{verb} {row.Name}{version}");
+    }
+
     private static bool IsSuccess(WingetOutcome outcome) =>
         outcome.Kind is WingetOutcomeKind.Updated or WingetOutcomeKind.UpdatedRestartNeeded;
 
@@ -1227,6 +1267,11 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Couldn't record {PackageId} in the update history.", row.Id);
+        }
+
+        if (succeeded)
+        {
+            RecordChange(row, action);
         }
     }
 
