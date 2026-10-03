@@ -2,6 +2,7 @@ using System.IO;
 using Microsoft.Extensions.Logging.Abstractions;
 using Porchlight.App.Features.RemoteSupport;
 using Porchlight.App.Tests.Features.Updates;
+using Porchlight.Core.Checkup;
 using Porchlight.Core.Settings;
 using Xunit;
 
@@ -32,7 +33,7 @@ public sealed class CheckupCardViewModelTests : IDisposable
 
     private CheckupCardViewModel Create() =>
         new(new FakeCheckupReportBuilder(), _clipboard, _urlLauncher, _dialogs, _settingsStore, TimeProvider.System,
-            NullLogger<CheckupCardViewModel>.Instance);
+            new CheckupReminderScheduler(TimeProvider.System), NullLogger<CheckupCardViewModel>.Instance);
 
     [Fact]
     public void Title_UsesHelperNameOrFallback()
@@ -121,5 +122,56 @@ public sealed class CheckupCardViewModelTests : IDisposable
         await viewModel.SaveReportCommand.ExecuteAsync(null);
 
         Assert.Equal(string.Empty, viewModel.StatusMessage);
+    }
+
+    [Fact]
+    public async Task Create_RecordsLastReport_AndShowsLines()
+    {
+        var time = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(new DateTimeOffset(2026, 10, 4, 12, 0, 0, TimeSpan.Zero));
+        time.SetLocalTimeZone(TimeZoneInfo.Utc);
+        _settingsStore.Update(s =>
+        {
+            s.CheckupReminder.Enabled = true;
+            s.CheckupReminder.EnabledSinceUtc = time.GetUtcNow().AddDays(-30);
+        });
+        var viewModel = new CheckupCardViewModel(
+            new FakeCheckupReportBuilder(), _clipboard, _urlLauncher, _dialogs, _settingsStore, time,
+            new CheckupReminderScheduler(time), NullLogger<CheckupCardViewModel>.Instance);
+        Assert.Equal(string.Empty, viewModel.LastCheckupText);
+        Assert.StartsWith("Next reminder: ", viewModel.NextReminderText);
+
+        await viewModel.CreateCheckupCommand.ExecuteAsync(null);
+
+        Assert.Equal(time.GetUtcNow(), _settingsStore.Current.CheckupReminder.LastReportCreatedUtc);
+        Assert.StartsWith("Last check-up: ", viewModel.LastCheckupText);
+        Assert.Contains("2026", viewModel.LastCheckupText);
+    }
+
+    [Fact]
+    public void ReminderOff_ShowsNoReminderLines()
+    {
+        var viewModel = Create();
+
+        Assert.Equal(string.Empty, viewModel.LastCheckupText);
+        Assert.Equal(string.Empty, viewModel.NextReminderText);
+    }
+
+    [Fact]
+    public async Task CopyEmailAndSave_AllRecordTheReport()
+    {
+        var viewModel = Create();
+        await viewModel.CreateCheckupCommand.ExecuteAsync(null);
+        _settingsStore.Update(s => s.CheckupReminder.LastReportCreatedUtc = null);
+        viewModel.CopyReportCommand.Execute(null);
+        Assert.NotNull(_settingsStore.Current.CheckupReminder.LastReportCreatedUtc);
+
+        _settingsStore.Update(s => s.CheckupReminder.LastReportCreatedUtc = null);
+        viewModel.EmailReportCommand.Execute(null);
+        Assert.NotNull(_settingsStore.Current.CheckupReminder.LastReportCreatedUtc);
+
+        _settingsStore.Update(s => s.CheckupReminder.LastReportCreatedUtc = null);
+        _dialogs.SavePath = Path.Combine(_directory, "r.html");
+        await viewModel.SaveReportCommand.ExecuteAsync(null);
+        Assert.NotNull(_settingsStore.Current.CheckupReminder.LastReportCreatedUtc);
     }
 }

@@ -13,6 +13,7 @@ public static class CheckupServiceCollectionExtensions
     {
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<ICheckupReportBuilder, CheckupReportBuilder>();
+        services.AddSingleton<CheckupReminderScheduler>();
 
         services.AddSingleton<ICheckupSection, ComputerCheckupSection>();
         services.AddSingleton<ICheckupSection, RestartCheckupSection>();

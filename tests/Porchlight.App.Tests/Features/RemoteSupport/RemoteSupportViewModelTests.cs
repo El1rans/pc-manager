@@ -52,7 +52,7 @@ public sealed class RemoteSupportViewModelTests : IDisposable
 
     private CheckupCardViewModel CreateCheckup() =>
         new(new FakeCheckupReportBuilder(), _clipboard, _urlLauncher, new FakeFileDialogService(), _settingsStore, _timeProvider,
-            NullLogger<CheckupCardViewModel>.Instance);
+            new Porchlight.Core.Checkup.CheckupReminderScheduler(_timeProvider), NullLogger<CheckupCardViewModel>.Instance);
 
     private RemoteSupportViewModel CreateViewModel()
     {

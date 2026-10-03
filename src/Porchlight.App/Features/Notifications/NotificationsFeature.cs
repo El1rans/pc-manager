@@ -25,7 +25,8 @@ public static class NotificationsFeature
         services.AddHostedService<AlertHostedService>();
         services.AddHostedService<ScheduledUpdateCheckHostedService>();
         services.AddHostedService<LoginLaunchRefreshHostedService>();
+        services.AddHostedService<CheckupReminderHostedService>();
 
-                return services;
+        return services;
     }
 }

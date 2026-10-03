@@ -230,6 +230,7 @@ public sealed partial class RemoteSupportViewModel : PageViewModelBase, IDisposa
         _visitCts.Dispose();
         _visitCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeCts.Token);
 
+        Checkup.RefreshReminderInfo();
         await Card.LoadAsync(_visitCts.Token).ConfigureAwait(true);
 
         if (ShowMainContent)
