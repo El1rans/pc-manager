@@ -20,6 +20,7 @@ public sealed partial class HealthViewModel : PageViewModelBase, IBusyGuard
         DiskHealthCardViewModel disks,
         RepairCardViewModel repair,
         RestorePointCardViewModel restorePoint,
+        BackupCardViewModel backup,
         ProblemsCardViewModel problems,
         BatteryCardViewModel battery)
     {
@@ -27,6 +28,7 @@ public sealed partial class HealthViewModel : PageViewModelBase, IBusyGuard
         Disks = disks;
         Repair = repair;
         RestorePoint = restorePoint;
+        Backup = backup;
         Problems = problems;
         Battery = battery;
     }
@@ -44,6 +46,8 @@ public sealed partial class HealthViewModel : PageViewModelBase, IBusyGuard
     public RepairCardViewModel Repair { get; }
 
     public RestorePointCardViewModel RestorePoint { get; }
+
+    public BackupCardViewModel Backup { get; }
 
     public ProblemsCardViewModel Problems { get; }
 
@@ -79,6 +83,7 @@ public sealed partial class HealthViewModel : PageViewModelBase, IBusyGuard
             await Task.WhenAll(
                 Disks.RefreshAsync(cancellationToken),
                 RestorePoint.RefreshAsync(cancellationToken),
+                Backup.RefreshAsync(cancellationToken),
                 Problems.RefreshAsync(cancellationToken),
                 Battery.RefreshAsync(cancellationToken));
         }

@@ -12,6 +12,7 @@ public static class HealthFeature
         services.AddSingleton<DiskHealthCardViewModel>();
         services.AddSingleton<RepairCardViewModel>();
         services.AddSingleton<RestorePointCardViewModel>();
+        services.AddSingleton<BackupCardViewModel>();
         services.AddSingleton<ProblemsCardViewModel>();
         services.AddSingleton<BatteryCardViewModel>();
         return services.AddPage<HealthViewModel, HealthView>();

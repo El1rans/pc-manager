@@ -20,6 +20,9 @@
         <DataTrigger Binding="{Binding Severity}" Value="Warning">
           <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}"/>
         </DataTrigger>
+        <DataTrigger Binding="{Binding Severity}" Value="Problem">
+          <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}"/>
+        </DataTrigger>
       </Style.Triggers>
     </Style>
     <Style x:Key="ResultIcon" TargetType="TextBlock" BasedOn="{StaticResource Icon}">
@@ -157,6 +160,50 @@
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <!-- Backup -->
+      <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+        <StackPanel DataContext="{Binding Backup}">
+          <TextBlock Text="Backup" Style="{StaticResource CardTitle}"/>
+          <ProgressBar IsIndeterminate="True" Height="4" Margin="0,0,0,8"
+                       Visibility="{Binding IsChecking, Converter={StaticResource BoolToVis}}"/>
+          <TextBlock Text="{Binding ErrorText}" Style="{StaticResource ErrorText}"
+                     Visibility="{Binding ShowError, Converter={StaticResource BoolToVis}}"/>
+          <StackPanel Visibility="{Binding HasResult, Converter={StaticResource BoolToVis}}">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="{Binding Glyph}" Style="{StaticResource SeverityIcon}" VerticalAlignment="Top"/>
+              <TextBlock Text="{Binding HeadlineText}" FontWeight="SemiBold" TextWrapping="Wrap" MaxWidth="700"
+                         VerticalAlignment="Center"/>
+            </StackPanel>
+            <ItemsControl ItemsSource="{Binding DetailLines}" Margin="28,6,0,0">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding}" Style="{StaticResource Secondary}" TextWrapping="Wrap" MaxWidth="700"
+                             Margin="0,0,0,2"/>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="{Binding OtherToolsText}" Style="{StaticResource Secondary}" TextWrapping="Wrap"
+                       MaxWidth="700" Margin="28,2,0,0"
+                       Visibility="{Binding OtherToolsText, Converter={StaticResource StringToVis}}"/>
+            <TextBlock Text="{Binding NudgeText}" TextWrapping="Wrap" MaxWidth="700" Margin="28,10,0,0"
+                       Visibility="{Binding NudgeText, Converter={StaticResource StringToVis}}"/>
+          </StackPanel>
+          <WrapPanel Margin="0,10,0,0">
+            <Button Content="Turn on File History" Command="{Binding TurnOnFileHistoryCommand}"
+                    AutomationProperties.Name="Turn on File History"
+                    Style="{DynamicResource AccentButtonStyle}" Margin="0,0,8,0"
+                    Visibility="{Binding CanTurnOnFileHistory, Converter={StaticResource BoolToVis}}"/>
+            <Button Content="Open backup settings" Command="{Binding OpenBackupSettingsCommand}"
+                    AutomationProperties.Name="Open backup settings" Margin="0,0,8,0"/>
+            <Button Content="Open OneDrive" Command="{Binding OpenOneDriveCommand}"
+                    AutomationProperties.Name="Open OneDrive"
+                    Visibility="{Binding CanOpenOneDrive, Converter={StaticResource BoolToVis}}"/>
+          </WrapPanel>
+          <TextBlock Text="{Binding LaunchError}" Style="{StaticResource ErrorText}" Margin="0,8,0,0"
+                     Visibility="{Binding LaunchError, Converter={StaticResource StringToVis}}"/>
         </StackPanel>
       </Border>
 

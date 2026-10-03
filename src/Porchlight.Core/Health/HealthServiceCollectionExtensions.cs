@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Porchlight.Core.Backup;
 
 namespace Porchlight.Core.Health;
 
@@ -8,6 +9,7 @@ public static class HealthServiceCollectionExtensions
     public static IServiceCollection AddHealthCore(this IServiceCollection services)
     {
         services.AddSingleton<IWindowsRepairService, WindowsRepairService>();
+        services.AddBackupCore();
 #if DEBUG
         if (Monitoring.Demo.DemoDataMode.IsEnabled)
         {

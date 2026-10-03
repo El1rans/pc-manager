@@ -6,4 +6,5 @@ public enum HealthSeverity
     Neutral,
     Ok,
     Warning,
+    Problem,
 }
