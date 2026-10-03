@@ -1,5 +1,7 @@
 using System.IO;
 using System.Security;
+using System.Security.Cryptography;
+using System.Text;
 using Porchlight.Core.Settings;
 using Serilog;
 
@@ -16,12 +18,32 @@ public sealed class SingleInstanceGuard : IDisposable
 {
     // A DEBUG demo/test run (AppDataPaths.IsOverridden, always false in Release) uses its own names,
     // so it starts alongside a real, running Porchlight instead of just activating it - see
-    // CONTRIBUTING.md's "Screenshots" section.
-    private static readonly string MutexName =
-        AppDataPaths.IsOverridden ? "Local\\PorchlightSingleInstance-dev" : "Local\\PorchlightSingleInstance";
+    // CONTRIBUTING.md's "Isolated data folder" section.
+    private static readonly ObjectNames Names =
+        GetObjectNames(AppDataPaths.IsOverridden ? AppDataPaths.Root : null);
 
-    private static readonly string ActivateEventName =
-        AppDataPaths.IsOverridden ? "Local\\PorchlightActivate-dev" : "Local\\PorchlightActivate";
+    /// <summary>The named mutex and activation event a run uses.</summary>
+    public sealed record ObjectNames(string Mutex, string ActivateEvent);
+
+    /// <summary>
+    /// Pure name derivation, separated for tests. <paramref name="overriddenRoot"/> is null for a
+    /// normal run, which gets the fixed release names. A DEBUG override run gets names suffixed with
+    /// a short hash of its data folder (case-insensitive, trailing separators ignored), so runs
+    /// against the same folder are still single-instance but different folders run side by side.
+    /// </summary>
+    public static ObjectNames GetObjectNames(string? overriddenRoot)
+    {
+        if (overriddenRoot is null)
+        {
+            return new ObjectNames("Local\\PorchlightSingleInstance", "Local\\PorchlightActivate");
+        }
+
+        var key = overriddenRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .ToUpperInvariant();
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)), 0, 6);
+        return new ObjectNames(
+            $"Local\\PorchlightSingleInstance-dev-{hash}", $"Local\\PorchlightActivate-dev-{hash}");
+    }
 
     /// <summary>How long a second instance waits for the first to finish exiting before assuming it
     /// is staying, signalling it and giving up.</summary>
@@ -45,8 +67,8 @@ public sealed class SingleInstanceGuard : IDisposable
         EventWaitHandle? activate = null;
         try
         {
-            mutex = new Mutex(initiallyOwned: false, MutexName);
-            activate = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateEventName);
+            mutex = new Mutex(initiallyOwned: false, Names.Mutex);
+            activate = new EventWaitHandle(false, EventResetMode.AutoReset, Names.ActivateEvent);
 
             bool owned;
             try

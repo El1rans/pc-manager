@@ -112,7 +112,10 @@ dotnet run -c Debug --project src/Porchlight.App
 ```
 
 A run with either override also uses its own single-instance lock, so it starts alongside a real,
-running Porchlight instead of just bringing that one to the front.
+running Porchlight instead of just bringing that one to the front. The lock is per data folder
+(its names include a short hash of the resolved folder, compared case-insensitively): two runs
+against the same folder still single-instance, while runs with different `PORCHLIGHT_DATA_DIR`
+folders - e.g. two worktrees doing visual checks at once - run side by side.
 
 While either override is active, the one-time `PCManager` -> `Porchlight` folder migration is
 skipped entirely. A Release build ignores both variables. There is no need to back up or restore
