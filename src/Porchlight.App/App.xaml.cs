@@ -282,7 +282,10 @@ public partial class App : System.Windows.Application, IDisposable
                 rollOnFileSizeLimit: true));
     }
 
-    private static void ConfigureServices(IServiceCollection services)
+    /// <summary>Registers every service and page. Public so <c>AppCompositionTests</c> can build the
+    /// real (non-demo) container with validation - a missing registration must fail CI, not the
+    /// installed app's startup.</summary>
+    public static void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton<ISettingsStore, SettingsStore>();
         services.AddSingleton<IElevationService, ElevationService>();

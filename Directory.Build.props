@@ -4,7 +4,7 @@
     <!-- Single source of the app's version: read by Porchlight.App (assembly/file version, shown
          in the sidebar footer) and by installer/Porchlight.iss (via /DMyAppVersion=<Version> from
          the CI/release workflows). Bump this and CHANGELOG.md together - see docs/RELEASING.md. -->
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <!-- Embedded in every assembly's PE version resource (ProductName/CompanyName) - must match
          docs/signing/app.xml's and docs/signing/installer.xml's product-name="Porchlight"
          metadata restriction (SignPath Foundation requires artifact metadata restrictions), and
