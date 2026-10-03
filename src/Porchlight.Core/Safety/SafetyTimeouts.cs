@@ -9,4 +9,7 @@ public static class SafetyTimeouts
 
     /// <summary>Reading the update history (local, normally instant).</summary>
     public static readonly TimeSpan HistoryRead = TimeSpan.FromSeconds(30);
+
+    /// <summary>Reading the Windows Firewall state (local, normally instant).</summary>
+    public static readonly TimeSpan FirewallRead = TimeSpan.FromSeconds(30);
 }

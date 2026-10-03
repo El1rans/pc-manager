@@ -3,6 +3,8 @@ using Microsoft.Extensions.Time.Testing;
 using Porchlight.App.Features.Cleanup;
 using Porchlight.App.Features.RemoveApps;
 using Porchlight.App.Shell;
+using Porchlight.App.Tests.TestDoubles;
+using Porchlight.Core.Changes;
 using Porchlight.Core.Cleanup;
 using Porchlight.Core.RemoveApps;
 using Porchlight.Core.Winget;
@@ -14,6 +16,7 @@ public sealed class RemoveAppsViewModelTests
 {
     private readonly FakeService _service = new();
     private readonly FakeConfirm _confirm = new();
+    private readonly FakeJournal _journal = new();
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero));
 
     private static RemovableApp App(
@@ -24,7 +27,7 @@ public sealed class RemoveAppsViewModelTests
     private async Task<RemoveAppsViewModel> LoadAsync(params RemovableApp[] apps)
     {
         _service.Apps = [.. apps];
-        var vm = new RemoveAppsViewModel(_service, _confirm, _time, NullLogger<RemoveAppsViewModel>.Instance);
+        var vm = new RemoveAppsViewModel(_service, _confirm, _time, NullLogger<RemoveAppsViewModel>.Instance, _journal);
         await vm.OnNavigatedToAsync(TestContext.Current.CancellationToken);
         return vm;
     }
@@ -101,6 +104,45 @@ public sealed class RemoveAppsViewModelTests
         Assert.Empty(_service.Removed);
         Assert.Contains("can't be undone from Porchlight", Assert.Single(_confirm.Messages));
         Assert.Equal("Remove VLC?", _confirm.Titles[0]);
+    }
+
+    [Fact]
+    public async Task Remove_Confirmed_RecordsOneJournalEntryWithoutUndo()
+    {
+        var vm = await LoadAsync(App("VLC"));
+
+        await vm.RemoveCommand.ExecuteAsync(vm.Apps.Single());
+
+        var entry = Assert.Single(_journal.Recorded);
+        Assert.Equal(ChangeArea.Apps, entry.Area);
+        Assert.Equal("Removed VLC", entry.Description);
+        Assert.False(entry.CanUndo);
+    }
+
+    [Theory]
+    [InlineData(RemoveAppResult.UninstallerOpened)]
+    [InlineData(RemoveAppResult.Failed)]
+    [InlineData(RemoveAppResult.WingetProblem)]
+    [InlineData(RemoveAppResult.Refused)]
+    public async Task Remove_NotConfirmed_RecordsNothing(RemoveAppResult result)
+    {
+        var vm = await LoadAsync(App("VLC"));
+        _service.Next = new RemoveAppOutcome(result);
+
+        await vm.RemoveCommand.ExecuteAsync(vm.Apps.Single());
+
+        Assert.Empty(_journal.Recorded);
+    }
+
+    [Fact]
+    public async Task Remove_Declined_RecordsNothing()
+    {
+        var vm = await LoadAsync(App("VLC"));
+        _confirm.Answer = false;
+
+        await vm.RemoveCommand.ExecuteAsync(vm.Apps.Single());
+
+        Assert.Empty(_journal.Recorded);
     }
 
     [Fact]
@@ -198,7 +240,7 @@ public sealed class RemoveAppsViewModelTests
     public async Task Load_Failure_ShowsAMessageInsteadOfCrashing()
     {
         _service.ListException = new InvalidOperationException("boom");
-        var vm = new RemoveAppsViewModel(_service, _confirm, _time, NullLogger<RemoveAppsViewModel>.Instance);
+        var vm = new RemoveAppsViewModel(_service, _confirm, _time, NullLogger<RemoveAppsViewModel>.Instance, _journal);
 
         await vm.OnNavigatedToAsync(TestContext.Current.CancellationToken);
 

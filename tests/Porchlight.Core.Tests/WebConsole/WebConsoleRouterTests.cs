@@ -10,11 +10,12 @@ public class WebConsoleRouterTests
     private const string Key = "0123456789abcdef0123456789abcdef";
 
     private readonly FakeStatsSource _stats = new();
+    private readonly FakeDetailsSource _details = new();
     private readonly WebConsoleRouter _router;
 
     public WebConsoleRouterTests()
     {
-        _router = new WebConsoleRouter(_stats);
+        _router = new WebConsoleRouter(_stats, _details);
     }
 
     [Theory]
@@ -25,7 +26,7 @@ public class WebConsoleRouterTests
     [InlineData("OPTIONS")]
     public async Task Anything_but_GET_or_HEAD_is_refused_on_every_path(string method)
     {
-        foreach (var path in new[] { "/", WebConsoleRouter.StatsPath, "/anything" })
+        foreach (var path in new[] { "/", WebConsoleRouter.StatsPath, WebConsoleRouter.UpdatesPath, WebConsoleRouter.StartupPath, WebConsoleRouter.SecurityPath, "/anything" })
         {
             var response = await RouteAsync(method, path, Key);
 

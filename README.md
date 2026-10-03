@@ -30,9 +30,37 @@ Screenshots use made-up demo data, not a real PC.
 
 ![Get apps page with a search box and popular apps, each with an Install button](docs/screenshots/get-apps.png)
 
+**Internet & safety > Safety** - is this PC protected, up to date, and who could connect to it?
+
+![Safety page with security software, Windows Update and remote-control program cards](docs/screenshots/safety.png)
+
+**Internet & safety > Browser add-ons** - add-ons worth a second look, and a changed home page or search engine.
+
+![Browser add-ons page with a start-up and search settings check above each browser's add-ons](docs/screenshots/browser-add-ons.png)
+
+**Apps & services > Remove apps** - uninstall a program from a plain list, carefully.
+
+![Remove apps page listing installed programs with size, install date and a Remove button](docs/screenshots/remove-apps.png)
+
+**Tune-up > Health check** - disk, Windows repair, restore points and whether anything is backing up.
+
+![Health check page showing the restore point, backup, recent problems and battery cards](docs/screenshots/health-check.png)
+
+**Tune-up > Recent changes** - what Porchlight changed, with Undo where it is possible.
+
+![Recent changes page listing what Porchlight changed with Undo buttons](docs/screenshots/recent-changes.png)
+
+**Hardware > Printers** - "my printer won't print".
+
+![Printers page with each printer's status and buttons to clear stuck jobs and use it online](docs/screenshots/printers.png)
+
 **Hardware > Sensors & fans** - is it running hot?
 
 ![Hardware page with temperature, power and fan tiles above collapsed cards for each part](docs/screenshots/hardware.png)
+
+**Settings > General** - theme, text size, start at sign-in.
+
+![Settings page with theme, text size, start at sign-in and restore point options](docs/screenshots/settings.png)
 
 **Get help** - let family connect in two clicks (uses AnyDesk).
 
@@ -49,27 +77,31 @@ Each link opens a guide that explains everything on that page.
 - [Updates](docs/pages/updates.md) - see and install program updates, and look back at what was updated.
 - [Startup apps](docs/pages/startup-apps.md) - see what slows down sign-in and choose what starts with Windows.
 - [Free up space](docs/pages/free-up-space.md) - clear leftovers and find what fills a drive.
-- [Health check](docs/pages/health-check.md) - disk and battery health, Windows repair, recent problems.
+- [Health check](docs/pages/health-check.md) - disk and battery health, Windows repair, restore points, backup status, recent problems.
+- [Recent changes](docs/pages/recent-changes.md) - what Porchlight changed on this PC, with Undo where possible.
 
 **Apps & services**
 - [Get apps](docs/pages/get-apps.md) - search for a program and install it from the official catalog.
 - [Running apps](docs/pages/running-apps.md) - what's running, how much it uses, and close a stuck program.
 - [Services](docs/pages/services.md) - background helpers that other programs installed; stop or turn off the ones you don't need.
+- [Remove apps](docs/pages/remove-apps.md) - uninstall a program from a plain list, with a confirmation first.
 
 **Internet & safety**
+- [Safety](docs/pages/safety.md) - "is this PC safe?": security software, Windows Update, and remote-control programs.
 - [Internet](docs/pages/internet.md) - connection details, "fix my internet", speed test.
-- [Browser add-ons](docs/pages/browser-add-ons.md) - flag add-ons worth a second look.
+- [Browser add-ons](docs/pages/browser-add-ons.md) - flag add-ons worth a second look, and a changed home page or search engine.
 
 **Hardware**
 - [Hardware](docs/pages/hardware.md) ("Sensors & fans" tab) - temperatures, speeds, power, optional fan control.
 - [Lighting](docs/pages/lighting.md) - colours, effects and profiles for RGB lights.
+- [Printers](docs/pages/printers.md) - "my printer won't print": clear stuck jobs, use a printer online, restart printing.
 
 **Get help**
-- [Get help](docs/pages/get-help.md) - let family connect, and send them a check-up.
-- [Web console](docs/pages/web-console.md) - watch this PC's stats from a phone (read-only).
+- [Get help](docs/pages/get-help.md) - let family connect, and send them a check-up (with an optional reminder).
+- [Web console](docs/pages/web-console.md) - watch this PC's stats, security, waiting updates and startup impact from a phone (read-only).
 
 **Settings** (pinned at the bottom of the left menu, below Get help)
-- [Settings](docs/pages/settings.md) - three tabs: General (theme, start at sign-in, tray), Notifications (alerts, update checks) and Optional features (AnyDesk, OpenRGB, PawnIO driver).
+- [Settings](docs/pages/settings.md) - three tabs: General (theme, text size, start at sign-in, restore points, tray), Notifications (alerts, update checks, check-up reminder) and Optional features (AnyDesk, OpenRGB, PawnIO driver).
 
 For a technical list of everything Porchlight does, see [docs/FEATURES.md](docs/FEATURES.md).
 

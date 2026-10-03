@@ -14,4 +14,10 @@ public interface IPendingUpdatesTracker
     /// <param name="count">Number of updates available, not counting ones the user chose to ignore.</param>
     /// <param name="checkedAt">When the check finished.</param>
     void Report(int count, DateTimeOffset checkedAt);
+
+    /// <summary>Records the outcome of a finished check together with the updates found, so the web
+    /// console can list them without running <c>winget</c> itself.</summary>
+    /// <param name="updates">The updates available, not counting ones the user chose to ignore.</param>
+    /// <param name="checkedAt">When the check finished.</param>
+    void Report(IReadOnlyList<PendingUpdate> updates, DateTimeOffset checkedAt);
 }

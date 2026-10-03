@@ -34,11 +34,18 @@ which remote-control tools could let someone connect to the PC.
 
 - `ISecurityCenterReader` reads WMI `root\SecurityCenter2` `AntiVirusProduct` / `FirewallProduct`
   (`displayName`, `productState`) off the UI thread. A missing namespace (Windows Server, no Security
-  Center) or any expected WMI failure gives "unavailable", not an exception.
+  Center) or any expected WMI failure gives "unavailable", not an exception. Security Center usually
+  lists only third-party firewalls, so it is not enough for Windows' own.
+- `IWindowsFirewallReader` reads the built-in Windows Firewall directly (COM `HNetCfg.FwPolicy2`:
+  `FirewallEnabled[profile]` for Domain/Private/Public and `CurrentProfileTypes`), off the UI thread,
+  read-only, with a timeout. A failure is logged and gives null.
 - `ProductStateParser` (pure) decodes the `productState` bitfield: bits 12-15 = state (0 off, 1 on,
   2 snoozed, 3 expired), bits 4-7 = definitions (0 up to date, otherwise out of date).
 - `SecurityVerdictBuilder` (pure) turns the products into the verdict line and a level. Priority:
-  antivirus off > antivirus out of date > firewall off > protected. Several antivirus products are fine:
+  antivirus off > antivirus out of date > firewall off > protected. The firewall is fine when a
+  third-party firewall product is on or Windows Firewall is on for every active profile; otherwise the
+  verdict is "Windows Firewall is off". With no readable firewall source at all the verdict is
+  "Couldn't check". A "Windows Firewall - on/off" detail line is shown. Several antivirus products are fine:
   one that is on and current is enough (Windows turns Defender off when another one is installed).
 
 ### Windows Update (`IWindowsUpdateStatusService`)
@@ -74,8 +81,8 @@ aggregation), and the existing `AppCompositionTests` (real container, `ValidateO
 ## Acceptance criteria
 
 - [ ] Page appears under Internet & safety; all three cards render with plain text at 900x600.
-- [ ] Verdict reflects antivirus off / out of date / firewall off / protected; "Couldn't check" when
-      Security Center is missing.
+- [ ] Verdict reflects antivirus off / out of date / Windows Firewall off / protected;
+      "Couldn't check" when neither Security Center nor the firewall can be read.
 - [ ] Update card shows last install date and failure warning; "Check now" counts pending updates and
       times out gracefully; nothing slow runs on page load.
 - [ ] Remote tools are listed with a calm warning; Porchlight's AnyDesk says "Set up by Porchlight".

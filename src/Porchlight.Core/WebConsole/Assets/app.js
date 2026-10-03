@@ -1,9 +1,11 @@
-// Porchlight web console. Read-only: this script only ever GETs /api/stats and draws it.
+// Porchlight web console. Read-only: this script only ever GETs /api/stats, /api/updates,
+// /api/startup and /api/security and draws them.
 // Every value from the server is inserted with textContent, never as HTML.
 (function () {
   "use strict";
 
   var POLL_MS = 2000;
+  var DETAILS_POLL_MS = 30000;
   var HISTORY = 60;
   var FILLING_PERCENT = 85;
 
@@ -12,6 +14,7 @@
   var tiles = {};
   var timer = null;
   var failures = 0;
+  var detailsTimer = null;
 
   function readKey() {
     var match = /(?:^|&)key=([^&]*)/.exec(location.hash.slice(1));
@@ -233,6 +236,102 @@
     });
   }
 
+  var levelLabel = { Good: "\u2713 OK", Attention: "\u26A0 Look at this", Unknown: "? Couldn't check" };
+  var impactLabel = {
+    High: "\u26A0 High", Medium: "Medium", Low: "\u2713 Low", NotMeasured: "Not measured"
+  };
+
+  function renderUpdates(u) {
+    var summary = el("updates-summary"), table = el("updates-table"), body = el("updates");
+    body.replaceChildren();
+    if (!u.hasChecked) {
+      summary.textContent = "Porchlight has not checked for app updates yet. Open Updates in Porchlight on the PC.";
+      table.hidden = true;
+      return;
+    }
+    var when = u.checkedAt ? " (last checked " + new Date(u.checkedAt).toLocaleString() + ")" : "";
+    summary.textContent = (u.count === 0 ? "All apps were up to date" :
+      u.count === 1 ? "1 app has an update" : u.count + " apps have updates") + when + ".";
+    table.hidden = !u.items || u.items.length === 0;
+    (u.items || []).forEach(function (item) {
+      var row = make("tr");
+      row.appendChild(make("td", null, item.name));
+      row.appendChild(make("td", null, item.installedVersion));
+      row.appendChild(make("td", null, item.availableVersion));
+      body.appendChild(row);
+    });
+  }
+
+  function renderStartup(s) {
+    var summary = el("startup-summary"), table = el("startup-table"), body = el("startup");
+    body.replaceChildren();
+    var items = s.items || [];
+    var on = items.filter(function (i) { return i.isEnabled; }).length;
+    var text = on + " of " + items.length + " programs start when someone signs in.";
+    if (s.impactNeedsAdmin) { text += " How much each slows start-up can only be read on the PC, as administrator."; }
+    summary.textContent = text;
+    table.hidden = items.length === 0;
+    items.forEach(function (item) {
+      var row = make("tr");
+      row.appendChild(make("td", null, item.publisher ? item.name + " (" + item.publisher + ")" : item.name));
+      row.appendChild(make("td", null, item.isEnabled ? "\u2713 On" : "Off"));
+      row.appendChild(make("td", impactLabel[item.impact] ? "impact-" + item.impact : null,
+        impactLabel[item.impact] || impactLabel.NotMeasured));
+      body.appendChild(row);
+    });
+  }
+
+  function securityItem(title, card) {
+    var root = make("div", "security-item");
+    root.appendChild(make("div", "security-title", title));
+    root.appendChild(make("div", "security-verdict", card.verdict));
+    root.appendChild(make("div", "level " + (levelLabel[card.level] ? card.level : "Unknown"),
+      levelLabel[card.level] || levelLabel.Unknown));
+    if (card.lines && card.lines.length) {
+      var list = root.appendChild(make("ul", "security-lines"));
+      card.lines.forEach(function (line) { list.appendChild(make("li", null, line)); });
+    }
+    return root;
+  }
+
+  function renderSecurity(s) {
+    el("security-headline").textContent = s.headline;
+    var box = el("security-cards");
+    box.replaceChildren();
+    box.appendChild(securityItem("Antivirus and firewall", s.protection));
+    box.appendChild(securityItem("Windows Update", s.windowsUpdate));
+    box.appendChild(securityItem("Who can connect to this PC", s.remoteAccess));
+  }
+
+  var detailViews = [
+    { path: "api/updates", render: renderUpdates },
+    { path: "api/startup", render: renderStartup },
+    { path: "api/security", render: renderSecurity }
+  ];
+
+  function pollDetails() {
+    var key = readKey();
+    if (!key) { return; }
+    // A failure of one view never blocks the others; the live stats poll shows the wrong-key and
+    // unreachable messages.
+    detailViews.forEach(function (view) {
+      fetch(view.path, { headers: { "Authorization": "Bearer " + key }, cache: "no-store", credentials: "omit" })
+        .then(function (response) { return response.ok ? response.json() : null; })
+        .then(function (data) { if (data) { view.render(data); } })
+        .catch(function () { /* keep showing the last values */ });
+    });
+  }
+
+  function stopDetails() {
+    if (detailsTimer !== null) { clearInterval(detailsTimer); detailsTimer = null; }
+  }
+
+  function startDetails() {
+    if (detailsTimer !== null || document.hidden) { return; }
+    pollDetails();
+    detailsTimer = setInterval(pollDetails, DETAILS_POLL_MS);
+  }
+
   function render(stats) {
     var info = stats.systemInfo;
     if (info) {
@@ -258,6 +357,7 @@
 
   function showKeyPanel(wrongKey) {
     stop();
+    stopDetails();
     el("content").hidden = true;
     el("key-panel").hidden = false;
     el("key-error").hidden = !wrongKey;
@@ -292,6 +392,7 @@
         el("key-panel").hidden = true;
         el("content").hidden = false;
         render(stats);
+        startDetails();
         setConnection("Live · updated " + new Date().toLocaleTimeString(), false);
         schedule();
       })
@@ -315,10 +416,17 @@
 
   el("key-button").addEventListener("click", connectWithTypedKey);
   el("key-input").addEventListener("keydown", function (e) { if (e.key === "Enter") { connectWithTypedKey(); } });
-  window.addEventListener("hashchange", function () { failures = 0; poll(); });
+  window.addEventListener("hashchange", function () { failures = 0; stopDetails(); poll(); });
+  document.querySelectorAll(".nav-button").forEach(function (button) {
+    // Scrolls instead of linking to "#section": the address's #fragment holds the access key.
+    button.addEventListener("click", function () {
+      var target = el(button.getAttribute("data-target"));
+      if (target) { target.scrollIntoView({ behavior: "smooth", block: "start" }); }
+    });
+  });
   document.addEventListener("visibilitychange", function () {
     // No point sampling the PC for a tab nobody is looking at.
-    if (document.hidden) { stop(); } else { poll(); }
+    if (document.hidden) { stop(); stopDetails(); } else { poll(); }
   });
 
   poll();

@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Porchlight.App.Features.RecentChanges;
 using Porchlight.Core.Changes;
 using Porchlight.Core.Startup;
+using Porchlight.Core.WebConsole;
 using Porchlight.Core.WindowsServices;
 using Microsoft.Extensions.Hosting;
 using Xunit;
@@ -26,6 +27,18 @@ public sealed class AppCompositionTests
         });
 
         Assert.Null(exception);
+    }
+
+    [Fact]
+    public void WebConsoleRouterWithItsDetailsSourceIsRegisteredOutsideDemoMode()
+    {
+        var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
+        App.ConfigureServices(builder.Services);
+        using var provider = builder.Services.BuildServiceProvider(
+            new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
+
+        Assert.IsType<WebConsoleDetailsCollector>(provider.GetRequiredService<IWebConsoleDetailsSource>());
+        Assert.NotNull(provider.GetRequiredService<WebConsoleRouter>());
     }
 
     [Fact]

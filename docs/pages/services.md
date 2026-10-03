@@ -25,12 +25,16 @@ turn off the ones that came with other programs, without letting you break Windo
 - **Status** - Running, Stopped, Starting... or Stopping..., shown with an icon and a word.
 - **Start option** - when the service starts:
   - **Starts with Windows** - every time the PC starts.
+  - **Starts with Windows (delayed)** - a little after the PC has finished starting, so sign-in is not
+    slowed down. Choosing plain **Starts with Windows** switches the delay off.
   - **Starts when needed** - only when a program asks for it.
   - **Turned off** - never.
 - **Start**, **Stop** and **Restart** buttons.
 
 Stopping a service or turning it off asks first, because the program that installed it may not work
-properly until you turn it back on. A service that other services depend on can't be stopped here;
+properly until you turn it back on. Changes are written to [Recent changes](recent-changes.md), where
+a start or stop can be undone, and Porchlight asks Windows for a restore point before it changes a
+start option (see [Settings](settings.md#general)). A service that other services depend on can't be stopped here;
 the page names the services that need it.
 
 ---

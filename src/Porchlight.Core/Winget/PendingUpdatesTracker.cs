@@ -9,4 +9,7 @@ public sealed class PendingUpdatesTracker : IPendingUpdatesTracker
 
     public void Report(int count, DateTimeOffset checkedAt) =>
         _current = new PendingUpdatesStatus(Math.Max(count, 0), checkedAt);
+
+    public void Report(IReadOnlyList<PendingUpdate> updates, DateTimeOffset checkedAt) =>
+        _current = new PendingUpdatesStatus(updates.Count, checkedAt, updates);
 }

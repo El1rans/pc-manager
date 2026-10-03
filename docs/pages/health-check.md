@@ -28,6 +28,26 @@ A restore point is a safety snapshot of Windows that it can go back to if a chan
 - **Open System Protection** - opens the Windows settings where it is switched on.
 - **Most recent restore points** - a list with when each was made.
 
+### Backup
+
+Answers "is anything backing up my files, and when did it last run?". Porchlight only reads this; it
+never changes a backup setting or starts a backup.
+
+![Health check page scrolled to the Backup card, showing File History, OneDrive and an Also found line](../screenshots/health-check.png)
+
+*(Screenshot uses made-up demo data, not a real PC.)*
+
+- **A verdict** with an icon and words: good (a backup ran in the last 7 days, or OneDrive protects both
+  Desktop and Documents), a warning (a backup is set up but out of date, or OneDrive protects only some
+  folders), or "Nothing is backing up your files."
+- **Detail lines** - whether File History is on and when it last backed up, whether OneDrive is
+  installed and signed in and which of Desktop, Documents and Pictures it protects, and an **Also
+  found** line for well-known backup programs (Porchlight can't tell whether those are working).
+- **Turn on File History**, **Open backup settings** and **Open OneDrive** - shown when they help; they
+  open Windows' or OneDrive's own screens.
+
+The same information appears in the check-up report you can send from [Get help](get-help.md).
+
 ### Recent problems
 
 Recent crashes and serious errors from the Windows event log, each with when it last happened and, where available, some advice. Shows a green "no problems" message when there is nothing to report.
