@@ -18,6 +18,7 @@ using Porchlight.App.Features.Network;
 using Porchlight.App.Features.Notifications;
 using Porchlight.App.Features.Printers;
 using Porchlight.App.Features.RemoteSupport;
+using Porchlight.App.Features.RemoveApps;
 using Porchlight.App.Features.RunningApps;
 using Porchlight.App.Features.Safety;
 using Porchlight.App.Features.Settings;
@@ -323,6 +324,7 @@ public partial class App : System.Windows.Application, IDisposable
         services.AddWindowsServicesFeature();
         services.AddSafetyFeature();
         services.AddPrintersFeature();
+        services.AddRemoveAppsFeature();
     }
 
     /// <summary>Applies every feature's <see cref="PageRegistration"/> to the view locator. Runs

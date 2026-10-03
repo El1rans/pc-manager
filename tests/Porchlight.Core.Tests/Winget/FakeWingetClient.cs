@@ -25,6 +25,11 @@ internal sealed class FakeWingetClient : IWingetClient
 
     public Task<WingetResult> UninstallAsync(string id, bool silent, IProgress<string>? log, CancellationToken cancellationToken)
     {
+        if (UninstallException is { } ex)
+        {
+            return Task.FromException<WingetResult>(ex);
+        }
+
         Calls.Add($"uninstall:{id}:{silent}");
         log?.Report($"> winget uninstall --id {id}");
         return Task.FromResult(UninstallResult);
@@ -44,6 +49,19 @@ internal sealed class FakeWingetClient : IWingetClient
 
     public Task<IReadOnlyList<WingetSearchResult>> SearchAsync(string query, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<WingetSearchResult>>([]);
+
+    public List<WingetInstalledPackage> InstalledPackages { get; } = [];
+
+    /// <summary>When set, <see cref="ListInstalledAsync"/> throws it.</summary>
+    public Exception? ListException { get; set; }
+
+    /// <summary>When set, <see cref="UninstallAsync"/> throws it.</summary>
+    public Exception? UninstallException { get; set; }
+
+    public Task<IReadOnlyList<WingetInstalledPackage>> ListInstalledAsync(CancellationToken cancellationToken) =>
+        ListException is { } ex
+            ? Task.FromException<IReadOnlyList<WingetInstalledPackage>>(ex)
+            : Task.FromResult<IReadOnlyList<WingetInstalledPackage>>([.. InstalledPackages]);
 
     public Task<IReadOnlySet<string>> ListInstalledIdsAsync(CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlySet<string>>(new HashSet<string>());

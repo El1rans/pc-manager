@@ -21,7 +21,10 @@ public static class InstalledAppFilter
     /// <summary>Filters, de-duplicates (by display name + version, keeping the first, so per-machine
     /// entries listed first win) and sorts by size, largest first, then name. Apps with no reported
     /// size come last.</summary>
-    public static IReadOnlyList<InstalledApp> Apply(IEnumerable<RawUninstallEntry> entries)
+    /// <param name="entries">Raw uninstall entries.</param>
+    /// <param name="includeProtectedNames">Keep Porchlight and its components in the result (the
+    /// "Remove apps" page labels them instead of hiding them).</param>
+    public static IReadOnlyList<InstalledApp> Apply(IEnumerable<RawUninstallEntry> entries, bool includeProtectedNames = false)
     {
         ArgumentNullException.ThrowIfNull(entries);
 
@@ -29,7 +32,7 @@ public static class InstalledAppFilter
         var apps = new List<InstalledApp>();
         foreach (var entry in entries)
         {
-            if (!IsUserRemovable(entry))
+            if (!IsUserRemovable(entry, includeProtectedNames))
             {
                 continue;
             }
@@ -56,7 +59,7 @@ public static class InstalledAppFilter
             .ToList();
     }
 
-    private static bool IsUserRemovable(RawUninstallEntry entry)
+    private static bool IsUserRemovable(RawUninstallEntry entry, bool includeProtectedNames)
     {
         if (string.IsNullOrWhiteSpace(entry.DisplayName) || string.IsNullOrWhiteSpace(entry.UninstallString))
         {
@@ -74,7 +77,7 @@ public static class InstalledAppFilter
             return false;
         }
 
-        return !ProtectedNameFragments.Any(fragment =>
+        return includeProtectedNames || !ProtectedNameFragments.Any(fragment =>
             entry.DisplayName.Contains(fragment, StringComparison.OrdinalIgnoreCase));
     }
 

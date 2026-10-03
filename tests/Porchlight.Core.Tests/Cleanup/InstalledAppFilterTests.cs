@@ -97,6 +97,31 @@ public sealed class InstalledAppFilterTests
     }
 
     [Fact]
+    public void Apply_ProtectedNames_AreHiddenByDefaultAndKeptOnRequest()
+    {
+        RawUninstallEntry[] entries = [Entry(name: "AnyDesk"), Entry(name: "Porchlight"), Entry(name: "Other")];
+
+        Assert.Equal(["Other"], InstalledAppFilter.Apply(entries).Select(a => a.DisplayName));
+        Assert.Equal(3, InstalledAppFilter.Apply(entries, includeProtectedNames: true).Count);
+    }
+
+    [Fact]
+    public void Apply_IncludingProtectedNames_StillDropsHiddenAndUpdateEntries()
+    {
+        var apps = InstalledAppFilter.Apply(
+        [
+            Entry(name: "Hidden", systemComponent: 1),
+            Entry(name: "Patch", releaseType: "Hotfix"),
+            Entry(name: "Child", parentKey: "Parent"),
+            Entry(name: "NoUninstall", uninstall: null),
+            Entry(name: "Fine"),
+        ],
+        includeProtectedNames: true);
+
+        Assert.Equal(["Fine"], apps.Select(a => a.DisplayName));
+    }
+
+    [Fact]
     public void Apply_SortsLargestFirst_UnknownSizeLast()
     {
         var apps = InstalledAppFilter.Apply(
