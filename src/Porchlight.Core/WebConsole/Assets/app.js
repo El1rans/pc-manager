@@ -5,6 +5,7 @@
 
   var POLL_MS = 2000;
   var HISTORY = 60;
+  var FILLING_PERCENT = 85;
 
   var el = function (id) { return document.getElementById(id); };
   var history = {};
@@ -42,25 +43,55 @@
     return m + "m";
   }
 
+  var SVG = "http://www.w3.org/2000/svg";
+
+  // Each metric's colour and icon (docs/specs/39-vivid-colour.md), matching the app's Dashboard.
+  var metricLook = {
+    cpu: { hue: "blue", icon: "M4 4h8v8H4z M6 1.5V4 M10 1.5V4 M6 12v2.5 M10 12v2.5 M1.5 6H4 M1.5 10H4 M12 6h2.5 M12 10h2.5" },
+    memory: { hue: "violet", icon: "M1.5 4.5h13v7h-13z M4.5 7v2 M7 7v2 M9.5 7v2 M12 7v2" },
+    gpu: { hue: "green", icon: "M1.5 4h13v8h-13z M6 8a2 2 0 1 0 4 0a2 2 0 1 0-4 0 M3.5 6.5H5 M3.5 9.5H5" },
+    disk: { hue: "teal", icon: "M2 3.5h12v9H2z M2 10h12 M11 11.3h.5" },
+    down: { hue: "amber", icon: "M8 2.5v9 M4 8l4 4 4-4 M3 14h10" },
+    up: { hue: "coral", icon: "M8 13.5v-9 M4 8l4-4 4 4 M3 2h10" }
+  };
+
+  // Same order and hash as the app's ProcessRowViewModel, so an app has the same colour in both.
+  var letterHues = ["blue", "violet", "green", "teal", "coral", "amber"];
+
+  function hueFor(name) {
+    var sum = 0, upper = name.toUpperCase();
+    for (var i = 0; i < upper.length; i++) { sum = (Math.imul(sum, 31) + upper.charCodeAt(i)) | 0; }
+    return letterHues[(sum >>> 0) % letterHues.length];
+  }
+
+  function svgNode(tag, attributes) {
+    var node = document.createElementNS(SVG, tag);
+    Object.keys(attributes).forEach(function (name) { node.setAttribute(name, attributes[name]); });
+    return node;
+  }
+
   function tile(id, title, max) {
     if (tiles[id]) { return tiles[id]; }
+    var look = metricLook[id];
     var root = make("div", "tile");
+    root.setAttribute("data-hue", look.hue);
     var t = { root: root, max: max };
-    root.appendChild(make("div", "tile-title", title));
+    var head = root.appendChild(make("div", "tile-head"));
+    var icon = head.appendChild(make("span", "tile-icon"));
+    icon.setAttribute("aria-hidden", "true");
+    icon.appendChild(svgNode("svg", { viewBox: "0 0 16 16" })).appendChild(svgNode("path", { d: look.icon }));
+    head.appendChild(make("div", "tile-title", title));
     t.value = root.appendChild(make("div", "tile-value", "n/a"));
     t.detail = root.appendChild(make("div", "tile-detail", ""));
-    var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("class", "spark");
-    svg.setAttribute("viewBox", "0 0 " + (HISTORY - 1) + " 100");
-    svg.setAttribute("preserveAspectRatio", "none");
-    svg.setAttribute("aria-hidden", "true");
-    var base = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    base.setAttribute("x1", "0"); base.setAttribute("x2", String(HISTORY - 1));
-    base.setAttribute("y1", "100"); base.setAttribute("y2", "100");
-    svg.appendChild(base);
-    t.line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-    svg.appendChild(t.line);
-    root.appendChild(svg);
+    var wrap = root.appendChild(make("div", "spark-wrap"));
+    var svg = wrap.appendChild(svgNode("svg", {
+      "class": "spark", viewBox: "0 0 " + (HISTORY - 1) + " 100", preserveAspectRatio: "none", "aria-hidden": "true"
+    }));
+    svg.appendChild(svgNode("line", { x1: "0", x2: String(HISTORY - 1), y1: "100", y2: "100" }));
+    t.area = svg.appendChild(svgNode("polygon", {}));
+    t.line = svg.appendChild(svgNode("polyline", {}));
+    t.dot = wrap.appendChild(make("span", "spark-dot"));
+    t.dot.hidden = true;
     el("metric-tiles").appendChild(root);
     tiles[id] = t;
     history[id] = [];
@@ -81,13 +112,20 @@
       top = 1;
       for (var i = 0; i < series.length; i++) { if (series[i] > top) { top = series[i]; } }
     }
-    var offset = HISTORY - series.length, points = [];
+    var offset = HISTORY - series.length, points = [], firstX = null, lastX = null, lastY = null;
     for (var j = 0; j < series.length; j++) {
       if (series[j] === null) { continue; }
       var y = 100 - Math.min(series[j] / top, 1) * 100;
+      if (firstX === null) { firstX = offset + j; }
+      lastX = offset + j;
+      lastY = y;
       points.push((offset + j) + "," + y.toFixed(1));
     }
     t.line.setAttribute("points", points.join(" "));
+    t.area.setAttribute("points", points.length > 1 ? points.join(" ") + " " + lastX + ",100 " + firstX + ",100" : "");
+    // Only when the newest sample is the right-hand edge, where the dot is drawn.
+    t.dot.hidden = lastX !== HISTORY - 1;
+    if (!t.dot.hidden) { t.dot.style.top = lastY.toFixed(1) + "%"; }
   }
 
   function renderPerformance(p, info) {
@@ -131,11 +169,22 @@
   function renderProcesses(list) {
     var body = el("processes");
     body.replaceChildren();
+    var largest = 0;
+    (list || []).forEach(function (p) { if (p.workingSetBytes > largest) { largest = p.workingSetBytes; } });
     (list || []).forEach(function (p) {
       var row = make("tr");
-      row.appendChild(make("td", null, p.instanceCount > 1 ? p.name + " (" + p.instanceCount + ")" : p.name));
+      var app = row.appendChild(make("td")).appendChild(make("span", "app"));
+      var initial = /[\p{L}\p{N}]/u.exec(p.name);
+      var letter = app.appendChild(make("span", "app-letter", initial ? initial[0].toUpperCase() : "?"));
+      letter.setAttribute("data-hue", hueFor(p.name));
+      letter.setAttribute("aria-hidden", "true");
+      app.appendChild(make("span", null, p.instanceCount > 1 ? p.name + " (" + p.instanceCount + ")" : p.name));
       row.appendChild(make("td", "num", p.cpuPercent.toFixed(1) + "%"));
-      row.appendChild(make("td", "num", bytes(p.workingSetBytes)));
+      var memory = row.appendChild(make("td", "num"));
+      var bar = memory.appendChild(make("span", "mem-bar"));
+      bar.setAttribute("aria-hidden", "true");
+      bar.appendChild(make("span")).style.width = (largest > 0 ? 100 * p.workingSetBytes / largest : 0).toFixed(1) + "%";
+      memory.appendChild(document.createTextNode(bytes(p.workingSetBytes)));
       body.appendChild(row);
     });
   }
@@ -148,9 +197,10 @@
       var head = root.appendChild(make("div", "drive-head"));
       head.appendChild(make("span", null, d.label ? d.name + " (" + d.label + ")" : d.name));
       head.appendChild(make("span", "secondary", bytes(d.freeBytes) + " free of " + bytes(d.totalBytes)));
-      var meter = root.appendChild(make("div", d.isLow ? "meter low" : "meter"));
-      var fill = meter.appendChild(make("div"));
       var used = d.totalBytes > 0 ? 100 * (d.totalBytes - d.freeBytes) / d.totalBytes : 0;
+      // Green / amber / red by how full the drive is, like the app (DriveRowViewModel.FillingPercent).
+      var meter = root.appendChild(make("div", d.isLow ? "meter low" : used >= FILLING_PERCENT ? "meter filling" : "meter"));
+      var fill = meter.appendChild(make("div"));
       fill.style.width = Math.max(0, Math.min(100, used)).toFixed(1) + "%";
       if (d.isLow) { root.appendChild(make("div", "drive-low", "⚠ Almost full")); }
       box.appendChild(root);

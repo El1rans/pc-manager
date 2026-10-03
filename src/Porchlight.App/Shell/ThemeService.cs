@@ -15,13 +15,19 @@ public sealed class ThemeService : IThemeService
         }
 
         var mode = ToThemeMode(theme);
-        if (app.Dispatcher.CheckAccess())
+        void ApplyOnUiThread()
         {
             app.ThemeMode = mode;
+            ThemePalette.Apply(app, theme);
+        }
+
+        if (app.Dispatcher.CheckAccess())
+        {
+            ApplyOnUiThread();
         }
         else
         {
-            app.Dispatcher.BeginInvoke(() => app.ThemeMode = mode);
+            app.Dispatcher.BeginInvoke(ApplyOnUiThread);
         }
     }
 

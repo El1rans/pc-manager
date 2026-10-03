@@ -1,7 +1,9 @@
+using Porchlight.App.Controls;
+
 namespace Porchlight.App.Shell;
 
-/// <summary>The single place mapping each <see cref="PageCategory"/> to its title, glyph, order and
-/// pinning. See docs/specs/22-nav-categories.md.</summary>
+/// <summary>The single place mapping each <see cref="PageCategory"/> to its title, glyph, order,
+/// pinning and rail colour. See docs/specs/22-nav-categories.md.</summary>
 public static class PageCategoryCatalog
 {
     // Segoe Fluent Icons: Home, Repair, AllApps, Globe, TVMonitor, People, Settings.
@@ -16,13 +18,13 @@ public static class PageCategoryCatalog
     private static readonly IReadOnlyDictionary<PageCategory, PageCategoryInfo> Infos =
         new Dictionary<PageCategory, PageCategoryInfo>
         {
-            [PageCategory.Overview] = new(PageCategory.Overview, "Overview", HomeGlyph, 0, false),
-            [PageCategory.TuneUp] = new(PageCategory.TuneUp, "Tune-up", RepairGlyph, 1, false),
-            [PageCategory.Apps] = new(PageCategory.Apps, "Apps & services", AllAppsGlyph, 2, false),
-            [PageCategory.InternetAndSafety] = new(PageCategory.InternetAndSafety, "Internet & safety", GlobeGlyph, 3, false),
-            [PageCategory.Hardware] = new(PageCategory.Hardware, "Hardware", TvMonitorGlyph, 4, false),
-            [PageCategory.Help] = new(PageCategory.Help, "Get help", PeopleGlyph, 5, true),
-            [PageCategory.Settings] = new(PageCategory.Settings, "Settings", SettingsGlyph, 6, true),
+            [PageCategory.Overview] = new(PageCategory.Overview, "Overview", HomeGlyph, 0, false, Hue.Amber),
+            [PageCategory.TuneUp] = new(PageCategory.TuneUp, "Tune-up", RepairGlyph, 1, false, Hue.Green),
+            [PageCategory.Apps] = new(PageCategory.Apps, "Apps & services", AllAppsGlyph, 2, false, Hue.Violet),
+            [PageCategory.InternetAndSafety] = new(PageCategory.InternetAndSafety, "Internet & safety", GlobeGlyph, 3, false, Hue.Blue),
+            [PageCategory.Hardware] = new(PageCategory.Hardware, "Hardware", TvMonitorGlyph, 4, false, Hue.Coral),
+            [PageCategory.Help] = new(PageCategory.Help, "Get help", PeopleGlyph, 5, true, Hue.Teal),
+            [PageCategory.Settings] = new(PageCategory.Settings, "Settings", SettingsGlyph, 6, true, Hue.Neutral),
         };
 
     /// <summary>Every category, unordered.</summary>

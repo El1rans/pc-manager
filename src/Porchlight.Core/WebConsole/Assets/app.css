@@ -5,8 +5,19 @@
   --border: #e0e0e0;
   --text: #1b1b1b;
   --text-secondary: #5d5d5d;
-  --accent: #b35c00;
+  --accent: #a86b00;
   --on-accent: #ffffff;
+  /* Category hues, the same as the app's Themes/Palette.Light.xaml (docs/specs/39-vivid-colour.md). */
+  --hue-amber: #a86b00;
+  --hue-blue: #1f6fd1;
+  --hue-violet: #7a4ad8;
+  --hue-green: #138a55;
+  --hue-teal: #0b8585;
+  --hue-coral: #c8502a;
+  --tint: 12%;
+  --wash: 16%;
+  --stroke: 25%;
+  --glow: rgba(245, 185, 66, 0.25);
   --track: #e8e8e8;
   --caution: #9d5d00;
   --caution-bg: #fff4ce;
@@ -22,8 +33,18 @@
     --border: #3a3a3a;
     --text: #ffffff;
     --text-secondary: #c5c5c5;
-    --accent: #ffb454;
+    --accent: #f5b942;
     --on-accent: #1b1b1b;
+    --hue-amber: #f5b942;
+    --hue-blue: #5aa9ff;
+    --hue-violet: #b48cff;
+    --hue-green: #4cd68f;
+    --hue-teal: #3cc8c8;
+    --hue-coral: #ff8e66;
+    --tint: 18%;
+    --wash: 22%;
+    --stroke: 30%;
+    --glow: rgba(245, 185, 66, 0.19);
     --track: #3d3d3d;
     --caution: #fce100;
     --caution-bg: #433519;
@@ -38,7 +59,8 @@
 body {
   margin: 0;
   padding: 16px;
-  background: var(--bg);
+  /* The warm "porch light" glow behind the header, like the app's. */
+  background: radial-gradient(ellipse 560px 220px at 12% 0, var(--glow), transparent) no-repeat, var(--bg);
   color: var(--text);
   font: 15px/1.4 "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
 }
@@ -83,6 +105,7 @@ h2 { font-size: 16px; margin: 0 0 12px; font-weight: 600; }
 #metric-tiles { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
 
 .tile {
+  --hue: var(--text-secondary);
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -90,19 +113,60 @@ h2 { font-size: 16px; margin: 0 0 12px; font-weight: 600; }
   min-width: 0;
 }
 
+/* Each metric tile in its own colour: icon chip, value, sparkline, tinted border and a wash fading
+   across the card. The title still names the metric, so colour is never the only cue. */
+#metric-tiles .tile {
+  background: linear-gradient(150deg, color-mix(in srgb, var(--hue) var(--wash), transparent), transparent 70%), var(--card);
+  border-color: color-mix(in srgb, var(--hue) var(--stroke), var(--border));
+}
+.tile[data-hue="amber"] { --hue: var(--hue-amber); }
+.tile[data-hue="blue"] { --hue: var(--hue-blue); }
+.tile[data-hue="violet"] { --hue: var(--hue-violet); }
+.tile[data-hue="green"] { --hue: var(--hue-green); }
+.tile[data-hue="teal"] { --hue: var(--hue-teal); }
+.tile[data-hue="coral"] { --hue: var(--hue-coral); }
+
 .tiles.small .tile { background: transparent; }
 
+.tile-head { display: flex; align-items: center; gap: 8px; }
+.tile-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  flex: none;
+  color: var(--hue);
+  background: color-mix(in srgb, var(--hue) var(--tint), transparent);
+}
+.tile-icon svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .tile-title { font-size: 13px; color: var(--text-secondary); }
-.tile-value { font-size: 26px; font-weight: 600; margin: 2px 0; }
+#metric-tiles .tile-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.tile-value { font-size: 26px; font-weight: 600; margin: 2px 0; font-variant-numeric: tabular-nums; }
+#metric-tiles .tile-value { color: var(--hue); margin-top: 6px; }
 .tile-detail { font-size: 12px; color: var(--text-secondary); min-height: 1.4em; overflow-wrap: anywhere; }
 
-.meter { height: 6px; background: var(--track); border-radius: 3px; overflow: hidden; margin-top: 6px; }
-.meter > div { height: 100%; background: var(--accent); width: 0; transition: width 0.4s ease; }
+.meter { height: 8px; background: var(--track); border-radius: 4px; overflow: hidden; margin-top: 6px; }
+.meter > div { height: 100%; background: var(--success); width: 0; transition: width 0.4s ease; }
+.meter.filling > div { background: var(--caution); }
 .meter.low > div { background: var(--critical); }
 
-.spark { display: block; width: 100%; height: 36px; margin-top: 6px; }
-.spark polyline { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.spark-wrap { position: relative; margin-top: 6px; }
+.spark { display: block; width: 100%; height: 36px; overflow: visible; }
+.spark polyline { fill: none; stroke: var(--hue); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.spark polygon { fill: var(--hue); opacity: 0.24; stroke: none; }
 .spark line { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+/* The newest sample, drawn in HTML so it stays round while the chart itself stretches. */
+.spark-dot {
+  position: absolute;
+  right: -3px;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--hue);
+}
 
 .severity { font-size: 12px; font-weight: 600; }
 .severity.Caution { color: var(--caution); }
@@ -118,6 +182,32 @@ h2 { font-size: 16px; margin: 0 0 12px; font-weight: 600; }
 .table tr:last-child td { border-bottom: none; }
 .table td { overflow-wrap: anywhere; }
 .table .num { text-align: right; white-space: nowrap; }
+.table .app { display: flex; align-items: center; gap: 10px; }
+
+/* A letter tile per app, in a colour picked from its name so each app keeps its colour. */
+.app-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--hue);
+  color: var(--on-accent);
+}
+.app-letter[data-hue="amber"] { --hue: var(--hue-amber); }
+.app-letter[data-hue="blue"] { --hue: var(--hue-blue); }
+.app-letter[data-hue="violet"] { --hue: var(--hue-violet); }
+.app-letter[data-hue="green"] { --hue: var(--hue-green); }
+.app-letter[data-hue="teal"] { --hue: var(--hue-teal); }
+.app-letter[data-hue="coral"] { --hue: var(--hue-coral); }
+
+/* Memory relative to the hungriest app in the list. */
+.mem-bar { display: inline-block; width: 32px; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; vertical-align: middle; margin-right: 10px; }
+.mem-bar > span { display: block; height: 100%; background: var(--hue-violet); }
 .table.info th { width: 40%; font-size: inherit; font-weight: normal; }
 
 .drive { margin-bottom: 14px; }

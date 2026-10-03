@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Porchlight.App.Controls;
 using Porchlight.Core.Monitoring;
 
 namespace Porchlight.App.Features.Dashboard;
@@ -18,14 +19,22 @@ public sealed partial class MetricTileViewModel : ObservableObject
     private readonly Func<double, string> _formatForTooltip;
     private int _consecutiveMisses;
 
-    public MetricTileViewModel(string title, double maximum, Func<double, string> formatForTooltip)
+    public MetricTileViewModel(string title, double maximum, Func<double, string> formatForTooltip, Hue hue = Hue.Neutral, string glyph = "")
     {
         Title = title;
         Maximum = maximum;
         _formatForTooltip = formatForTooltip;
+        Hue = hue;
+        Glyph = glyph;
     }
 
     public string Title { get; }
+
+    /// <summary>The tile's colour: icon chip, value, sparkline and card wash (docs/specs/39-vivid-colour.md).</summary>
+    public Hue Hue { get; }
+
+    /// <summary>Segoe Fluent Icons glyph shown in the tile's icon chip.</summary>
+    public string Glyph { get; }
 
     /// <summary>Top of the Sparkline's scale; <see cref="double.NaN"/> auto-scales to the data.</summary>
     public double Maximum { get; }

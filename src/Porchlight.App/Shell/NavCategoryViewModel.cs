@@ -43,6 +43,8 @@ public sealed partial class NavCategoryViewModel : ObservableObject, IDisposable
 
     public string Glyph => Info.Glyph;
 
+    public Controls.Hue Hue => Info.Hue;
+
     public bool IsPinnedToBottom => Info.IsPinnedToBottom;
 
     public ObservableCollection<IPage> Pages { get; }
