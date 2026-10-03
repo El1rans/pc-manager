@@ -15,11 +15,13 @@ namespace Porchlight.App.Features.Browsers;
 public sealed partial class BrowserExtensionsViewModel : PageViewModelBase, IDisposable
 {
     private readonly IBrowserExtensionScanner _scanner;
+    private readonly IBrowserHijackScanner _hijackScanner;
     private readonly IBrowserAddOnsOpener _opener;
     private readonly ILogger<BrowserExtensionsViewModel> _logger;
 
     private CancellationTokenSource? _scanCts;
     private BrowserScanResult? _lastResult;
+    private BrowserHijackResult? _lastHijack;
     private bool _disposed;
 
     [ObservableProperty]
@@ -27,6 +29,9 @@ public sealed partial class BrowserExtensionsViewModel : PageViewModelBase, IDis
 
     [ObservableProperty]
     private string _summary = "Looking at your browsers...";
+
+    [ObservableProperty]
+    private string _hijackSummary = string.Empty;
 
     [ObservableProperty]
     private bool _isBusy;
@@ -45,10 +50,12 @@ public sealed partial class BrowserExtensionsViewModel : PageViewModelBase, IDis
 
     public BrowserExtensionsViewModel(
         IBrowserExtensionScanner scanner,
+        IBrowserHijackScanner hijackScanner,
         IBrowserAddOnsOpener opener,
         ILogger<BrowserExtensionsViewModel> logger)
     {
         _scanner = scanner;
+        _hijackScanner = hijackScanner;
         _opener = opener;
         _logger = logger;
     }
@@ -80,6 +87,7 @@ public sealed partial class BrowserExtensionsViewModel : PageViewModelBase, IDis
         HasError = false;
         try
         {
+            _lastHijack = await ScanSettingsAsync(cts.Token).ConfigureAwait(true);
             _lastResult = await _scanner.ScanAsync(cts.Token).ConfigureAwait(true);
             HasLoaded = true;
             Rebuild();
@@ -107,6 +115,20 @@ public sealed partial class BrowserExtensionsViewModel : PageViewModelBase, IDis
         }
     }
 
+    /// <summary>The settings check is a bonus on this page: if it fails the add-on list still shows.</summary>
+    private async Task<BrowserHijackResult?> ScanSettingsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _hijackScanner.ScanAsync(cancellationToken).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            _logger.LogWarning(ex, "Browser settings check failed.");
+            return null;
+        }
+    }
+
     partial void OnShowOnlyReviewChanged(bool value) => Rebuild();
 
     private void Rebuild()
@@ -127,11 +149,16 @@ public sealed partial class BrowserExtensionsViewModel : PageViewModelBase, IDis
                 .Select(e => new ExtensionItemViewModel(e))
                 .ToList();
             var openCommand = new RelayCommand(() => OpenAddOnsPage(browser));
-            sections.Add(new BrowserSectionViewModel(browser, shown, all.Count, openCommand));
+            var hijackRows = (_lastHijack?.Findings ?? [])
+                .Where(f => f.Browser == browser)
+                .Select(f => new HijackRowViewModel(f, new RelayCommand(() => OpenSettingsPage(browser, f.Setting))))
+                .ToList();
+            sections.Add(new BrowserSectionViewModel(browser, shown, all.Count, openCommand, hijackRows));
         }
 
         Sections = sections;
         Summary = BuildSummary(result);
+        HijackSummary = BuildHijackSummary(_lastHijack);
         OnPropertyChanged(nameof(ShowEmptyState));
     }
 
@@ -148,6 +175,36 @@ public sealed partial class BrowserExtensionsViewModel : PageViewModelBase, IDis
         var found = total == 1 ? "1 add-on" : $"{total} add-ons";
         var tail = review == 0 ? "None of them needs a second look." : review == 1 ? "1 is worth a look." : $"{review} are worth a look.";
         return $"We found {found} in {browsers}. {tail}";
+    }
+
+    private static string BuildHijackSummary(BrowserHijackResult? hijack)
+    {
+        if (hijack is null || hijack.Findings.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var forced = hijack.Findings.Count(f => f.Status == HijackStatus.ForcedByPolicy);
+        var changed = hijack.Findings.Count(f => f.Status == HijackStatus.Changed);
+        var total = forced + changed;
+        if (total == 0)
+        {
+            return "Your home page, start-up pages and search engine look normal.";
+        }
+
+        var settings = total == 1 ? "1 browser setting looks changed" : $"{total} browser settings look changed";
+        return forced > 0
+            ? $"{settings}, and a setting on this PC is forcing {(forced == 1 ? "one of them" : "some of them")}. See each browser below."
+            : $"{settings}. See each browser below.";
+    }
+
+    private void OpenSettingsPage(BrowserKind browser, HijackSetting setting)
+    {
+        var opened = _opener.TryOpenSettings(browser, setting);
+        OpenMessage = opened
+            ? null
+            : $"We couldn't open {BrowserSectionViewModel.DisplayName(browser)} automatically. Open it, then type "
+                + $"{BrowserAddOnsOpener.SettingsUrl(browser, setting)} in the address bar.";
     }
 
     private void OpenAddOnsPage(BrowserKind browser)

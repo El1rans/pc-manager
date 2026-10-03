@@ -14,6 +14,7 @@ public static class BrowsersServiceCollectionExtensions
         services.AddSingleton<IBrowserLocations, BrowserLocations>();
         services.AddSingleton<IBrowserExecutableLocator, BrowserExecutableLocator>();
         services.AddSingleton<IBrowserAddOnsOpener, BrowserAddOnsOpener>();
+        services.AddSingleton<IBrowserPolicyReader, BrowserPolicyReader>();
 
 #if DEBUG
         // Non-shipping (DEBUG-only) fake add-on list for documentation screenshots - see
@@ -21,11 +22,13 @@ public static class BrowsersServiceCollectionExtensions
         if (Monitoring.Demo.DemoDataMode.IsEnabled)
         {
             services.AddSingleton<IBrowserExtensionScanner, Demo.DemoBrowserExtensionScanner>();
+            services.AddSingleton<IBrowserHijackScanner, Demo.DemoBrowserHijackScanner>();
             return services;
         }
 #endif
 
         services.AddSingleton<IBrowserExtensionScanner, BrowserExtensionScanner>();
+        services.AddSingleton<IBrowserHijackScanner, BrowserHijackScanner>();
         return services;
     }
 }

@@ -53,6 +53,34 @@ public sealed class BrowserAddOnsOpenerTests
         Assert.Equal([url], started.Args);
     }
 
+    [Theory]
+    [InlineData(BrowserKind.Edge, HijackSetting.SearchEngine, "edge://settings/search")]
+    [InlineData(BrowserKind.Edge, HijackSetting.HomePage, "edge://settings/startHomeNTP")]
+    [InlineData(BrowserKind.Chrome, HijackSetting.SearchEngine, "chrome://settings/search")]
+    [InlineData(BrowserKind.Chrome, HijackSetting.StartupPages, "chrome://settings/onStartup")]
+    [InlineData(BrowserKind.Brave, HijackSetting.NewTabPage, "brave://settings/getStarted")]
+    [InlineData(BrowserKind.Firefox, HijackSetting.SearchEngine, "about:preferences#search")]
+    [InlineData(BrowserKind.Firefox, HijackSetting.HomePage, "about:preferences#home")]
+    public void TryOpenSettings_StartsBrowserWithTheSettingsUrl(BrowserKind kind, HijackSetting setting, string url)
+    {
+        var runner = new FakeRunner();
+        var opener = new BrowserAddOnsOpener(new FakeLocator(@"C:rowser.exe"), runner, NullLogger<BrowserAddOnsOpener>.Instance);
+
+        Assert.True(opener.TryOpenSettings(kind, setting));
+
+        Assert.Equal([url], Assert.Single(runner.Started).Args);
+    }
+
+    [Fact]
+    public void TryOpenSettings_BrowserNotFound_ReturnsFalse()
+    {
+        var runner = new FakeRunner();
+        var opener = new BrowserAddOnsOpener(new FakeLocator(null), runner, NullLogger<BrowserAddOnsOpener>.Instance);
+
+        Assert.False(opener.TryOpenSettings(BrowserKind.Chrome, HijackSetting.HomePage));
+        Assert.Empty(runner.Started);
+    }
+
     [Fact]
     public void TryOpen_BrowserNotFound_ReturnsFalse()
     {

@@ -10,8 +10,10 @@ public sealed class BrowserSectionViewModel
         BrowserKind browser,
         IReadOnlyList<ExtensionItemViewModel> items,
         int totalCount,
-        ICommand openCommand)
+        ICommand openCommand,
+        IReadOnlyList<HijackRowViewModel>? hijackRows = null)
     {
+        HijackRows = hijackRows ?? [];
         Browser = browser;
         Items = items;
         TotalCount = totalCount;
@@ -27,6 +29,11 @@ public sealed class BrowserSectionViewModel
     public int TotalCount { get; }
 
     public ICommand OpenCommand { get; }
+
+    /// <summary>The start-up, home page, new-tab and search checks for this browser (spec 32).</summary>
+    public IReadOnlyList<HijackRowViewModel> HijackRows { get; }
+
+    public bool HasHijackRows => HijackRows.Count > 0;
 
     public string OpenButtonText => $"Open {Name}'s add-ons page";
 
