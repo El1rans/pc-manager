@@ -1,0 +1,19 @@
+<UserControl x:Class="Porchlight.App.Features.Settings.TextSizeCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:settings="clr-namespace:Porchlight.App.Features.Settings"
+             d:DataContext="{d:DesignInstance settings:TextSizeViewModel}"
+             mc:Ignorable="d">
+  <Border Style="{StaticResource Card}">
+    <StackPanel>
+      <TextBlock Text="Text size" Style="{StaticResource CardTitle}"/>
+      <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding SelectedSize}"
+                DisplayMemberPath="Label" HorizontalAlignment="Left" MinWidth="160"
+                AutomationProperties.Name="Text size"/>
+      <TextBlock Style="{StaticResource Secondary}" Margin="0,8,0,0" TextWrapping="Wrap"
+                 Text="Makes the text and pictures on each page bigger. The menu on the left stays the same size."/>
+    </StackPanel>
+  </Border>
+</UserControl>

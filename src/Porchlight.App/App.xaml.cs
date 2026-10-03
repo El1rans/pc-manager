@@ -154,6 +154,7 @@ public partial class App : System.Windows.Application, IDisposable
 
             // Before any window is created, so nothing ever paints in the wrong theme.
             _host.Services.GetRequiredService<IThemeService>().Apply(_host.Services.GetRequiredService<ISettingsStore>().Current.Appearance.Theme);
+            _host.Services.GetRequiredService<ITextScaleService>().Apply(_host.Services.GetRequiredService<ISettingsStore>().Current.Appearance.TextSize);
 
             // The tray icon owns a message-only HwndSource, which must be created on this (STA, UI)
             // thread. Hosted services that raise alerts depend on it, and StartAsync below resolves
