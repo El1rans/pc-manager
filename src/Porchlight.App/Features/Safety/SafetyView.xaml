@@ -1,0 +1,100 @@
+<UserControl x:Class="Porchlight.App.Features.Safety.SafetyView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:safety="clr-namespace:Porchlight.App.Features.Safety"
+             d:DataContext="{d:DesignInstance safety:SafetyViewModel}"
+             mc:Ignorable="d">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel MaxWidth="820" HorizontalAlignment="Left">
+            <TextBlock Text="Safety" Style="{StaticResource PageTitle}"/>
+            <TextBlock Style="{StaticResource Secondary}" TextWrapping="Wrap" Margin="0,4,0,8"
+                       Text="A quick check of whether this PC is protected, up to date, and who could connect to it. Porchlight only looks here - it doesn't change anything."/>
+
+            <DockPanel Margin="0,0,0,12">
+                <Button DockPanel.Dock="Right" Content="Refresh" Command="{Binding RefreshCommand}"
+                        AutomationProperties.Name="Refresh the safety checks"/>
+                <TextBlock Text="{Binding HeadlineGlyph}" Style="{StaticResource Icon}" FontSize="20" Margin="0,0,10,0"/>
+                <TextBlock Text="{Binding Headline}" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"
+                           TextWrapping="Wrap" AutomationProperties.Name="Overall safety result"/>
+            </DockPanel>
+
+            <!-- Security status -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="Security software" Style="{StaticResource CardTitle}" Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding SecurityGlyph}" Style="{StaticResource Icon}" Margin="0,0,8,0"/>
+                        <TextBlock Text="{Binding SecurityVerdict}" FontWeight="SemiBold" TextWrapping="Wrap"
+                                   AutomationProperties.Name="Security result"/>
+                    </StackPanel>
+                    <ItemsControl ItemsSource="{Binding SecurityDetails}" Margin="0,6,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Style="{StaticResource Secondary}" TextWrapping="Wrap"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Content="Open Windows Security" Command="{Binding OpenWindowsSecurityCommand}"
+                            HorizontalAlignment="Left" Margin="0,12,0,0"
+                            AutomationProperties.Name="Open Windows Security"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Windows Update -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="Windows Update" Style="{StaticResource CardTitle}" Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding UpdateGlyph}" Style="{StaticResource Icon}" Margin="0,0,8,0"/>
+                        <TextBlock Text="{Binding UpdateVerdict}" FontWeight="SemiBold" TextWrapping="Wrap"
+                                   AutomationProperties.Name="Windows Update result"/>
+                    </StackPanel>
+                    <ItemsControl ItemsSource="{Binding UpdateDetails}" Margin="0,6,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Style="{StaticResource Secondary}" TextWrapping="Wrap"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="{Binding PendingMessage}" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Visibility="{Binding PendingMessage, Converter={StaticResource StringToVis}}"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Open Windows Update" Command="{Binding OpenWindowsUpdateCommand}" Margin="0,0,8,0"
+                                AutomationProperties.Name="Open Windows Update"/>
+                        <Button Content="Check now" Command="{Binding CheckPendingCommand}"
+                                AutomationProperties.Name="Check for waiting updates"
+                                ToolTip="Looks for updates that are waiting. This can take a few minutes."/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Who can connect -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="Who can connect to this PC?" Style="{StaticResource CardTitle}" Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding RemoteGlyph}" Style="{StaticResource Icon}" Margin="0,0,8,0"/>
+                        <TextBlock Text="{Binding RemoteVerdict}" FontWeight="SemiBold" TextWrapping="Wrap"
+                                   AutomationProperties.Name="Remote access result"/>
+                    </StackPanel>
+                    <ItemsControl ItemsSource="{Binding RemoteTools}" Margin="0,8,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type safety:RemoteToolRowViewModel}">
+                                <StackPanel Margin="0,0,0,10" AutomationProperties.Name="{Binding AutomationName}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Glyph}" Style="{StaticResource Icon}" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding StatusText}" Style="{StaticResource Secondary}" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Note}" TextWrapping="Wrap" Margin="24,2,0,0"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

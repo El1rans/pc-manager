@@ -18,6 +18,7 @@ using Porchlight.App.Features.Network;
 using Porchlight.App.Features.Notifications;
 using Porchlight.App.Features.RemoteSupport;
 using Porchlight.App.Features.RunningApps;
+using Porchlight.App.Features.Safety;
 using Porchlight.App.Features.Settings;
 using Porchlight.App.Features.Setup;
 using Porchlight.App.Features.Startup;
@@ -318,6 +319,7 @@ public partial class App : System.Windows.Application, IDisposable
         services.AddSettingsFeature();
         services.AddWebConsoleFeature();
         services.AddWindowsServicesFeature();
+        services.AddSafetyFeature();
     }
 
     /// <summary>Applies every feature's <see cref="PageRegistration"/> to the view locator. Runs
