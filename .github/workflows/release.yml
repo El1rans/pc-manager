@@ -134,7 +134,7 @@ jobs:
       - name: Upload app artifact for signing
         if: steps.signing.outputs.enabled == 'true'
         id: upload-app
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: app-to-sign
           path: publish/Porchlight.exe
@@ -211,7 +211,7 @@ jobs:
       - name: Upload installer artifact for signing
         if: steps.signing.outputs.enabled == 'true'
         id: upload-installer
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: installer-to-sign
           path: dist/Porchlight-Setup-${{ steps.version.outputs.version }}.exe
@@ -322,7 +322,7 @@ jobs:
       - name: Upload release assets
         # Hands the signed (or unsigned-fallback) installer, its checksum, and the release notes to
         # the `publish` job, which is the only job with `contents: write` - see that job's comment.
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-assets
           path: |
