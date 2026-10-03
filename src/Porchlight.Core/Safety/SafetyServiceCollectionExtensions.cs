@@ -26,6 +26,7 @@ public static class SafetyServiceCollectionExtensions
         services.TryAddSingleton<RunningApps.IProcessSnapshotSource, RunningApps.ProcessSnapshotSource>();
 
         services.AddSingleton<ISecurityCenterReader, SecurityCenterReader>();
+        services.AddSingleton<IWindowsFirewallReader, WindowsFirewallReader>();
         services.AddSingleton<ISecurityStatusService, SecurityStatusService>();
         services.AddSingleton<IWindowsUpdateAgent, WindowsUpdateAgent>();
         services.AddSingleton<IWindowsUpdateStatusService, WindowsUpdateStatusService>();

@@ -82,6 +82,7 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     private readonly TimeProvider _timeProvider;
     private readonly StringBuilder _log = new();
     private readonly List<string> _pendingLogLines = [];
+    private readonly Lock _logLock = new();
     private readonly DispatcherTimer _logFlushTimer;
     private readonly Lock _initialCheckLock = new();
 
@@ -1387,8 +1388,12 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     [RelayCommand]
     private void ClearLog()
     {
-        _pendingLogLines.Clear();
-        _log.Clear();
+        lock (_logLock)
+        {
+            _pendingLogLines.Clear();
+            _log.Clear();
+        }
+
         LogText = string.Empty;
     }
 
@@ -1397,13 +1402,17 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     /// log." <see cref="LogText"/> itself is only rebuilt when <see cref="FlushLog"/> runs (every
     /// <see cref="LogFlushInterval"/>, or explicitly at the end of an operation), not on every call
     /// to this method - rebuilding the whole log string on every single line would be O(n) per line
-    /// (O(n<sup>2</sup>) overall for a run with many lines). Called only from the UI thread (every
-    /// caller is a <see cref="Progress{T}"/> callback created on it, or code already running on
-    /// it), so the pending-lines buffer needs no locking.</summary>
+    /// (O(n<sup>2</sup>) overall for a run with many lines). Usually called on the UI thread, but a
+    /// <see cref="Progress{T}"/> created where there is no synchronization context (a continuation
+    /// that left the UI thread, or unit tests) invokes its callback on a thread-pool thread, so the
+    /// pending-lines buffer and <see cref="_log"/> are guarded by <see cref="_logLock"/>.</summary>
     private void AppendLog(string line)
     {
         LogAppendedLine(line);
-        _pendingLogLines.Add(line);
+        lock (_logLock)
+        {
+            _pendingLogLines.Add(line);
+        }
     }
 
     /// <summary>Moves every pending line (see <see cref="AppendLog"/>) into <see cref="_log"/>,
@@ -1412,29 +1421,35 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
     /// nothing is pending, so the ~100ms timer tick is cheap between bursts of log activity.</summary>
     private void FlushLog()
     {
-        if (_pendingLogLines.Count == 0)
+        string text;
+        lock (_logLock)
         {
-            return;
+            if (_pendingLogLines.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var line in _pendingLogLines)
+            {
+                _log.Append(line).Append('\n');
+            }
+
+            _pendingLogLines.Clear();
+
+            if (_log.Length > LogCharacterLimit)
+            {
+                TrimLogToLineBoundary();
+            }
+
+            text = _log.ToString();
         }
 
-        foreach (var line in _pendingLogLines)
-        {
-            _log.Append(line).Append('\n');
-        }
-
-        _pendingLogLines.Clear();
-
-        if (_log.Length > LogCharacterLimit)
-        {
-            TrimLogToLineBoundary();
-        }
-
-        LogText = _log.ToString();
+        LogText = text;
     }
 
     /// <summary>Drops whole lines from the front of <see cref="_log"/> until it is at or below
     /// <see cref="LogTrimTarget"/> characters, cutting only at a <c>'\n'</c> so no line is left
-    /// half-truncated.</summary>
+    /// half-truncated. Caller holds <see cref="_logLock"/>.</summary>
     private void TrimLogToLineBoundary()
     {
         var excess = _log.Length - LogTrimTarget;

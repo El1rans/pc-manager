@@ -33,7 +33,7 @@ programs with a search box, sorting, and a careful Remove button.
   either unreliable (access times are off by default) or too invasive for a family PC; skipped.
 - Microsoft Store (MSIX) apps, leftover file/registry cleanup, silent forcing of non-winget
   uninstallers, using `QuietUninstallString` (the program's own window is what the user expects).
-- The "Recent changes" journal (another milestone): this one only exposes a seam (below).
+- Undoing a removal (the journal entry says it can't be undone).
 
 ## Design
 
@@ -72,8 +72,10 @@ while Porchlight is elevated) are reused unchanged.
   `ListAsync` result. The winget call never gets a cancellable token once started (same rule as the
   Updates page).
 - Seam for the "Recent changes" journal: `event EventHandler<AppRemovedEventArgs>? AppRemoved`,
-  raised once after a confirmed winget removal. The journal subscribes there; nothing here depends
-  on it.
+  raised once after a confirmed winget removal. Nothing depends on a subscriber.
+- Recent changes: `RemoveAppsViewModel` records "Removed <app name>" (area Apps, no undo) in
+  `IChangeJournal` after a confirmed winget removal only. When the app's own uninstaller was merely
+  opened, the outcome is unknown, so nothing is recorded.
 - `AddRemoveAppsCore()` DI extension; the demo fakes live inside `#if DEBUG` only, real
   registrations are outside it.
 
