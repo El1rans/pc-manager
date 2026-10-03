@@ -103,7 +103,7 @@ public sealed class SafetyServicesTests
     [Fact]
     public async Task Aggregate_CombinesAndCountsAttention()
     {
-        var security = new SecurityStatusService(new FakeSecurityCenter(null));
+        var security = new SecurityStatusService(new FakeSecurityCenter(null), new FakeWindowsFirewall(null));
         var update = new WindowsUpdateStatusService(
             new FakeAgent([new UpdateHistoryEntry(Now.AddDays(-3), "Cumulative", UpdateHistoryResult.Succeeded)]), new FixedTime(Now));
         var remote = new RemoteAccessService(new FakeProbe(new RemoteToolEvidence(["rustdesk"], [], [])), new FakeComponents(ComponentState.NotInstalled));
@@ -120,7 +120,7 @@ public sealed class SafetyServicesTests
     public void Summary_AllGood_SaysSafe()
     {
         var status = new SafetyStatus(
-            SecurityVerdictBuilder.Build([]) with { Level = SafetyLevel.Good },
+            SecurityVerdictBuilder.Build([], null) with { Level = SafetyLevel.Good },
             UpdateVerdictBuilder.Build(new UpdateHistorySummary(Now, 0), false, Now),
             new RemoteAccessStatus([]));
 
@@ -131,6 +131,25 @@ public sealed class SafetyServicesTests
     private sealed class FakeProbe(RemoteToolEvidence evidence) : IRemoteToolProbe
     {
         public Task<RemoteToolEvidence> CollectAsync(CancellationToken cancellationToken) => Task.FromResult(evidence);
+    }
+
+    [Fact]
+    public async Task Security_UsesBothSources()
+    {
+        var off = new WindowsFirewallStatus(
+            new Dictionary<WindowsFirewallProfile, bool> { [WindowsFirewallProfile.Public] = false },
+            WindowsFirewallProfile.Public);
+        var av = new SecurityProduct("AV", SecurityProductKind.Antivirus, new ProductStateInfo(ProductRunState.On, true));
+        var service = new SecurityStatusService(new FakeSecurityCenter([av]), new FakeWindowsFirewall(off));
+
+        var status = await service.GetAsync(CancellationToken.None);
+
+        Assert.Equal(SecurityVerdictBuilder.FirewallOff, status.Verdict);
+    }
+
+    private sealed class FakeWindowsFirewall(WindowsFirewallStatus? status) : IWindowsFirewallReader
+    {
+        public Task<WindowsFirewallStatus?> ReadAsync(CancellationToken cancellationToken) => Task.FromResult(status);
     }
 
     private sealed class FakeSecurityCenter(IReadOnlyList<SecurityProduct>? products) : ISecurityCenterReader
