@@ -146,7 +146,10 @@
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
-            <ContentControl Content="{Binding SelectedPageView}"/>
+            <!-- Only the page is scaled by "Text size" (docs/specs/37-larger-text.md); the tab strip is navigation. -->
+            <Border LayoutTransform="{DynamicResource PageTextScaleTransform}">
+                <ContentControl Content="{Binding SelectedPageView}"/>
+            </Border>
         </DockPanel>
     </Grid>
 </Window>

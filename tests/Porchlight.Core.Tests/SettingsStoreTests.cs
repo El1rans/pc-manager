@@ -117,6 +117,23 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void TextSize_DefaultsToNormal_WhenMissingFromAnOldFile()
+    {
+        File.WriteAllText(_settingsPath, """{"Appearance": {"Theme": "Dark"}}""");
+
+        Assert.Equal(TextSize.Normal, CreateStore().Current.Appearance.TextSize);
+    }
+
+    [Fact]
+    public void TextSize_RoundTripsByName()
+    {
+        CreateStore().Update(s => s.Appearance.TextSize = TextSize.ExtraLarge);
+
+        Assert.Contains("\"TextSize\": \"ExtraLarge\"", File.ReadAllText(_settingsPath));
+        Assert.Equal(TextSize.ExtraLarge, CreateStore().Current.Appearance.TextSize);
+    }
+
+    [Fact]
     public void Load_NullSection_FallsBackToDefaultForThatSection()
     {
         File.WriteAllText(_settingsPath, """{"Updates": null}""");
