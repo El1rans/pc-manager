@@ -25,4 +25,6 @@ public sealed class AppSettings
     public WebConsoleSettings WebConsole { get; set; } = new();
 
     public WindowSettings Window { get; set; } = new();
+
+    public CheckupReminderSettings CheckupReminder { get; set; } = new();
 }

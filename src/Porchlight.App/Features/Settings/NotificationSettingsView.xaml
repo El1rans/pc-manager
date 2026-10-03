@@ -33,6 +33,25 @@
                      Text="Porchlight only looks for updates. You choose when to install them."/>
         </StackPanel>
       </Border>
+
+      <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+        <StackPanel>
+          <TextBlock Text="Check-up reminder" Style="{StaticResource CardTitle}"/>
+          <CheckBox Content="Remind me to send a check-up report" IsChecked="{Binding CheckupReminderEnabled}"
+                    AutomationProperties.Name="Remind me to send a check-up report"/>
+          <StackPanel Orientation="Horizontal" Margin="0,10,0,0" IsEnabled="{Binding CheckupReminderEnabled}">
+            <ComboBox ItemsSource="{Binding CheckupFrequencyOptions}" SelectedItem="{Binding SelectedCheckupFrequency}"
+                      DisplayMemberPath="Label" MinWidth="140" Margin="0,0,10,0"
+                      AutomationProperties.Name="How often to remind me about a check-up"/>
+            <TextBlock Text="on" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <ComboBox ItemsSource="{Binding CheckupDayOptions}" SelectedItem="{Binding SelectedCheckupDay}"
+                      DisplayMemberPath="Label" MinWidth="140"
+                      AutomationProperties.Name="Which day to remind me about a check-up"/>
+          </StackPanel>
+          <TextBlock Style="{StaticResource Secondary}" Margin="0,8,0,0" TextWrapping="Wrap"
+                     Text="Porchlight shows a reminder when it is running. Clicking it opens the check-up on the Get help page. Porchlight never sends the report itself, and it won't remind you if you made one recently."/>
+        </StackPanel>
+      </Border>
     </StackPanel>
   </ScrollViewer>
 </UserControl>

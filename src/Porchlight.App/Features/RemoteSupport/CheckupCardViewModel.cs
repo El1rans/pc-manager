@@ -26,6 +26,7 @@ public sealed partial class CheckupCardViewModel : ObservableObject
     private readonly IFileDialogService _fileDialogs;
     private readonly ISettingsStore _settingsStore;
     private readonly TimeProvider _timeProvider;
+    private readonly CheckupReminderScheduler _reminderScheduler;
     private readonly ILogger<CheckupCardViewModel> _logger;
 
     private CheckupReport? _report;
@@ -60,8 +61,10 @@ public sealed partial class CheckupCardViewModel : ObservableObject
         IFileDialogService fileDialogs,
         ISettingsStore settingsStore,
         TimeProvider timeProvider,
+        CheckupReminderScheduler reminderScheduler,
         ILogger<CheckupCardViewModel> logger)
     {
+        _reminderScheduler = reminderScheduler;
         _builder = builder;
         _clipboard = clipboard;
         _urlLauncher = urlLauncher;
@@ -73,6 +76,37 @@ public sealed partial class CheckupCardViewModel : ObservableObject
         _loadingEmail = true;
         _helperEmail = settingsStore.Current.RemoteSupport.HelperEmail;
         _loadingEmail = false;
+        RefreshReminderInfo();
+    }
+
+    /// <summary>"Last check-up: ..." line; empty until the first report.</summary>
+    [ObservableProperty]
+    private string _lastCheckupText = string.Empty;
+
+    /// <summary>"Next reminder: ..." line; empty while reminders are off.</summary>
+    [ObservableProperty]
+    private string _nextReminderText = string.Empty;
+
+    /// <summary>Re-reads the reminder settings; called when the page is shown and after each report action.</summary>
+    public void RefreshReminderInfo()
+    {
+        var reminder = _settingsStore.Current.CheckupReminder;
+        var last = _reminderScheduler.LastReportDate(reminder);
+        LastCheckupText = last is null ? string.Empty : "Last check-up: " + FormatDate(last.Value);
+        var next = _reminderScheduler.NextReminderDate(reminder);
+        NextReminderText = next is null ? string.Empty : "Next reminder: " + FormatDate(next.Value < DateOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime)
+            ? DateOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime)
+            : next.Value);
+    }
+
+    private static string FormatDate(DateOnly date) => date.ToString("ddd d MMM yyyy", CultureInfo.CurrentCulture);
+
+    /// <summary>Remembers that a check-up was made, so the reminder waits a full period.</summary>
+    private void RecordReportActivity()
+    {
+        var now = _timeProvider.GetUtcNow();
+        _settingsStore.Update(s => s.CheckupReminder.LastReportCreatedUtc = now);
+        RefreshReminderInfo();
     }
 
     public string Title => $"Send a check-up to {(string.IsNullOrWhiteSpace(HelperName) ? "your helper" : HelperName)}";
@@ -90,6 +124,7 @@ public sealed partial class CheckupCardViewModel : ObservableObject
             var report = await Task.Run(() => _builder.BuildAsync(CancellationToken.None)).ConfigureAwait(true);
             _report = report;
             PreviewText = CheckupTextRenderer.Render(report);
+            RecordReportActivity();
         }
         catch (Exception ex)
         {
@@ -108,6 +143,11 @@ public sealed partial class CheckupCardViewModel : ObservableObject
     private void CopyReport()
     {
         var copied = _clipboard.SetText(PreviewText);
+        if (copied)
+        {
+            RecordReportActivity();
+        }
+
         SetStatus(copied ? "Copied. You can paste it into a message." : "Couldn't copy. Please try again.", isError: !copied);
     }
 
@@ -134,6 +174,7 @@ public sealed partial class CheckupCardViewModel : ObservableObject
         try
         {
             await File.WriteAllTextAsync(path, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true)).ConfigureAwait(true);
+            RecordReportActivity();
             SetStatus($"Saved to {Path.GetFileName(path)}.", isError: false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -148,6 +189,7 @@ public sealed partial class CheckupCardViewModel : ObservableObject
     {
         var subject = $"Porchlight check-up for {_report?.ComputerName ?? Environment.MachineName}";
         _urlLauncher.Open(CheckupMailto.Build(HelperEmail, subject, PreviewText));
+        RecordReportActivity();
         SetStatus("Your email program should open with the report in a new message. Nothing is sent until you press Send.", isError: false);
     }
 

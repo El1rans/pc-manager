@@ -180,6 +180,10 @@
                              HorizontalAlignment="Left" Margin="0,0,0,10"
                              AutomationProperties.Name="Your helper's email"/>
 
+                    <TextBlock Style="{StaticResource Secondary}" Text="{Binding LastCheckupText}" Margin="0,0,0,2"
+                               Visibility="{Binding LastCheckupText, Converter={StaticResource StringToVis}}"/>
+                    <TextBlock Style="{StaticResource Secondary}" Text="{Binding NextReminderText}" Margin="0,0,0,10"
+                               Visibility="{Binding NextReminderText, Converter={StaticResource StringToVis}}"/>
                     <Button Content="Create check-up" Command="{Binding CreateCheckupCommand}"
                             HorizontalAlignment="Left"/>
                     <ProgressBar IsIndeterminate="True" Height="4" Margin="0,10,0,0"
