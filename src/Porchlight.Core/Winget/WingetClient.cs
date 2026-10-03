@@ -135,6 +135,13 @@ public sealed partial class WingetClient : IWingetClient
         return WingetInstalledIdsParser.Parse(result.StandardOutputLines, _logger);
     }
 
+    public async Task<IReadOnlyList<WingetInstalledPackage>> ListInstalledAsync(CancellationToken cancellationToken)
+    {
+        string[] arguments = ["list", "--source", "winget", "--accept-source-agreements", "--disable-interactivity"];
+        var result = await RunAsync(arguments, onLine: null, onProgress: null, cancellationToken).ConfigureAwait(false);
+        return WingetInstalledListParser.Parse(result.StandardOutputLines, _logger);
+    }
+
     public async Task<WingetResult> ExportAsync(
         string filePath, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken)
     {

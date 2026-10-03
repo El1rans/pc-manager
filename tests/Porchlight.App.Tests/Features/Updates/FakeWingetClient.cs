@@ -181,6 +181,9 @@ internal sealed class FakeWingetClient : IWingetClient
         return [.. SearchResults];
     }
 
+    public Task<IReadOnlyList<WingetInstalledPackage>> ListInstalledAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<WingetInstalledPackage>>([]);
+
     public async Task<IReadOnlySet<string>> ListInstalledIdsAsync(CancellationToken cancellationToken)
     {
         if (ListGate is not null)

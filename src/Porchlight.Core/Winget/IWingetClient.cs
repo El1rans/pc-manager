@@ -76,6 +76,12 @@ public interface IWingetClient
     Task<IReadOnlySet<string>> ListInstalledIdsAsync(CancellationToken cancellationToken);
 
     /// <summary>
+    /// Same command as <see cref="ListInstalledIdsAsync"/>, but returns each package's name, id and
+    /// installed version (used by "Remove apps" to map an installed program to its winget id).
+    /// </summary>
+    Task<IReadOnlyList<WingetInstalledPackage>> ListInstalledAsync(CancellationToken cancellationToken);
+
+    /// <summary>
     /// Runs <c>winget export -o &lt;filePath&gt; --accept-source-agreements --disable-interactivity</c>,
     /// saving the list of installed apps to a file (used by the Updates page's "Move to a new PC").
     /// </summary>

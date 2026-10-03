@@ -6,4 +6,8 @@ public interface IInstalledAppsReader
 {
     /// <summary>Reads the registry; call off the UI thread.</summary>
     IReadOnlyList<InstalledApp> GetInstalledApps();
+
+    /// <summary>Like <see cref="GetInstalledApps"/> but also keeps Porchlight and its managed
+    /// components, so "Remove apps" can label them. Defaults to the filtered list.</summary>
+    IReadOnlyList<InstalledApp> GetAllInstalledApps() => GetInstalledApps();
 }

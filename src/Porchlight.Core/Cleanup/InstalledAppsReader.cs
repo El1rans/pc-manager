@@ -20,7 +20,11 @@ public sealed partial class InstalledAppsReader : IInstalledAppsReader
         _logger = logger;
     }
 
-    public IReadOnlyList<InstalledApp> GetInstalledApps()
+    public IReadOnlyList<InstalledApp> GetInstalledApps() => Read(includeProtectedNames: false);
+
+    public IReadOnlyList<InstalledApp> GetAllInstalledApps() => Read(includeProtectedNames: true);
+
+    private List<InstalledApp> Read(bool includeProtectedNames)
     {
         var raw = new List<RawUninstallEntry>();
         foreach (var (hive, subKey, isPerMachine) in UninstallRoots)
@@ -28,7 +32,7 @@ public sealed partial class InstalledAppsReader : IInstalledAppsReader
             ReadHive(hive, subKey, isPerMachine, raw);
         }
 
-        return InstalledAppFilter.Apply(raw);
+        return [.. InstalledAppFilter.Apply(raw, includeProtectedNames)];
     }
 
     private void ReadHive(RegistryKey hive, string subKey, bool isPerMachine, List<RawUninstallEntry> into)

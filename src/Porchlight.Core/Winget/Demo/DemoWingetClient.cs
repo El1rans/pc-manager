@@ -113,6 +113,10 @@ internal sealed class DemoWingetClient : IWingetClient
         return Task.FromResult(installed);
     }
 
+    public Task<IReadOnlyList<WingetInstalledPackage>> ListInstalledAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<WingetInstalledPackage>>(
+            [new WingetInstalledPackage("Example Chat", "Demo.ExampleChat", "1.9")]);
+
     public Task<WingetResult> ExportAsync(
         string filePath, IProgress<string>? log, IProgress<string>? progress, CancellationToken cancellationToken)
     {
