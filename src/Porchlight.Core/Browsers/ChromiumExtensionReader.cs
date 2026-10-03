@@ -74,11 +74,15 @@ internal sealed partial class ChromiumExtensionReader
     /// <summary>True if <paramref name="location"/>'s user data folder exists.</summary>
     public static bool IsInstalled(ChromiumBrowserLocation location) => Directory.Exists(location.UserDataDirectory);
 
-    private Dictionary<string, string> ReadProfileNames(string userDataDir)
+    private Dictionary<string, string> ReadProfileNames(string userDataDir) =>
+        ReadProfileNames(userDataDir, _logger, _tally);
+
+    /// <summary>Profile folder -> display name, from <c>Local State</c>.</summary>
+    internal static Dictionary<string, string> ReadProfileNames(string userDataDir, ILogger logger, ScanTally tally)
     {
         var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         using var doc = BrowserJson.TryOpen(
-            Path.Combine(userDataDir, "Local State"), BrowserJson.PreferencesMaxBytes, _logger, _tally);
+            Path.Combine(userDataDir, "Local State"), BrowserJson.PreferencesMaxBytes, logger, tally);
         if (doc is null || doc.RootElement.Child("profile").Child("info_cache") is not { ValueKind: JsonValueKind.Object } cache)
         {
             return names;

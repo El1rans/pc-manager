@@ -11,6 +11,8 @@
         <StackPanel MaxWidth="760" HorizontalAlignment="Left" Margin="24">
             <TextBlock Text="Browser add-ons" Style="{StaticResource PageTitle}"/>
             <TextBlock Text="{Binding Summary}" Margin="0,4,0,4" TextWrapping="Wrap" FontSize="16"/>
+            <TextBlock Text="{Binding HijackSummary}" Margin="0,0,0,4" TextWrapping="Wrap" FontSize="16"
+                       Visibility="{Binding HijackSummary, Converter={StaticResource StringToVis}}"/>
             <TextBlock Text="Porchlight only looks. It never changes, turns off or removes anything in your browsers."
                        Style="{StaticResource Secondary}" TextWrapping="Wrap"/>
 
@@ -43,6 +45,50 @@
                                                VerticalAlignment="Center"/>
                                     <Button Grid.Column="1" Content="{Binding OpenButtonText}" Command="{Binding OpenCommand}"/>
                                 </Grid>
+
+                                <StackPanel Margin="0,0,0,12"
+                                            Visibility="{Binding HasHijackRows, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="Start-up and search settings" FontWeight="SemiBold" FontSize="16"
+                                               Margin="0,0,0,6"/>
+                                    <ItemsControl ItemsSource="{Binding HijackRows}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type b:HijackRowViewModel}">
+                                                <StackPanel Margin="0,0,0,10">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding StatusGlyph}" FontSize="16" Margin="0,0,6,0">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Status}" Value="{x:Static core:HijackStatus.Changed}">
+                                                                            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}"/>
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Status}" Value="{x:Static core:HijackStatus.ForcedByPolicy}">
+                                                                            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                        <TextBlock Text="{Binding StatusText}" FontWeight="SemiBold" Margin="0,0,10,0"
+                                                                   VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding SettingText}" FontWeight="SemiBold"
+                                                                   TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding Details}" Style="{StaticResource Secondary}"
+                                                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                                    <StackPanel Visibility="{Binding NeedsAttention, Converter={StaticResource BoolToVis}}">
+                                                        <TextBlock Text="{Binding Advice}" TextWrapping="Wrap" Margin="0,4,0,4"/>
+                                                        <Button Content="{Binding OpenButtonText}" Command="{Binding OpenCommand}"
+                                                                HorizontalAlignment="Left"
+                                                                AutomationProperties.Name="{Binding AutomationName}"/>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Text="Add-ons" FontWeight="SemiBold" FontSize="16" Margin="0,6,0,0"/>
+                                </StackPanel>
 
                                 <TextBlock Text="{Binding EmptyText}" Style="{StaticResource Secondary}"
                                            Visibility="{Binding ShowEmptyText, Converter={StaticResource BoolToVis}}"/>

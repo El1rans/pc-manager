@@ -10,11 +10,12 @@ public sealed class BrowserExtensionsViewModelTests : IDisposable
 {
     private readonly FakeScanner _scanner = new();
     private readonly FakeOpener _opener = new();
+    private readonly FakeHijackScanner _hijack = new();
     private readonly BrowserExtensionsViewModel _viewModel;
 
     public BrowserExtensionsViewModelTests()
     {
-        _viewModel = new BrowserExtensionsViewModel(_scanner, _opener, NullLogger<BrowserExtensionsViewModel>.Instance);
+        _viewModel = new BrowserExtensionsViewModel(_scanner, _hijack, _opener, NullLogger<BrowserExtensionsViewModel>.Instance);
     }
 
     public void Dispose() => _viewModel.Dispose();
@@ -230,6 +231,94 @@ public sealed class BrowserExtensionsViewModelTests : IDisposable
         Assert.Equal(expectedMessage, _viewModel.OpenMessage);
     }
 
+    [Fact]
+    public async Task SettingsFindings_AreShownUnderTheirBrowser_WithASummary()
+    {
+        _scanner.Result = Scan([BrowserKind.Chrome, BrowserKind.Edge]);
+        _hijack.Result = new BrowserHijackResult(
+            [
+                new(BrowserKind.Chrome, "Default", HijackSetting.HomePage, HijackStatus.Changed, "fast-search.example"),
+                new(BrowserKind.Chrome, null, HijackSetting.SearchEngine, HijackStatus.ForcedByPolicy, "evil.example"),
+                new(BrowserKind.Edge, "Default", HijackSetting.HomePage, HijackStatus.Ok, "msn.com"),
+            ],
+            [BrowserKind.Chrome, BrowserKind.Edge],
+            0);
+
+        await _viewModel.RefreshCommand.ExecuteAsync(null);
+
+        var chrome = _viewModel.Sections[0].HijackRows;
+        Assert.Equal(2, chrome.Count);
+        Assert.Equal("Changed", chrome[0].StatusText);
+        Assert.Equal("Forced by a setting on this PC", chrome[1].StatusText);
+        Assert.Equal("Home page", chrome[0].SettingText);
+        Assert.Contains("fast-search.example", chrome[0].Details, StringComparison.Ordinal);
+        Assert.True(chrome[0].HasAdvice);
+        Assert.Contains("reset it in the browser's settings", chrome[0].Advice, StringComparison.Ordinal);
+        Assert.False(_viewModel.Sections[1].HijackRows[0].HasAdvice);
+        Assert.Equal(
+            "2 browser settings look changed, and a setting on this PC is forcing one of them. See each browser below.",
+            _viewModel.HijackSummary);
+    }
+
+    [Fact]
+    public async Task SettingsAllFine_SaysSo()
+    {
+        _scanner.Result = Scan([BrowserKind.Edge]);
+        _hijack.Result = new BrowserHijackResult(
+            [new(BrowserKind.Edge, "Default", HijackSetting.SearchEngine, HijackStatus.Ok, "bing.com")],
+            [BrowserKind.Edge],
+            0);
+
+        await _viewModel.RefreshCommand.ExecuteAsync(null);
+
+        Assert.Equal("Your home page, start-up pages and search engine look normal.", _viewModel.HijackSummary);
+    }
+
+    [Fact]
+    public async Task SettingsCheckFailing_StillShowsTheAddOns()
+    {
+        _scanner.Result = Scan([BrowserKind.Edge], Extension(BrowserKind.Edge, "A"));
+        _hijack.Failure = new IOException("disk");
+
+        await _viewModel.RefreshCommand.ExecuteAsync(null);
+
+        Assert.False(_viewModel.HasError);
+        Assert.Single(_viewModel.Sections[0].Items);
+        Assert.Empty(_viewModel.Sections[0].HijackRows);
+        Assert.Equal(string.Empty, _viewModel.HijackSummary);
+    }
+
+    [Theory]
+    [InlineData(true, null)]
+    [InlineData(
+        false,
+        "We couldn't open Google Chrome automatically. Open it, then type chrome://settings/search in the address bar.")]
+    public async Task OpeningSettings_ReportsWhenItCouldNotBeOpened(bool opened, string? expectedMessage)
+    {
+        _opener.Succeeds = opened;
+        _scanner.Result = Scan([BrowserKind.Chrome]);
+        _hijack.Result = new BrowserHijackResult(
+            [new(BrowserKind.Chrome, "Default", HijackSetting.SearchEngine, HijackStatus.Changed, "x.example")],
+            [BrowserKind.Chrome],
+            0);
+        await _viewModel.RefreshCommand.ExecuteAsync(null);
+
+        _viewModel.Sections[0].HijackRows[0].OpenCommand.Execute(null);
+
+        Assert.Equal([(BrowserKind.Chrome, HijackSetting.SearchEngine)], _opener.OpenedSettings);
+        Assert.Equal(expectedMessage, _viewModel.OpenMessage);
+    }
+
+    private sealed class FakeHijackScanner : IBrowserHijackScanner
+    {
+        public BrowserHijackResult Result { get; set; } = new([], [], 0);
+
+        public Exception? Failure { get; set; }
+
+        public Task<BrowserHijackResult> ScanAsync(CancellationToken cancellationToken) =>
+            Failure is null ? Task.FromResult(Result) : throw Failure;
+    }
+
     private sealed class FakeScanner : IBrowserExtensionScanner
     {
         public BrowserScanResult Result { get; set; } = new([], [], 0);
@@ -261,9 +350,17 @@ public sealed class BrowserExtensionsViewModelTests : IDisposable
 
         public List<BrowserKind> Opened { get; } = [];
 
+        public List<(BrowserKind Browser, HijackSetting Setting)> OpenedSettings { get; } = [];
+
         public bool TryOpen(BrowserKind kind)
         {
             Opened.Add(kind);
+            return Succeeds;
+        }
+
+        public bool TryOpenSettings(BrowserKind kind, HijackSetting setting)
+        {
+            OpenedSettings.Add((kind, setting));
             return Succeeds;
         }
     }

@@ -41,14 +41,34 @@ public sealed class BrowserAddOnsOpener : IBrowserAddOnsOpener
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
-    public bool TryOpen(BrowserKind kind)
+    /// <summary>The browser's own settings page that holds <paramref name="setting"/> (start-up and
+    /// home page, or search engine).</summary>
+    public static string SettingsUrl(BrowserKind kind, HijackSetting setting)
+    {
+        var search = setting == HijackSetting.SearchEngine;
+        return kind switch
+        {
+            BrowserKind.Edge => search ? "edge://settings/search" : "edge://settings/startHomeNTP",
+            BrowserKind.Chrome => search ? "chrome://settings/search" : "chrome://settings/onStartup",
+            BrowserKind.Brave => search ? "brave://settings/search" : "brave://settings/getStarted",
+            BrowserKind.Firefox => search ? "about:preferences#search" : "about:preferences#home",
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        };
+    }
+
+    public bool TryOpen(BrowserKind kind) => TryStart(kind, AddOnsUrl(kind), "add-ons");
+
+    public bool TryOpenSettings(BrowserKind kind, HijackSetting setting) =>
+        TryStart(kind, SettingsUrl(kind, setting), "settings");
+
+    private bool TryStart(BrowserKind kind, string url, string pageName)
     {
         var exe = _locator.Find(kind);
         if (exe is null)
         {
             if (_logger.IsEnabled(LogLevel.Information))
             {
-                _logger.LogInformation("Could not find {Browser} to open its add-ons page.", kind);
+                _logger.LogInformation("Could not find {Browser} to open its {Page} page.", kind, pageName);
             }
 
             return false;
@@ -56,7 +76,7 @@ public sealed class BrowserAddOnsOpener : IBrowserAddOnsOpener
 
         try
         {
-            _processRunner.StartDetached(exe, [AddOnsUrl(kind)]);
+            _processRunner.StartDetached(exe, [url]);
             return true;
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
