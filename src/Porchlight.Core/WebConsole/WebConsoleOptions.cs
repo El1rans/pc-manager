@@ -48,6 +48,10 @@ public static class WebConsoleOptions
     /// <summary>A pending restart changes rarely; re-check at most this often.</summary>
     public static readonly TimeSpan RestartCheckInterval = TimeSpan.FromSeconds(60);
 
+    /// <summary>Startup items and the safety picture are read from Windows (registry, WMI, scheduled
+    /// tasks) and change rarely; requests within this long of the last read share its result.</summary>
+    public static readonly TimeSpan DetailsCacheTtl = TimeSpan.FromSeconds(30);
+
     /// <summary>How many process groups the console lists - the same as the dashboard.</summary>
     public const int TopProcessCount = 8;
 

@@ -10,7 +10,7 @@
         <StackPanel MaxWidth="720" HorizontalAlignment="Left" Margin="24,24,24,24">
             <TextBlock Text="Web console" Style="{StaticResource PageTitle}"/>
             <TextBlock Style="{StaticResource Secondary}" Margin="0,4,0,20" TextWrapping="Wrap"
-                       Text="Watch this PC's stats from a browser on your phone or another computer. The web console is read-only: it only shows information and cannot change anything on this PC."/>
+                       Text="Watch this PC's stats from a browser on your phone or another computer. It also shows security status, app updates waiting and what slows start-up. The web console is read-only: it only shows information and cannot change anything on this PC."/>
 
             <!-- On/off and status. -->
             <Border Style="{StaticResource Card}" Margin="0,0,0,16">

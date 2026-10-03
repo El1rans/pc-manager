@@ -187,3 +187,28 @@ h2 { font-size: 16px; margin: 0 0 12px; font-weight: 600; }
 footer.secondary { font-size: 12px; margin: 16px auto 0; padding: 0 0 24px; }
 
 [hidden] { display: none !important; }
+
+.nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.nav-button {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.nav-button:hover, .nav-button:focus-visible { border-color: var(--accent); }
+
+.headline { font-size: 18px; font-weight: 600; margin: 0 0 12px; overflow-wrap: anywhere; }
+.security-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.security-item { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; min-width: 0; }
+.security-title { font-size: 13px; color: var(--text-secondary); }
+.security-verdict { font-weight: 600; margin: 2px 0 6px; overflow-wrap: anywhere; }
+.security-lines { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.level { font-size: 12px; font-weight: 600; }
+.level.Good { color: var(--success); }
+.level.Attention { color: var(--critical); }
+.level.Unknown { color: var(--caution); }
+.impact-High { color: var(--critical); font-weight: 600; }
+.impact-Medium { color: var(--caution); font-weight: 600; }
