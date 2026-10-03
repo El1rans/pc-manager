@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Porchlight.App.Features.Cleanup;
 using Porchlight.App.Shell;
+using Porchlight.Core.Changes;
 using Porchlight.Core.RemoveApps;
 
 namespace Porchlight.App.Features.RemoveApps;
@@ -26,6 +27,7 @@ public sealed partial class RemoveAppsViewModel : PageViewModelBase, IBusyGuard
     private readonly IConfirmationDialog _confirm;
     private readonly TimeProvider _time;
     private readonly ILogger<RemoveAppsViewModel> _logger;
+    private readonly IChangeJournal? _changeJournal;
     private List<AppRowViewModel> _allRows = [];
 
     [ObservableProperty]
@@ -54,8 +56,10 @@ public sealed partial class RemoveAppsViewModel : PageViewModelBase, IBusyGuard
         IRemoveAppsService service,
         IConfirmationDialog confirm,
         TimeProvider time,
-        ILogger<RemoveAppsViewModel> logger)
+        ILogger<RemoveAppsViewModel> logger,
+        IChangeJournal? changeJournal = null)
     {
+        _changeJournal = changeJournal;
         _service = service;
         _confirm = confirm;
         _time = time;
@@ -148,6 +152,9 @@ public sealed partial class RemoveAppsViewModel : PageViewModelBase, IBusyGuard
         switch (outcome.Result)
         {
             case RemoveAppResult.Removed:
+                // Only a confirmed (winget) removal is recorded; when the app's own uninstaller was
+                // merely opened the outcome is unknown, so nothing is written.
+                _changeJournal?.Record(ChangeArea.Apps, $"Removed {row.Name}");
                 Message = $"{row.Name} was removed.";
                 await ReloadQuietlyAsync();
                 break;
