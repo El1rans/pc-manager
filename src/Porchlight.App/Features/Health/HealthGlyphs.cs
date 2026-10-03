@@ -5,12 +5,14 @@ internal static class HealthGlyphs
 {
     public const string Ok = "";
     public const string Warning = "";
+    public const string Problem = "";
     public const string Unknown = "";
 
     public static string For(HealthSeverity severity) => severity switch
     {
         HealthSeverity.Ok => Ok,
         HealthSeverity.Warning => Warning,
+        HealthSeverity.Problem => Problem,
         _ => Unknown,
     };
 }
