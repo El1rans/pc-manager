@@ -3,6 +3,7 @@ using System.Linq;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Porchlight.App.Features.Updates;
+using Porchlight.App.Tests.Features.Notifications;
 using Porchlight.App.Tests.TestDoubles;
 using Porchlight.Core.Changes;
 using Porchlight.Core.Settings;
@@ -851,7 +852,7 @@ public sealed class UpdatesViewModelTests : IDisposable
         Assert.Null(row.WaitingHint);
 
         timeProvider.Advance(UpdatesViewModel.WaitingHintThreshold);
-        await Task.Delay(20, TestContext.Current.CancellationToken); // let the Task.Delay continuation observe the advance
+        await BackgroundLoop.WaitUntilAsync(() => row.WaitingHint is not null); // let the Task.Delay continuation observe the advance
 
         Assert.Equal(
             silent ? UpdatesViewModel.WaitingHintTextSilent : UpdatesViewModel.WaitingHintTextInteractive,
@@ -1033,7 +1034,7 @@ public sealed class UpdatesViewModelTests : IDisposable
         var row = viewModel.Packages.Single();
 
         var updateTask = viewModel.UpdateSelectedCommand.ExecuteAsync(null);
-        await Task.Delay(20, TestContext.Current.CancellationToken); // let the reported line propagate
+        await BackgroundLoop.WaitUntilAsync(() => row.WaitingHint is not null); // the line is reported from a background thread
 
         Assert.Equal(UpdatesViewModel.AdminPromptWaitingHintText, row.WaitingHint);
 
