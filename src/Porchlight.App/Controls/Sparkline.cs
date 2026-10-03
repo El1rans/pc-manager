@@ -29,11 +29,23 @@ public sealed class Sparkline : FrameworkElement
         nameof(BaselineBrush), typeof(Brush), typeof(Sparkline),
         new FrameworkPropertyMetadata(new SolidColorBrush(Color.FromArgb(0x33, 0x80, 0x80, 0x80)), FrameworkPropertyMetadataOptions.AffectsRender));
 
+    /// <summary>Opacity of the area under the line, as a share of <see cref="Stroke"/>.</summary>
+    public static readonly DependencyProperty FillOpacityProperty = DependencyProperty.Register(
+        nameof(FillOpacity), typeof(double), typeof(Sparkline),
+        new FrameworkPropertyMetadata(0.18, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    /// <summary>Draws a dot on the newest sample.</summary>
+    public static readonly DependencyProperty ShowEndPointProperty = DependencyProperty.Register(
+        nameof(ShowEndPoint), typeof(bool), typeof(Sparkline),
+        new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+
     public IReadOnlyList<double>? Values { get => (IReadOnlyList<double>?)GetValue(ValuesProperty); set => SetValue(ValuesProperty, value); }
     public double Maximum { get => (double)GetValue(MaximumProperty); set => SetValue(MaximumProperty, value); }
     public int Capacity { get => (int)GetValue(CapacityProperty); set => SetValue(CapacityProperty, value); }
     public Brush Stroke { get => (Brush)GetValue(StrokeProperty); set => SetValue(StrokeProperty, value); }
     public Brush BaselineBrush { get => (Brush)GetValue(BaselineBrushProperty); set => SetValue(BaselineBrushProperty, value); }
+    public double FillOpacity { get => (double)GetValue(FillOpacityProperty); set => SetValue(FillOpacityProperty, value); }
+    public bool ShowEndPoint { get => (bool)GetValue(ShowEndPointProperty); set => SetValue(ShowEndPointProperty, value); }
 
     protected override void OnRender(DrawingContext drawingContext)
     {
@@ -89,8 +101,13 @@ public sealed class Sparkline : FrameworkElement
         area.Freeze();
 
         var fill = Stroke.CloneCurrentValue();
-        fill.Opacity = 0.18;
+        fill.Opacity = FillOpacity;
         drawingContext.DrawGeometry(fill, null, area);
         drawingContext.DrawGeometry(null, new Pen(Stroke, 2) { LineJoin = PenLineJoin.Round }, line);
+        if (ShowEndPoint)
+        {
+            var last = new Point(x0 + ((values.Count - 1) * step), Y(values[^1]));
+            drawingContext.DrawEllipse(Stroke, null, last, 3, 3);
+        }
     }
 }

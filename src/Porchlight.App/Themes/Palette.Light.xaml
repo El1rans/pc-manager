@@ -1,0 +1,82 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Vivid colour palette, light theme.
+       Not merged into App.xaml: ThemePalette copies these entries into Application.Resources whenever the
+       effective theme changes, so they win over the Fluent theme dictionary. Keep the key set identical to
+       Palette.Dark.xaml. See docs/specs/40-vivid-colour.md. -->
+
+  <!-- Porchlight amber replaces the Windows accent: every Fluent accent brush (buttons, toggles,
+       progress bars, focus) is derived from these. -->
+  <Color x:Key="SystemAccentColorLight3">#FFFFE7AE</Color>
+  <Color x:Key="SystemAccentColorLight2">#FFF5B942</Color>
+  <Color x:Key="SystemAccentColorLight1">#FFE8A317</Color>
+  <Color x:Key="SystemAccentColor">#FFD18B0B</Color>
+  <Color x:Key="SystemAccentColorDark1">#FFA86B00</Color>
+  <Color x:Key="SystemAccentColorDark2">#FF855300</Color>
+  <Color x:Key="SystemAccentColorDark3">#FF5E3B00</Color>
+
+  <!-- Per-category hues (Controls/Hue.cs): solid, a soft tint for icon chips and selected rows, a wash
+       that fades out across a card, and a stroke for that card's border. -->
+  <Color x:Key="HueAmberColor">#FFA86B00</Color>
+  <SolidColorBrush x:Key="HueAmberBrush" Color="#FFA86B00"/>
+  <SolidColorBrush x:Key="HueAmberTintBrush" Color="#1FA86B00"/>
+  <SolidColorBrush x:Key="HueAmberStrokeBrush" Color="#40A86B00"/>
+  <LinearGradientBrush x:Key="HueAmberWashBrush" StartPoint="0,0" EndPoint="0.8,1">
+    <GradientStop Color="#2AA86B00" Offset="0"/>
+    <GradientStop Color="#00A86B00" Offset="0.75"/>
+  </LinearGradientBrush>
+  <Color x:Key="HueBlueColor">#FF1F6FD1</Color>
+  <SolidColorBrush x:Key="HueBlueBrush" Color="#FF1F6FD1"/>
+  <SolidColorBrush x:Key="HueBlueTintBrush" Color="#1F1F6FD1"/>
+  <SolidColorBrush x:Key="HueBlueStrokeBrush" Color="#401F6FD1"/>
+  <LinearGradientBrush x:Key="HueBlueWashBrush" StartPoint="0,0" EndPoint="0.8,1">
+    <GradientStop Color="#2A1F6FD1" Offset="0"/>
+    <GradientStop Color="#001F6FD1" Offset="0.75"/>
+  </LinearGradientBrush>
+  <Color x:Key="HueVioletColor">#FF7A4AD8</Color>
+  <SolidColorBrush x:Key="HueVioletBrush" Color="#FF7A4AD8"/>
+  <SolidColorBrush x:Key="HueVioletTintBrush" Color="#1F7A4AD8"/>
+  <SolidColorBrush x:Key="HueVioletStrokeBrush" Color="#407A4AD8"/>
+  <LinearGradientBrush x:Key="HueVioletWashBrush" StartPoint="0,0" EndPoint="0.8,1">
+    <GradientStop Color="#2A7A4AD8" Offset="0"/>
+    <GradientStop Color="#007A4AD8" Offset="0.75"/>
+  </LinearGradientBrush>
+  <Color x:Key="HueGreenColor">#FF138A55</Color>
+  <SolidColorBrush x:Key="HueGreenBrush" Color="#FF138A55"/>
+  <SolidColorBrush x:Key="HueGreenTintBrush" Color="#1F138A55"/>
+  <SolidColorBrush x:Key="HueGreenStrokeBrush" Color="#40138A55"/>
+  <LinearGradientBrush x:Key="HueGreenWashBrush" StartPoint="0,0" EndPoint="0.8,1">
+    <GradientStop Color="#2A138A55" Offset="0"/>
+    <GradientStop Color="#00138A55" Offset="0.75"/>
+  </LinearGradientBrush>
+  <Color x:Key="HueTealColor">#FF0B8585</Color>
+  <SolidColorBrush x:Key="HueTealBrush" Color="#FF0B8585"/>
+  <SolidColorBrush x:Key="HueTealTintBrush" Color="#1F0B8585"/>
+  <SolidColorBrush x:Key="HueTealStrokeBrush" Color="#400B8585"/>
+  <LinearGradientBrush x:Key="HueTealWashBrush" StartPoint="0,0" EndPoint="0.8,1">
+    <GradientStop Color="#2A0B8585" Offset="0"/>
+    <GradientStop Color="#000B8585" Offset="0.75"/>
+  </LinearGradientBrush>
+  <Color x:Key="HueCoralColor">#FFC8502A</Color>
+  <SolidColorBrush x:Key="HueCoralBrush" Color="#FFC8502A"/>
+  <SolidColorBrush x:Key="HueCoralTintBrush" Color="#1FC8502A"/>
+  <SolidColorBrush x:Key="HueCoralStrokeBrush" Color="#40C8502A"/>
+  <LinearGradientBrush x:Key="HueCoralWashBrush" StartPoint="0,0" EndPoint="0.8,1">
+    <GradientStop Color="#2AC8502A" Offset="0"/>
+    <GradientStop Color="#00C8502A" Offset="0.75"/>
+  </LinearGradientBrush>
+  <Color x:Key="HueNeutralColor">#FF5D5D5D</Color>
+  <SolidColorBrush x:Key="HueNeutralBrush" Color="#FF5D5D5D"/>
+  <SolidColorBrush x:Key="HueNeutralTintBrush" Color="#1F5D5D5D"/>
+  <SolidColorBrush x:Key="HueNeutralStrokeBrush" Color="#405D5D5D"/>
+  <LinearGradientBrush x:Key="HueNeutralWashBrush" StartPoint="0,0" EndPoint="0.8,1">
+    <GradientStop Color="#2A5D5D5D" Offset="0"/>
+    <GradientStop Color="#005D5D5D" Offset="0.75"/>
+  </LinearGradientBrush>
+
+  <!-- The warm "porch light" glow behind the page header. -->
+  <RadialGradientBrush x:Key="BrandGlowBrush" Center="0.25,0.3" GradientOrigin="0.25,0.3" RadiusX="0.75" RadiusY="0.7">
+    <GradientStop Color="#40F5B942" Offset="0"/>
+    <GradientStop Color="#00F5B942" Offset="1"/>
+  </RadialGradientBrush>
+</ResourceDictionary>

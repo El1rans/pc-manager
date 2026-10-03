@@ -94,9 +94,9 @@
 
   <!-- Left navigation rail item. The stock Fluent ListBoxItem paints a heavy mid-grey block for the
        selected row in Light theme, so the rail draws its own: the same subtle fills Windows uses for
-       navigation (hover and selected, a touch stronger when both), plus an accent bar on the
-       selected row so the state is never colour alone. Every colour is a dynamic Fluent resource, so
-       it follows Light/Dark at runtime. -->
+       navigation on hover, a soft amber tint when selected (a touch stronger when both), plus an
+       accent bar on the selected row so the state is never colour alone. Every colour is a dynamic
+       resource (Fluent or Themes/Palette.*.xaml), so it follows Light/Dark at runtime. -->
   <Style x:Key="NavRailItem" TargetType="ListBoxItem">
     <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
     <Setter Property="Cursor" Value="Hand"/>
@@ -123,7 +123,7 @@
               <Setter TargetName="Root" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}"/>
             </Trigger>
             <Trigger Property="IsSelected" Value="True">
-              <Setter TargetName="Root" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}"/>
+              <Setter TargetName="Root" Property="Background" Value="{DynamicResource HueAmberTintBrush}"/>
               <Setter TargetName="Indicator" Property="Visibility" Value="Visible"/>
             </Trigger>
             <MultiTrigger>
@@ -131,7 +131,7 @@
                 <Condition Property="IsSelected" Value="True"/>
                 <Condition Property="IsMouseOver" Value="True"/>
               </MultiTrigger.Conditions>
-              <Setter TargetName="Root" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}"/>
+              <Setter TargetName="Root" Property="Background" Value="{DynamicResource HueAmberStrokeBrush}"/>
             </MultiTrigger>
             <Trigger Property="IsKeyboardFocused" Value="True">
               <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
@@ -140,5 +140,38 @@
         </ControlTemplate>
       </Setter.Value>
     </Setter>
+  </Style>
+
+  <!-- Vivid colour (docs/specs/40-vivid-colour.md). Set c:HueBrushes.Hue on the element (or an
+       ancestor) first; these styles only read the brushes it provides. -->
+
+  <!-- A rounded square holding a Segoe Fluent glyph in the hue, on its soft tint. -->
+  <Style x:Key="HueIconChip" TargetType="Border">
+    <Setter Property="Width" Value="26"/>
+    <Setter Property="Height" Value="26"/>
+    <Setter Property="CornerRadius" Value="6"/>
+    <Setter Property="Background" Value="{Binding (c:HueBrushes.Tint), RelativeSource={RelativeSource Self}}"/>
+    <Setter Property="TextElement.Foreground" Value="{Binding (c:HueBrushes.Brush), RelativeSource={RelativeSource Self}}"/>
+  </Style>
+
+  <Style x:Key="HueIconChipGlyph" TargetType="TextBlock" BasedOn="{StaticResource Icon}">
+    <Setter Property="FontSize" Value="14"/>
+    <Setter Property="HorizontalAlignment" Value="Center"/>
+  </Style>
+
+  <!-- A Card in its hue: tinted border. Put a HueWash as the first child of the card's root Grid to
+       add the gradient that fades out towards the bottom right. -->
+  <Style x:Key="HueCard" TargetType="Border" BasedOn="{StaticResource Card}">
+    <Setter Property="c:HueBrushes.PaintBorder" Value="True"/>
+  </Style>
+
+  <!-- Fills its HueCard edge to edge: the negative margin undoes the card's 16px padding (less its
+       1px border). Decoration only, so it never takes clicks or focus. Give it the card's
+       c:HueBrushes.Hue too: the wash is painted from that. -->
+  <Style x:Key="HueWash" TargetType="Border">
+    <Setter Property="Margin" Value="-15"/>
+    <Setter Property="CornerRadius" Value="7"/>
+    <Setter Property="IsHitTestVisible" Value="False"/>
+    <Setter Property="c:HueBrushes.PaintWash" Value="True"/>
   </Style>
 </ResourceDictionary>

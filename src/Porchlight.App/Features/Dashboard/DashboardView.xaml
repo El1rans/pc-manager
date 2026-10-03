@@ -11,19 +11,33 @@
 
     <UserControl.Resources>
 
+        <!-- Each tile in its own colour (docs/specs/40-vivid-colour.md): icon chip, value, sparkline,
+             tinted border and a wash fading across the card. The title still names the metric, so
+             colour is never the only cue. -->
         <DataTemplate DataType="{x:Type dashboard:MetricTileViewModel}">
-            <Border Style="{StaticResource Card}" Margin="0,0,12,12"
+            <Border Style="{StaticResource HueCard}" Margin="0,0,12,12"
+                    controls:HueBrushes.Hue="{Binding Hue}"
                     ToolTip="{Binding TooltipText}"
                     automation:AutomationProperties.HelpText="{Binding TooltipText}">
-                <StackPanel>
-                    <TextBlock Text="{Binding Title}" Style="{StaticResource CardTitle}" Margin="0,0,0,4"/>
-                    <TextBlock Text="{Binding ValueText}" FontSize="26" FontWeight="SemiBold"/>
-                    <TextBlock Text="{Binding DetailText}" Style="{StaticResource Secondary}"
-                               FontSize="12" Height="16" TextTrimming="CharacterEllipsis"/>
-                    <controls:Sparkline Values="{Binding Values}" Maximum="{Binding Maximum}"
-                                         Height="40" Margin="0,10,0,0"
-                                         Stroke="{DynamicResource AccentFillColorDefaultBrush}"/>
-                </StackPanel>
+                <Grid>
+                    <Border Style="{StaticResource HueWash}" controls:HueBrushes.Hue="{Binding Hue}"/>
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <Border Style="{StaticResource HueIconChip}" Width="24" Height="24" Margin="0,0,8,0">
+                                <TextBlock Text="{Binding Glyph}" Style="{StaticResource HueIconChipGlyph}"/>
+                            </Border>
+                            <TextBlock Text="{Binding Title}" Style="{StaticResource CardTitle}" Margin="0"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding ValueText}" FontSize="26" FontWeight="SemiBold"
+                                   Foreground="{Binding (controls:HueBrushes.Brush), RelativeSource={RelativeSource Self}}"/>
+                        <TextBlock Text="{Binding DetailText}" Style="{StaticResource Secondary}"
+                                   FontSize="12" Height="16" TextTrimming="CharacterEllipsis"/>
+                        <controls:Sparkline Values="{Binding Values}" Maximum="{Binding Maximum}"
+                                             Height="40" Margin="0,10,0,0" FillOpacity="0.24" ShowEndPoint="True"
+                                             Stroke="{Binding (controls:HueBrushes.Brush), RelativeSource={RelativeSource Self}}"/>
+                    </StackPanel>
+                </Grid>
             </Border>
         </DataTemplate>
 
@@ -49,12 +63,27 @@
                                Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
                 </StackPanel>
 
-                <ProgressBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Height="6" Margin="0,4,0,4"
-                             Minimum="0" Maximum="100" Value="{Binding UsedPercent, Mode=OneWay}"/>
+                <!-- Green / amber / red by how full the drive is; "Low space" above says it in words. -->
+                <ProgressBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Height="8" Margin="0,4,0,4"
+                             Minimum="0" Maximum="100" Value="{Binding UsedPercent, Mode=OneWay}">
+                    <ProgressBar.Style>
+                        <Style TargetType="ProgressBar" BasedOn="{StaticResource {x:Type ProgressBar}}">
+                            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding FillLevel}" Value="Filling">
+                                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding FillLevel}" Value="Low">
+                                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ProgressBar.Style>
+                </ProgressBar>
                 <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Text="{Binding DetailText}"
                            Style="{StaticResource Secondary}" FontSize="12" Margin="0,6,0,0"/>
                 <Button Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Content="Free up space"
-                        HorizontalAlignment="Left" Margin="0,8,0,0"
+                        Style="{DynamicResource AccentButtonStyle}" HorizontalAlignment="Left" Margin="0,8,0,0"
                         Visibility="{Binding IsLow, Converter={StaticResource BoolToVis}}"
                         Command="{Binding DataContext.FreeUpSpaceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
             </Grid>
@@ -63,13 +92,29 @@
         <DataTemplate DataType="{x:Type dashboard:ProcessRowViewModel}">
             <Grid Margin="0,0,0,8">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="70"/>
-                    <ColumnDefinition Width="90"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="80"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{Binding NameText}" TextTrimming="CharacterEllipsis"/>
-                <TextBlock Grid.Column="1" Text="{Binding CpuText}" HorizontalAlignment="Right"/>
-                <TextBlock Grid.Column="2" Text="{Binding MemoryText}" HorizontalAlignment="Right"/>
+                <!-- Letter tile in a colour picked from the app's name, so each app keeps its colour. -->
+                <Border Grid.Column="0" Width="20" Height="20" CornerRadius="4" Margin="0,0,10,0"
+                        controls:HueBrushes.Hue="{Binding Hue}"
+                        Background="{Binding (controls:HueBrushes.Brush), RelativeSource={RelativeSource Self}}">
+                    <TextBlock Text="{Binding Initial}" FontSize="11" FontWeight="Bold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"/>
+                </Border>
+                <TextBlock Grid.Column="1" Text="{Binding NameText}" TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="2" Text="{Binding CpuText}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                <!-- Memory relative to the hungriest app in the list. -->
+                <ProgressBar Grid.Column="3" Width="32" Height="4" Margin="12,0,0,0" VerticalAlignment="Center"
+                             Minimum="0" Maximum="1" Value="{Binding MemoryShare, Mode=OneWay}"
+                             Foreground="{DynamicResource HueVioletBrush}" Focusable="False"
+                             automation:AutomationProperties.Name="Memory compared with the other apps"/>
+                <TextBlock Grid.Column="4" Text="{Binding MemoryText}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
             </Grid>
         </DataTemplate>
 

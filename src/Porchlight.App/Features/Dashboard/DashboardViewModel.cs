@@ -4,6 +4,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using Porchlight.App.Controls;
 using Porchlight.App.Features.Cleanup;
 using Porchlight.App.Shell;
 using Porchlight.Core.Monitoring;
@@ -94,17 +95,17 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
     [ObservableProperty]
     private bool _isRestartPending;
 
-    public MetricTileViewModel CpuTile { get; } = new("CPU", 100, v => $"{v:0}%");
+    public MetricTileViewModel CpuTile { get; } = new("CPU", 100, v => $"{v:0}%", Hue.Blue, "");
 
-    public MetricTileViewModel MemoryTile { get; } = new("Memory", 100, v => $"{v:0}%");
+    public MetricTileViewModel MemoryTile { get; } = new("Memory", 100, v => $"{v:0}%", Hue.Violet, "");
 
-    public MetricTileViewModel GpuTile { get; } = new("GPU", 100, v => $"{v:0}%");
+    public MetricTileViewModel GpuTile { get; } = new("GPU", 100, v => $"{v:0}%", Hue.Green, "");
 
-    public MetricTileViewModel DiskTile { get; } = new("Disk", 100, v => $"{v:0}%");
+    public MetricTileViewModel DiskTile { get; } = new("Disk", 100, v => $"{v:0}%", Hue.Teal, "");
 
-    public MetricTileViewModel DownloadTile { get; } = new("Download", double.NaN, ByteFormatter.FormatBitRate);
+    public MetricTileViewModel DownloadTile { get; } = new("Download", double.NaN, ByteFormatter.FormatBitRate, Hue.Amber, "");
 
-    public MetricTileViewModel UploadTile { get; } = new("Upload", double.NaN, ByteFormatter.FormatBitRate);
+    public MetricTileViewModel UploadTile { get; } = new("Upload", double.NaN, ByteFormatter.FormatBitRate, Hue.Coral, "");
 
     /// <summary>Bound to a 3-column grid in <c>DashboardView</c>.</summary>
     public IReadOnlyList<MetricTileViewModel> MetricTiles { get; }
@@ -358,8 +359,11 @@ public sealed partial class DashboardViewModel : PageViewModelBase, IDisposable
     {
         var top = _processMonitor.SampleTop(TopProcessCount);
 
-        await RunOnUiThreadAsync(() => ApplyInPlace(TopProcesses, top, (row, snapshot) => row.Apply(snapshot), snapshot => new ProcessRowViewModel(snapshot)),
-            cancellationToken).ConfigureAwait(false);
+        await RunOnUiThreadAsync(() =>
+        {
+            ApplyInPlace(TopProcesses, top, (row, snapshot) => row.Apply(snapshot), snapshot => new ProcessRowViewModel(snapshot));
+            ProcessRowViewModel.UpdateMemoryShares(TopProcesses);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task SampleDrivesAsync(CancellationToken cancellationToken)
