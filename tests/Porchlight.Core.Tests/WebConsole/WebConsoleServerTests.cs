@@ -15,7 +15,7 @@ public sealed class WebConsoleServerTests : IDisposable
     private const string Key = "0123456789abcdef0123456789abcdef";
 
     private readonly WebConsoleServer _server =
-        new(new WebConsoleRouter(new FakeStatsSource()), NullLogger<WebConsoleServer>.Instance);
+        new(new WebConsoleRouter(new FakeStatsSource(), new FakeDetailsSource()), NullLogger<WebConsoleServer>.Instance);
 
     private readonly HttpClient _client = new(new SocketsHttpHandler { UseProxy = false });
 
@@ -81,7 +81,7 @@ public sealed class WebConsoleServerTests : IDisposable
     public void A_port_already_in_use_fails_without_throwing()
     {
         _server.Start(0, Key);
-        using var second = new WebConsoleServer(new WebConsoleRouter(new FakeStatsSource()), NullLogger<WebConsoleServer>.Instance);
+        using var second = new WebConsoleServer(new WebConsoleRouter(new FakeStatsSource(), new FakeDetailsSource()), NullLogger<WebConsoleServer>.Instance);
 
         second.Start(_server.Port, Key);
 

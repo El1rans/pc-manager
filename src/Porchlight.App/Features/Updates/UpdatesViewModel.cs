@@ -463,7 +463,11 @@ public sealed partial class UpdatesViewModel : PageViewModelBase, IDisposable, I
 
         UpdateSummary();
         UpdateBadge();
-        _pendingUpdatesTracker.Report(Packages.Count(p => !p.IsHiddenByDefault), _timeProvider.GetLocalNow());
+        _pendingUpdatesTracker.Report(
+            Packages.Where(p => !p.IsHiddenByDefault)
+                .Select(p => new PendingUpdate(p.Name, p.InstalledVersion, p.AvailableVersion))
+                .ToList(),
+            _timeProvider.GetLocalNow());
     }
 
     private void UpdateSummary()

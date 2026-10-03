@@ -8,7 +8,8 @@ namespace Porchlight.Core.WebConsole;
 
 /// <summary>Registers the Core-side web console services. Needs <c>AddMonitoring()</c> and
 /// <c>AddHardwareCore()</c> (for the shared system info, drive, restart and hardware sources) and an
-/// <see cref="ISettingsStore"/>.</summary>
+/// <see cref="ISettingsStore"/>. The extra views also need <c>AddWingetClient()</c>, <c>AddStartupCore()</c>
+/// and <c>AddSafetyCore()</c>.</summary>
 public static class WebConsoleServiceCollectionExtensions
 {
     public static IServiceCollection AddWebConsoleCore(this IServiceCollection services)
@@ -31,6 +32,9 @@ public static class WebConsoleServiceCollectionExtensions
             sp.GetRequiredService<IHardwareService>(),
             sp.GetRequiredService<ISettingsStore>(),
             sp.GetRequiredService<ILogger<WebConsoleStatsCollector>>()));
+        // Reuses the Updates (IPendingUpdatesTracker), Startup and Safety features' services, which
+        // their own Add*Core/AddWingetClient registrations provide.
+        services.AddSingleton<IWebConsoleDetailsSource, WebConsoleDetailsCollector>();
         services.AddSingleton<WebConsoleRouter>();
         services.AddSingleton<IWebConsoleServer, WebConsoleServer>();
         services.AddSingleton<ILocalAddressProvider, LocalAddressProvider>();

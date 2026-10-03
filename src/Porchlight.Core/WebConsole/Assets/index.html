@@ -31,12 +31,21 @@
     </section>
 
     <div id="content" hidden>
+      <nav class="nav" aria-label="Sections">
+        <button type="button" class="nav-button" data-target="overview">Overview</button>
+        <button type="button" class="nav-button" data-target="security-card">Security</button>
+        <button type="button" class="nav-button" data-target="updates-card">Updates</button>
+        <button type="button" class="nav-button" data-target="startup-card">Startup</button>
+      </nav>
+
       <section id="restart" class="notice" hidden>
         <span class="notice-icon" aria-hidden="true">!</span>
         <span>Windows is waiting for a restart to finish installing updates.</span>
       </section>
 
-      <section class="tiles" id="metric-tiles" aria-label="Live usage"></section>
+      <section id="overview" aria-label="Live usage">
+        <div class="tiles" id="metric-tiles"></div>
+      </section>
 
       <section class="card" id="hardware-card" hidden>
         <h2>Hardware at a glance</h2>
@@ -55,6 +64,32 @@
         <section class="card">
           <h2>Drives</h2>
           <div id="drives"></div>
+        </section>
+      </div>
+
+      <section class="card" id="security-card">
+        <h2>Security</h2>
+        <p id="security-headline" class="headline">Loading...</p>
+        <div id="security-cards" class="security-grid"></div>
+      </section>
+
+      <div class="columns">
+        <section class="card" id="updates-card">
+          <h2>Updates waiting</h2>
+          <p id="updates-summary" class="secondary">Loading...</p>
+          <table class="table" id="updates-table" hidden>
+            <thead><tr><th scope="col">App</th><th scope="col">Now</th><th scope="col">Available</th></tr></thead>
+            <tbody id="updates"></tbody>
+          </table>
+        </section>
+
+        <section class="card" id="startup-card">
+          <h2>Startup impact</h2>
+          <p id="startup-summary" class="secondary">Loading...</p>
+          <table class="table" id="startup-table" hidden>
+            <thead><tr><th scope="col">Program</th><th scope="col">Starts</th><th scope="col">Slows start-up</th></tr></thead>
+            <tbody id="startup"></tbody>
+          </table>
         </section>
       </div>
 
