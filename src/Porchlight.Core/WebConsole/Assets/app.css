@@ -7,7 +7,7 @@
   --text-secondary: #5d5d5d;
   --accent: #a86b00;
   --on-accent: #ffffff;
-  /* Category hues, the same as the app's Themes/Palette.Light.xaml (docs/specs/39-vivid-colour.md). */
+  /* Category hues, the same as the app's Themes/Palette.Light.xaml (docs/specs/40-vivid-colour.md). */
   --hue-amber: #a86b00;
   --hue-blue: #1f6fd1;
   --hue-violet: #7a4ad8;
@@ -289,10 +289,32 @@ footer.secondary { font-size: 12px; margin: 16px auto 0; padding: 0 0 24px; }
   cursor: pointer;
 }
 .nav-button:hover, .nav-button:focus-visible { border-color: var(--accent); }
+/* Each section button in its own colour, with a dot so it reads as a set (docs/specs/40-vivid-colour.md). */
+.nav-button[data-hue] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--hue) var(--tint), var(--card));
+  border-color: color-mix(in srgb, var(--hue) var(--stroke), var(--border));
+}
+.nav-button[data-hue]::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--hue); }
+.nav-button[data-hue]:hover, .nav-button[data-hue]:focus-visible { border-color: var(--hue); }
+.nav-button[data-hue="amber"] { --hue: var(--hue-amber); }
+.nav-button[data-hue="blue"] { --hue: var(--hue-blue); }
+.nav-button[data-hue="green"] { --hue: var(--hue-green); }
+.nav-button[data-hue="coral"] { --hue: var(--hue-coral); }
 
 .headline { font-size: 18px; font-weight: 600; margin: 0 0 12px; overflow-wrap: anywhere; }
 .security-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 .security-item { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; min-width: 0; }
+/* Tinted by verdict; the level label below still says it in words. */
+.security-item.Good { --hue: var(--success); }
+.security-item.Attention { --hue: var(--critical); }
+.security-item.Unknown { --hue: var(--caution); }
+.security-item.Good, .security-item.Attention, .security-item.Unknown {
+  background: linear-gradient(150deg, color-mix(in srgb, var(--hue) var(--wash), transparent), transparent 70%);
+  border-color: color-mix(in srgb, var(--hue) var(--stroke), var(--border));
+}
 .security-title { font-size: 13px; color: var(--text-secondary); }
 .security-verdict { font-weight: 600; margin: 2px 0 6px; overflow-wrap: anywhere; }
 .security-lines { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; }

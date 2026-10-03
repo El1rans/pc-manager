@@ -104,7 +104,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <!-- Each category's own colour (docs/specs/39-vivid-colour.md). -->
+                                <!-- Each category's own colour (docs/specs/40-vivid-colour.md). -->
                                 <Border Grid.Column="0" Style="{StaticResource HueIconChip}"
                                         c:HueBrushes.Hue="{Binding Hue}" Margin="0,-4,10,-4">
                                     <TextBlock Text="{Binding Glyph}" Style="{StaticResource HueIconChipGlyph}"/>

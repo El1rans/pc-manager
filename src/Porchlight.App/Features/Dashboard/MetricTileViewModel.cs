@@ -30,7 +30,7 @@ public sealed partial class MetricTileViewModel : ObservableObject
 
     public string Title { get; }
 
-    /// <summary>The tile's colour: icon chip, value, sparkline and card wash (docs/specs/39-vivid-colour.md).</summary>
+    /// <summary>The tile's colour: icon chip, value, sparkline and card wash (docs/specs/40-vivid-colour.md).</summary>
     public Hue Hue { get; }
 
     /// <summary>Segoe Fluent Icons glyph shown in the tile's icon chip.</summary>

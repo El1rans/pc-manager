@@ -142,7 +142,7 @@
     </Setter>
   </Style>
 
-  <!-- Vivid colour (docs/specs/39-vivid-colour.md). Set c:HueBrushes.Hue on the element (or an
+  <!-- Vivid colour (docs/specs/40-vivid-colour.md). Set c:HueBrushes.Hue on the element (or an
        ancestor) first; these styles only read the brushes it provides. -->
 
   <!-- A rounded square holding a Segoe Fluent glyph in the hue, on its soft tint. -->

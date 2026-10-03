@@ -3,7 +3,7 @@
   <!-- Vivid colour palette, light theme.
        Not merged into App.xaml: ThemePalette copies these entries into Application.Resources whenever the
        effective theme changes, so they win over the Fluent theme dictionary. Keep the key set identical to
-       Palette.Dark.xaml. See docs/specs/39-vivid-colour.md. -->
+       Palette.Dark.xaml. See docs/specs/40-vivid-colour.md. -->
 
   <!-- Porchlight amber replaces the Windows accent: every Fluent accent brush (buttons, toggles,
        progress bars, focus) is derived from these. -->

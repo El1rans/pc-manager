@@ -15,7 +15,7 @@ namespace Porchlight.App.Shell;
 /// Fluent brush painted in a Windows accent shade is re-created in the matching amber shade.
 /// "System" follows Windows' app-mode setting live. In high
 /// contrast the palette is removed entirely, so Windows' high-contrast colours are left alone.
-/// See docs/specs/39-vivid-colour.md.
+/// See docs/specs/40-vivid-colour.md.
 /// </summary>
 public static class ThemePalette
 {

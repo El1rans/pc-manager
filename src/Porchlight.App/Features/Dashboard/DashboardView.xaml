@@ -11,7 +11,7 @@
 
     <UserControl.Resources>
 
-        <!-- Each tile in its own colour (docs/specs/39-vivid-colour.md): icon chip, value, sparkline,
+        <!-- Each tile in its own colour (docs/specs/40-vivid-colour.md): icon chip, value, sparkline,
              tinted border and a wash fading across the card. The title still names the metric, so
              colour is never the only cue. -->
         <DataTemplate DataType="{x:Type dashboard:MetricTileViewModel}">

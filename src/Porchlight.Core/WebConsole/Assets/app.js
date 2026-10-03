@@ -48,7 +48,7 @@
 
   var SVG = "http://www.w3.org/2000/svg";
 
-  // Each metric's colour and icon (docs/specs/39-vivid-colour.md), matching the app's Dashboard.
+  // Each metric's colour and icon (docs/specs/40-vivid-colour.md), matching the app's Dashboard.
   var metricLook = {
     cpu: { hue: "blue", icon: "M4 4h8v8H4z M6 1.5V4 M10 1.5V4 M6 12v2.5 M10 12v2.5 M1.5 6H4 M1.5 10H4 M12 6h2.5 M12 10h2.5" },
     memory: { hue: "violet", icon: "M1.5 4.5h13v7h-13z M4.5 7v2 M7 7v2 M9.5 7v2 M12 7v2" },
@@ -169,6 +169,18 @@
     });
   }
 
+  // A table cell with the app's coloured letter tile and its label.
+  function appCell(name, label) {
+    var cell = make("td");
+    var app = cell.appendChild(make("span", "app"));
+    var initial = /[\p{L}\p{N}]/u.exec(name || "");
+    var letter = app.appendChild(make("span", "app-letter", initial ? initial[0].toUpperCase() : "?"));
+    letter.setAttribute("data-hue", hueFor(name || ""));
+    letter.setAttribute("aria-hidden", "true");
+    app.appendChild(make("span", null, label));
+    return cell;
+  }
+
   function renderProcesses(list) {
     var body = el("processes");
     body.replaceChildren();
@@ -176,12 +188,7 @@
     (list || []).forEach(function (p) { if (p.workingSetBytes > largest) { largest = p.workingSetBytes; } });
     (list || []).forEach(function (p) {
       var row = make("tr");
-      var app = row.appendChild(make("td")).appendChild(make("span", "app"));
-      var initial = /[\p{L}\p{N}]/u.exec(p.name);
-      var letter = app.appendChild(make("span", "app-letter", initial ? initial[0].toUpperCase() : "?"));
-      letter.setAttribute("data-hue", hueFor(p.name));
-      letter.setAttribute("aria-hidden", "true");
-      app.appendChild(make("span", null, p.instanceCount > 1 ? p.name + " (" + p.instanceCount + ")" : p.name));
+      row.appendChild(appCell(p.name, p.instanceCount > 1 ? p.name + " (" + p.instanceCount + ")" : p.name));
       row.appendChild(make("td", "num", p.cpuPercent.toFixed(1) + "%"));
       var memory = row.appendChild(make("td", "num"));
       var bar = memory.appendChild(make("span", "mem-bar"));
@@ -255,7 +262,7 @@
     table.hidden = !u.items || u.items.length === 0;
     (u.items || []).forEach(function (item) {
       var row = make("tr");
-      row.appendChild(make("td", null, item.name));
+      row.appendChild(appCell(item.name, item.name));
       row.appendChild(make("td", null, item.installedVersion));
       row.appendChild(make("td", null, item.availableVersion));
       body.appendChild(row);
@@ -273,7 +280,7 @@
     table.hidden = items.length === 0;
     items.forEach(function (item) {
       var row = make("tr");
-      row.appendChild(make("td", null, item.publisher ? item.name + " (" + item.publisher + ")" : item.name));
+      row.appendChild(appCell(item.name, item.publisher ? item.name + " (" + item.publisher + ")" : item.name));
       row.appendChild(make("td", null, item.isEnabled ? "\u2713 On" : "Off"));
       row.appendChild(make("td", impactLabel[item.impact] ? "impact-" + item.impact : null,
         impactLabel[item.impact] || impactLabel.NotMeasured));
@@ -282,11 +289,11 @@
   }
 
   function securityItem(title, card) {
-    var root = make("div", "security-item");
+    var level = levelLabel[card.level] ? card.level : "Unknown";
+    var root = make("div", "security-item " + level);
     root.appendChild(make("div", "security-title", title));
     root.appendChild(make("div", "security-verdict", card.verdict));
-    root.appendChild(make("div", "level " + (levelLabel[card.level] ? card.level : "Unknown"),
-      levelLabel[card.level] || levelLabel.Unknown));
+    root.appendChild(make("div", "level " + level, levelLabel[level]));
     if (card.lines && card.lines.length) {
       var list = root.appendChild(make("ul", "security-lines"));
       card.lines.forEach(function (line) { list.appendChild(make("li", null, line)); });

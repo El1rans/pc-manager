@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **More colour.** Porchlight now uses its own lamp amber instead of the Windows accent colour, for
+  buttons, check boxes, switches, progress bars, badges and the selected page. Each section of the
+  left menu has its own colour, and a warm glow sits behind every page title. On the Dashboard each
+  tile has its own colour (icon, value, chart and a soft tint), drive bars turn green, amber or red
+  as a drive fills up, and the busiest apps get coloured letter tiles and a small memory bar. The web
+  console gets the same look. Light and dark themes both have their own colours; in a high-contrast
+  theme Porchlight keeps Windows' colours (`docs/specs/40-vivid-colour.md`).
+
 ## [0.3.0] - 2026-10-03
 
 ### Added
