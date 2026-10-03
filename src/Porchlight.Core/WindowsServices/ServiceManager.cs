@@ -82,13 +82,7 @@ public sealed partial class ServiceManager : IServiceManager
 
     public ServiceChangeResult SetStartType(string name, ServiceStartType startType)
     {
-        var startValue = startType switch
-        {
-            ServiceStartType.Automatic or ServiceStartType.AutomaticDelayed => ServiceAutoStart,
-            ServiceStartType.Manual => ServiceDemandStart,
-            ServiceStartType.Disabled => ServiceDisabled,
-            _ => throw new ArgumentOutOfRangeException(nameof(startType), startType, "Unknown start type."),
-        };
+        var (startValue, delayed) = ToNative(startType);
 
         using var manager = ServiceNative.OpenSCManager(null, null, ScManagerConnect);
         if (manager.IsInvalid)
@@ -111,7 +105,8 @@ public sealed partial class ServiceManager : IServiceManager
 
         if (startValue == ServiceAutoStart)
         {
-            var info = new ServiceNative.DelayedAutoStartInfo { DelayedAutostart = startType == ServiceStartType.AutomaticDelayed };
+            // Always written for automatic, so choosing plain "Starts with Windows" clears the delayed flag.
+            var info = new ServiceNative.DelayedAutoStartInfo { DelayedAutostart = delayed };
             if (!ServiceNative.ChangeServiceConfig2(service, ServiceConfigDelayedAutoStartInfo, ref info))
             {
                 return Map(new Win32Exception(Marshal.GetLastWin32Error()), "change", name);
@@ -120,6 +115,18 @@ public sealed partial class ServiceManager : IServiceManager
 
         return ServiceChangeResult.Changed;
     }
+
+    /// <summary>The SCM start value for <paramref name="startType"/> and whether the delayed
+    /// auto-start flag must be set (only ever true for <see cref="ServiceStartType.AutomaticDelayed"/>).</summary>
+    internal static (uint StartValue, bool Delayed) ToNative(ServiceStartType startType) =>
+        startType switch
+        {
+            ServiceStartType.Automatic => (ServiceAutoStart, false),
+            ServiceStartType.AutomaticDelayed => (ServiceAutoStart, true),
+            ServiceStartType.Manual => (ServiceDemandStart, false),
+            ServiceStartType.Disabled => (ServiceDisabled, false),
+            _ => throw new ArgumentOutOfRangeException(nameof(startType), startType, "Unknown start type."),
+        };
 
     private ServiceChangeResult Run(string name, string verb, Func<ServiceController, ServiceChangeResult> action)
     {

@@ -11,6 +11,7 @@ public static class StartupServiceCollectionExtensions
         services.AddSingleton<Elevation.IElevatedCommandRunner, Elevation.ElevatedCommandRunner>();
         services.AddSingleton<ILoginLaunchEnvironment, LoginLaunchEnvironment>();
         services.AddSingleton<ILoginLaunchService, LoginLaunchService>();
+        services.AddSingleton<Changes.IChangeUndoer, StartupChangeUndoer>();
 
 #if DEBUG
         // DEBUG-only fake list for documentation screenshots; see Monitoring.Demo.DemoDataMode.

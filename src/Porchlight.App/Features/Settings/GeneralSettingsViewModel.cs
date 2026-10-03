@@ -18,6 +18,9 @@ public sealed partial class GeneralSettingsViewModel : PageViewModelBase
     private bool _keepRunningInTray;
 
     [ObservableProperty]
+    private bool _createRestorePointBeforeBigChanges;
+
+    [ObservableProperty]
     private ThemeOption _selectedTheme;
 
     /// <summary>True while the sign-in checkbox's change is being applied, and until its real state
@@ -47,6 +50,7 @@ public sealed partial class GeneralSettingsViewModel : PageViewModelBase
 
         // Assigned to the fields, not the properties: loading must not write settings back.
         _keepRunningInTray = settingsStore.Current.Notifications.KeepRunningInTray;
+        _createRestorePointBeforeBigChanges = settingsStore.Current.Changes.CreateRestorePointBeforeBigChanges;
         _selectedTheme = ThemeOptions.FirstOrDefault(o => o.Value == settingsStore.Current.Appearance.Theme) ?? ThemeOptions[0];
     }
 
@@ -144,6 +148,9 @@ public sealed partial class GeneralSettingsViewModel : PageViewModelBase
     }
 
     partial void OnKeepRunningInTrayChanged(bool value) => _settingsStore.Update(s => s.Notifications.KeepRunningInTray = value);
+
+    partial void OnCreateRestorePointBeforeBigChangesChanged(bool value) =>
+        _settingsStore.Update(s => s.Changes.CreateRestorePointBeforeBigChanges = value);
 
     partial void OnSelectedThemeChanged(ThemeOption value)
     {

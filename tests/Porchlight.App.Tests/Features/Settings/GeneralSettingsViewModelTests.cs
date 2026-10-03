@@ -41,6 +41,18 @@ public sealed class GeneralSettingsViewModelTests
     }
 
     [Fact]
+    public void RestorePointBeforeBigChanges_DefaultsOnAndPersistsWhenChanged()
+    {
+        var store = new FakeSettingsStore();
+        var viewModel = new GeneralSettingsViewModel(store, new FakeLoginLaunch());
+        Assert.True(viewModel.CreateRestorePointBeforeBigChanges);
+
+        viewModel.CreateRestorePointBeforeBigChanges = false;
+
+        Assert.False(store.Current.Changes.CreateRestorePointBeforeBigChanges);
+    }
+
+    [Fact]
     public void IsAPageInTheSettingsCategory_FirstTab()
     {
         var viewModel = new GeneralSettingsViewModel(new FakeSettingsStore(), new FakeLoginLaunch());

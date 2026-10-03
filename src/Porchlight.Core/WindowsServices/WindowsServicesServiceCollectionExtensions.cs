@@ -8,6 +8,9 @@ public static class WindowsServicesServiceCollectionExtensions
 {
     public static IServiceCollection AddWindowsServicesCore(this IServiceCollection services)
     {
+        services.AddSingleton<Changes.IChangeUndoer, ServiceStartTypeUndoer>();
+        services.AddSingleton<Changes.IChangeUndoer, ServiceStateUndoer>();
+
 #if DEBUG
         // DEBUG-only fake list for documentation screenshots; see Monitoring.Demo.DemoDataMode.
         if (Monitoring.Demo.DemoDataMode.IsEnabled)

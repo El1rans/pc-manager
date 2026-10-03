@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Porchlight.App.Shell;
+using Porchlight.Core.Changes;
 using Porchlight.Core.Elevation;
 using Porchlight.Core.Startup;
 
@@ -22,6 +23,7 @@ public sealed partial class StartupViewModel : PageViewModelBase
     private readonly IStartupService _service;
     private readonly IElevationService _elevation;
     private readonly ILogger<StartupViewModel> _logger;
+    private readonly IChangeJournal? _changeJournal;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowEmptyState))]
@@ -43,8 +45,10 @@ public sealed partial class StartupViewModel : PageViewModelBase
     private IReadOnlyList<StartupEntryViewModel> _loaded = [];
     private bool _impactNeedsAdmin;
 
-    public StartupViewModel(IStartupService service, IElevationService elevation, ILogger<StartupViewModel> logger)
+    public StartupViewModel(
+        IStartupService service, IElevationService elevation, ILogger<StartupViewModel> logger, IChangeJournal? changeJournal = null)
     {
+        _changeJournal = changeJournal;
         _service = service;
         _elevation = elevation;
         _logger = logger;
@@ -143,6 +147,11 @@ public sealed partial class StartupViewModel : PageViewModelBase
         {
             case StartupChangeResult.Changed:
                 item.IsEnabled = enable;
+                _changeJournal?.Record(
+                    ChangeArea.Startup,
+                    enable ? $"Turned on {item.Name} at startup" : $"Turned off {item.Name} at startup",
+                    StartupChangeUndoer.Type,
+                    StartupChangeUndoer.CreatePayload(item.Id, item.Name, !enable));
                 Message = string.Format(System.Globalization.CultureInfo.CurrentCulture, enable ? TurnedOnMessage : TurnedOffMessage, item.Name);
                 OnPropertyChanged(nameof(Summary));
                 break;

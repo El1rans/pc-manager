@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Porchlight.App.Shell;
+using Porchlight.Core.Changes;
 using Porchlight.Core.Processes;
 using Porchlight.Core.Settings;
 using Porchlight.Core.Winget;
@@ -33,6 +34,7 @@ public sealed partial class GetAppsViewModel : PageViewModelBase, IBusyGuard, ID
     public const string InstallFailedText = "Something went wrong while installing. Details are in the log.";
 
     private readonly IWingetClient _wingetClient;
+    private readonly IChangeJournal? _changeJournal;
     private readonly ISettingsStore _settingsStore;
     private readonly IUpdateHistoryStore _historyStore;
     private readonly TimeProvider _timeProvider;
@@ -66,8 +68,10 @@ public sealed partial class GetAppsViewModel : PageViewModelBase, IBusyGuard, ID
         ISettingsStore settingsStore,
         IUpdateHistoryStore historyStore,
         TimeProvider timeProvider,
-        ILogger<GetAppsViewModel> logger)
+        ILogger<GetAppsViewModel> logger,
+        IChangeJournal? changeJournal = null)
     {
+        _changeJournal = changeJournal;
         _wingetClient = wingetClient;
         _settingsStore = settingsStore;
         _historyStore = historyStore;
@@ -260,6 +264,11 @@ public sealed partial class GetAppsViewModel : PageViewModelBase, IBusyGuard, ID
             row.ResultText = AppResultViewModel.InstalledText;
             row.ResultIsError = false;
             RecordHistory(row, succeeded: true, result.ExitCode);
+            if (outcome.Kind == WingetOutcomeKind.Updated)
+            {
+                _changeJournal?.Record(ChangeArea.Apps, $"Installed {row.Name}");
+            }
+
             return true;
         }
 
@@ -268,6 +277,7 @@ public sealed partial class GetAppsViewModel : PageViewModelBase, IBusyGuard, ID
             row.ResultText = "Installed. Restart your PC to finish.";
             row.ResultIsError = false;
             RecordHistory(row, succeeded: true, result.ExitCode);
+            _changeJournal?.Record(ChangeArea.Apps, $"Installed {row.Name}");
             return true;
         }
 

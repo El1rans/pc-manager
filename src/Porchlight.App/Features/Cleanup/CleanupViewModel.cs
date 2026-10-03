@@ -7,6 +7,7 @@ using Porchlight.App.Features.Dashboard;
 using Porchlight.App.Features.RemoteSupport;
 using Porchlight.App.Shell;
 using Porchlight.Core.Cleanup;
+using Porchlight.Core.Changes;
 using Porchlight.Core.Elevation;
 using Porchlight.Core.Monitoring;
 using Porchlight.Core.Processes;
@@ -23,6 +24,7 @@ public sealed partial class CleanupViewModel : PageViewModelBase, IBusyGuard, ID
     private const string InstalledAppsUri = "ms-settings:appsfeatures";
     private const int TopAppCount = 25;
 
+    private readonly IChangeJournal? _changeJournal;
     private readonly ICleanupPathProvider _paths;
     private readonly ICleanupCatalog _catalog;
     private readonly ICleanupScanner _scanner;
@@ -63,8 +65,10 @@ public sealed partial class CleanupViewModel : PageViewModelBase, IBusyGuard, ID
         ISettingsStore settings,
         DiskMapViewModel diskMap,
         DuplicatesViewModel duplicates,
-        ILogger<CleanupViewModel> logger)
+        ILogger<CleanupViewModel> logger,
+        IChangeJournal? changeJournal = null)
     {
+        _changeJournal = changeJournal;
         _paths = paths;
         _catalog = catalog;
         _scanner = scanner;
@@ -367,6 +371,7 @@ public sealed partial class CleanupViewModel : PageViewModelBase, IBusyGuard, ID
                     s.Cleanup.LastCleanedUtc = DateTime.UtcNow;
                 });
                 FreedSoFarText = CleanupTextFormatter.FormatFreedSoFar(_settings.Current.Cleanup.TotalBytesFreed);
+                _changeJournal?.Record(ChangeArea.Cleanup, $"Cleared {ByteFormatter.FormatBytes(result.BytesFreed)} of junk files");
             }
         }
         finally

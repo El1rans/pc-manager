@@ -27,4 +27,5 @@ public sealed class AppSettings
     public WindowSettings Window { get; set; } = new();
 
     public CheckupReminderSettings CheckupReminder { get; set; } = new();
+    public ChangesSettings Changes { get; set; } = new();
 }

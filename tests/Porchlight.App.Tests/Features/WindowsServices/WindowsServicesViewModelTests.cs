@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Porchlight.App.Features.Cleanup;
 using Porchlight.App.Features.WindowsServices;
 using Porchlight.App.Shell;
+using Porchlight.App.Tests.TestDoubles;
+using Porchlight.Core.Changes;
 using Porchlight.Core.WindowsServices;
 using Xunit;
 
@@ -212,12 +214,127 @@ public sealed class WindowsServicesViewModelTests
     }
 
     [Fact]
-    public async Task StartType_DelayedAutomaticShowsAsAutomaticWithoutApplying()
+    public async Task StartType_DelayedAutomaticShowsAsItsOwnOptionWithoutApplying()
     {
         var vm = await LoadAsync(Entry("A", start: ServiceStartType.AutomaticDelayed));
 
-        Assert.Equal(ServiceStartType.Automatic, vm.Services[0].SelectedStartOption!.Type);
+        Assert.Equal(ServiceStartType.AutomaticDelayed, vm.Services[0].SelectedStartOption!.Type);
         Assert.Empty(_service.Calls);
+    }
+
+    [Fact]
+    public void StartTypeOptions_OfferFourChoicesIncludingDelayed()
+    {
+        Assert.Equal(
+            [ServiceStartType.Automatic, ServiceStartType.AutomaticDelayed, ServiceStartType.Manual, ServiceStartType.Disabled],
+            StartTypeOption.All.Select(o => o.Type));
+        Assert.Equal("Starts with Windows (delayed)", StartTypeOption.For(ServiceStartType.AutomaticDelayed).Label);
+    }
+
+    [Fact]
+    public async Task StartType_CanSelectDelayedFromAutomaticAndBack()
+    {
+        var vm = await LoadAsync(Entry("A", start: ServiceStartType.Automatic));
+        var row = vm.Services[0];
+
+        row.SelectedStartOption = StartTypeOption.For(ServiceStartType.AutomaticDelayed);
+        await row.PendingChange;
+        row.SelectedStartOption = StartTypeOption.For(ServiceStartType.Automatic);
+        await row.PendingChange;
+
+        Assert.Equal([$"type A {ServiceStartType.AutomaticDelayed}", $"type A {ServiceStartType.Automatic}"], _service.Calls);
+    }
+
+    private async Task<WindowsServicesViewModel> LoadWithAsync(
+        IChangeJournal journal, IAutoRestorePoint? restore, params WindowsServiceEntry[] entries)
+    {
+        _service.Entries = entries;
+        var vm = new WindowsServicesViewModel(
+            _service, _shell, _confirm, NullLogger<WindowsServicesViewModel>.Instance, journal, restore);
+        await vm.OnNavigatedToAsync(TestContext.Current.CancellationToken);
+        return vm;
+    }
+
+    [Fact]
+    public async Task StartType_RecordsAnUndoableChangeWithThePreviousType()
+    {
+        var journal = new FakeJournal();
+        var vm = await LoadWithAsync(journal, new FakeRestore(), Entry("A", start: ServiceStartType.AutomaticDelayed));
+        var row = vm.Services[0];
+
+        row.SelectedStartOption = StartTypeOption.For(ServiceStartType.Manual);
+        await row.PendingChange;
+
+        var recorded = Assert.Single(journal.Recorded);
+        Assert.Equal(ChangeArea.Services, recorded.Area);
+        Assert.Equal(ServiceStartTypeUndoer.Type, recorded.UndoType);
+        var payload = ChangeUndoPayload.TryDeserialize<ServiceStartTypeUndoer.Payload>(recorded.UndoPayload);
+        Assert.Equal(ServiceStartType.AutomaticDelayed, payload!.StartType);
+    }
+
+    [Fact]
+    public async Task StartType_AsksForARestorePointFirstAndShowsItsNote()
+    {
+        var restore = new FakeRestore { Result = new AutoRestorePointResult(AutoRestorePointOutcome.Created, "Restore point made.") };
+        var vm = await LoadWithAsync(new FakeJournal(), restore, Entry("A"));
+
+        vm.Services[0].SelectedStartOption = StartTypeOption.For(ServiceStartType.Manual);
+        await vm.Services[0].PendingChange;
+
+        Assert.Equal(1, restore.Calls);
+        Assert.Contains("Restore point made.", vm.Message);
+    }
+
+    [Fact]
+    public async Task StartType_AFailedOrSkippedRestorePointNeverBlocksTheChange()
+    {
+        var restore = new FakeRestore { Result = new AutoRestorePointResult(AutoRestorePointOutcome.Failed, null) };
+        var vm = await LoadWithAsync(new FakeJournal(), restore, Entry("A"));
+
+        vm.Services[0].SelectedStartOption = StartTypeOption.For(ServiceStartType.Manual);
+        await vm.Services[0].PendingChange;
+
+        Assert.Equal([$"type A {ServiceStartType.Manual}"], _service.Calls);
+        Assert.Null(vm.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task StartType_NotElevatedDoesNotAskForARestorePoint()
+    {
+        _shell.IsElevated = false;
+        var restore = new FakeRestore();
+        var vm = await LoadWithAsync(new FakeJournal(), restore, Entry("A"));
+
+        vm.Services[0].SelectedStartOption = StartTypeOption.For(ServiceStartType.Manual);
+        await vm.Services[0].PendingChange;
+
+        Assert.Equal(0, restore.Calls);
+    }
+
+    [Fact]
+    public async Task StopAndStart_RecordUndoThatDoesTheOpposite()
+    {
+        var journal = new FakeJournal();
+        var vm = await LoadWithAsync(journal, null, Entry("A"));
+
+        await vm.StopCommand.ExecuteAsync(vm.Services[0]);
+        await vm.StartCommand.ExecuteAsync(vm.Services[0]);
+
+        Assert.Equal([ServiceStateUndoer.Type, ServiceStateUndoer.Type], journal.Recorded.Select(r => r.UndoType));
+        Assert.True(ChangeUndoPayload.TryDeserialize<ServiceStateUndoer.Payload>(journal.Recorded[0].UndoPayload)!.Running);
+        Assert.False(ChangeUndoPayload.TryDeserialize<ServiceStateUndoer.Payload>(journal.Recorded[1].UndoPayload)!.Running);
+    }
+
+    [Fact]
+    public async Task FailedChange_RecordsNothing()
+    {
+        var journal = new FakeJournal();
+        var vm = await LoadWithAsync(journal, null, Entry("A"));
+        _service.Next = ServiceChangeOutcome.Of(ServiceChangeResult.Failed);
+
+        await vm.StopCommand.ExecuteAsync(vm.Services[0]);
+
+        Assert.Empty(journal.Recorded);
     }
 
     [Fact]
@@ -230,6 +347,19 @@ public sealed class WindowsServicesViewModelTests
 
         Assert.NotNull(vm.ErrorMessage);
         Assert.False(vm.ShowEmptyState);
+    }
+
+    private sealed class FakeRestore : IAutoRestorePoint
+    {
+        public int Calls { get; private set; }
+
+        public AutoRestorePointResult Result { get; set; } = new(AutoRestorePointOutcome.SkippedUnavailable, null);
+
+        public Task<AutoRestorePointResult> EnsureAsync(string reason, CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.FromResult(Result);
+        }
     }
 
     private sealed class FakeService : IWindowsServicesService
